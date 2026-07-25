@@ -301,7 +301,10 @@ export function createServer(deps: ServerDeps): FastMCP {
         .describe('Public URIs for multimodal inputs (PDFs, images) the researcher should read.'),
     }),
     execute: async (args, { log }) => {
-      requireClient(deps);
+      // Validate the request before checking credentials. Both are guards, but
+      // only one is the caller's actual problem when the arguments are wrong,
+      // and reporting "no credentials" for a contract mismatch hides the bug
+      // the handshake exists to catch. Cheap local checks first (CP §6.1).
       const resolved = resolvePrompt({
         question: args.question,
         ...(args.archetype ? { archetype: args.archetype } : {}),
@@ -327,6 +330,7 @@ export function createServer(deps: ServerDeps): FastMCP {
         );
       }
 
+      requireClient(deps);
       log.info('Starting deep research run', { tier: args.tier, archetype: resolved.archetype });
 
       const { run, deduped } = await runner.start({
@@ -385,7 +389,9 @@ export function createServer(deps: ServerDeps): FastMCP {
         .describe('Instructions that amend the proposed plan. Omit to approve it as proposed.'),
     }),
     execute: async (args) => {
-      requireClient(deps);
+      // Local preconditions first. Checking credentials before these means a
+      // caller whose run simply has no plan yet is told about credentials,
+      // which is true but is not their problem.
       const run = await requireRun(deps, args.runId);
       if (run.planApproved) return `Run \`${run.id}\` is already approved (state: ${run.state}).`;
       if (!run.plan) {
@@ -393,6 +399,7 @@ export function createServer(deps: ServerDeps): FastMCP {
           `Run \`${run.id}\` has no plan yet (state: ${run.state}). Poll \`research_status\` until a plan appears.`,
         );
       }
+      requireClient(deps);
       const updated = await runner.approvePlan(args.runId, args.amendment);
       if (!updated) throw new UserError(`Run \`${args.runId}\` disappeared.`);
       return `Plan approved${args.amendment ? ' with your amendment' : ' as proposed'}. \`${updated.id}\` is now ${updated.state}. ${stateHint(updated.state)}`;
@@ -761,12 +768,18 @@ export function createServer(deps: ServerDeps): FastMCP {
     annotations: { title: 'Cancel a research run', readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     parameters: z.object({ runId: z.string().max(64) }),
     execute: async (args) => {
-      const run = await requireRun(deps, args.runId);
+      const before = await requireRun(deps, args.runId);
+      // Capture the prior state: `cancel` is a no-op on a terminal run and
+      // returns it unchanged, so keying the message off the RESULT alone
+      // reports "Cancelled" for a run that was already cancelled.
+      const wasTerminal =
+        before.state === 'completed' || before.state === 'failed' || before.state === 'cancelled';
       const cancelled = await runner.cancel(args.runId);
       if (!cancelled) throw new UserError(`Run \`${args.runId}\` disappeared.`);
-      return cancelled.state === 'cancelled'
-        ? `Cancelled \`${cancelled.id}\`. Committed spend (~$${cancelled.estimatedCostUsd.toFixed(2)}) stays on the ledger.`
-        : `\`${run.id}\` was already ${cancelled.state}; nothing to cancel.`;
+      if (wasTerminal) {
+        return `\`${before.id}\` was already ${before.state}; nothing to cancel.`;
+      }
+      return `Cancelled \`${cancelled.id}\`. Committed spend (~$${cancelled.estimatedCostUsd.toFixed(2)}) stays on the ledger.`;
     },
   });
 
@@ -957,7 +970,8 @@ function registerAgentTools(server: FastMCP, deps: ServerDeps): void {
 
   server.addTool({
     name: 'agent_list',
-    description: 'List the managed agents in your project.',
+    description:
+      'List the managed agents saved in your project, with their ids and descriptions. Cheap and read-only. Use it to find an agentId for `agent_run`, or to check what already exists before `agent_create` (ids are unique per project, so creating a duplicate id fails).',
     annotations: { title: 'List managed agents', readOnlyHint: true, openWorldHint: true },
     parameters: z.object({}),
     execute: async () => {
@@ -1092,20 +1106,11 @@ function registerResources(server: FastMCP, deps: ServerDeps): void {
     },
   });
 
-  server.addResourceTemplate({
-    uriTemplate: 'research://run/{runId}',
-    name: 'Research run record',
-    mimeType: 'application/json',
-    arguments: [{ name: 'runId', description: 'The run handle', required: true }],
-    async load({ runId }) {
-      const run = await store.getRun(runId);
-      if (!run) return { text: JSON.stringify({ error: `No run ${runId}` }) };
-      // The engineered prompt can be 6k characters — the record stays scannable.
-      const { prompt, ...rest } = run;
-      return { text: JSON.stringify({ ...rest, promptChars: prompt.length }, null, 2) };
-    },
-  });
-
+  // ORDER IS LOAD-BEARING. FastMCP matches templates in registration order and
+  // `{runId}` happily captures a slash, so registering the generic
+  // `research://run/{runId}` first makes it swallow `/report` and `/citations`
+  // (runId becomes "dr_x/report") and the specific templates never match at
+  // all. The generic one is registered last, below.
   server.addResourceTemplate({
     uriTemplate: 'research://run/{runId}/report',
     name: 'Research report (markdown)',
@@ -1147,6 +1152,20 @@ function registerResources(server: FastMCP, deps: ServerDeps): void {
       };
     },
   });
+  server.addResourceTemplate({
+    uriTemplate: 'research://run/{runId}',
+    name: 'Research run record',
+    mimeType: 'application/json',
+    arguments: [{ name: 'runId', description: 'The run handle', required: true }],
+    async load({ runId }) {
+      const run = await store.getRun(runId);
+      if (!run) return { text: JSON.stringify({ error: `No run ${runId}` }) };
+      // The engineered prompt can be 6k characters — the record stays scannable.
+      const { prompt, ...rest } = run;
+      return { text: JSON.stringify({ ...rest, promptChars: prompt.length }, null, 2) };
+    },
+  });
+
 }
 
 // ─────────────────────────────────────────────────────────────────── prompts ────

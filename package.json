@@ -54,15 +54,17 @@
     "build": "tsgo -p tsconfig.build.json",
     "dev": "tsx src/index.ts",
     "typecheck": "tsgo --noEmit",
-    "test": "vitest run",
+    "test": "vitest run --project unit",
     "test:watch": "vitest",
     "inspect": "npm run build && npx fastmcp inspect dist/index.js",
-    "gate": "npm run typecheck && npm run lint && npm run test && npm run build",
+    "gate": "npm run typecheck && npm run lint && npm run test:all && npm run build",
     "prepublishOnly": "npm run build",
     "lint": "eslint .",
     "preversion": "npm run gate",
     "version": "node scripts/sync-version.mjs && git add src/version.ts",
-    "postversion": "git push --follow-tags"
+    "postversion": "git push --follow-tags",
+    "test:acceptance": "vitest run --project acceptance",
+    "test:all": "vitest run"
   },
   "dependencies": {
     "@ai-sdk/google": "^4.0.24",
