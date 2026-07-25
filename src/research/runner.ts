@@ -188,6 +188,8 @@ export class Runner {
       reportChars: 0,
       sourceCount: 0,
       imageCount: 0,
+      reasoningSteps: 0,
+      streamedChars: 0,
       searches: 0,
       urlsFetched: 0,
       corpusQueries: 0,

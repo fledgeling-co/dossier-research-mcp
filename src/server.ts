@@ -424,15 +424,14 @@ export function createServer(deps: ServerDeps): FastMCP {
           `- Last forward progress: ${idleMinutes} minute(s) ago`,
           `- Committed cost: ~$${run.estimatedCostUsd.toFixed(2)}`,
         ];
-        if (run.searches + run.urlsFetched + run.corpusQueries > 0) {
-          const bits = [`${run.searches} searches`];
-          if (run.urlsFetched > 0) bits.push(`${run.urlsFetched} sources read`);
-          // Called out separately because it is the only direct evidence that
-          // an attached corpus is actually being searched.
-          if (run.corpusQueries > 0) bits.push(`${run.corpusQueries} corpus queries`);
-          if (run.codeRuns > 0) bits.push(`${run.codeRuns} code runs`);
-          lines.push(`- Live progress: ${bits.join(' · ')}`);
-        }
+        const live: string[] = [];
+        if (run.reasoningSteps > 0) live.push(`${run.reasoningSteps} reasoning steps`);
+        if (run.streamedChars > 0) live.push(`${run.streamedChars} chars of report streamed`);
+        // Deep Research emits no tool-call deltas, so these stay at zero for a
+        // research run. Kept because managed agents share the event vocabulary.
+        if (run.searches > 0) live.push(`${run.searches} searches`);
+        if (run.corpusQueries > 0) live.push(`${run.corpusQueries} corpus queries`);
+        if (live.length > 0) lines.push(`- Live progress: ${live.join(' · ')}`);
         if (run.streamAbandoned) {
           lines.push(
             '- Live progress stream dropped and could not be re-established; the run continues on polling, so these counters have stopped moving.',

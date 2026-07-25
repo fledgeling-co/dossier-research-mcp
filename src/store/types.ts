@@ -74,6 +74,8 @@ export const RunRecordSchema = z.object({
   citationsCheckedAt: z.string().optional(),
 
   /** Live progress from the SSE stream. Zero when only polling was used. */
+  reasoningSteps: z.number().int().nonnegative().default(0),
+  streamedChars: z.number().int().nonnegative().default(0),
   searches: z.number().int().nonnegative().default(0),
   urlsFetched: z.number().int().nonnegative().default(0),
   corpusQueries: z.number().int().nonnegative().default(0),

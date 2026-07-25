@@ -62,6 +62,8 @@ export class StreamSupervisor {
     const sleep = this.deps.sleep ?? defaultSleep;
     let progress: StreamProgress = {
       ...EMPTY_PROGRESS,
+      reasoningSteps: run.reasoningSteps,
+      reportChars: run.streamedChars,
       searches: run.searches,
       urlsFetched: run.urlsFetched,
       corpusQueries: run.corpusQueries,
@@ -79,6 +81,8 @@ export class StreamSupervisor {
       if (!current) return;
       await store.saveRun({
         ...current,
+        reasoningSteps: progress.reasoningSteps,
+        streamedChars: progress.reportChars,
         searches: progress.searches,
         urlsFetched: progress.urlsFetched,
         corpusQueries: progress.corpusQueries,

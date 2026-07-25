@@ -14,18 +14,59 @@ function foldAll(events: unknown[]): { progress: StreamProgress; journal: string
 }
 
 describe('foldEvent', () => {
-  it('counts searches and journals each one with its query', () => {
+  it('journals one entry per reasoning step, from the real live shapes', () => {
+    // Captured verbatim from a live Deep Research stream. Note what is NOT
+    // here: the delta carries content.text (not content.parts), and the
+    // model_output deltas carry no type at all.
     const { progress, journal } = foldAll([
-      { event_type: 'step.delta', event_id: 'e1', delta: { type: 'google_search_call', arguments: { queries: ['vertex ai deep research'] } } },
-      { event_type: 'step.delta', event_id: 'e2', delta: { type: 'google_search_call', arguments: { queries: ['interactions api'] } } },
+      { event_type: 'interaction.created', interaction: { id: 'v1_x', status: 'in_progress' } },
+      { event_type: 'step.start', index: 0, step: { type: 'thought' } },
+      { event_type: 'step.delta', index: 0, delta: { type: 'thought_summary', content: { text: '***Generating research plan***', type: 'text' } } },
+      { event_type: 'step.delta', index: 0, delta: { type: 'thought_summary', content: { text: ' and mapping candidates', type: 'text' } } },
+      { event_type: 'step.stop', index: 0 },
+      { event_type: 'step.start', index: 1, step: { type: 'model_output' } },
+      { event_type: 'step.delta', index: 1, delta: { text: '# The Report\n\n' } },
+      { event_type: 'step.stop', index: 1 },
+      { event_type: 'interaction.completed' },
     ]);
-    expect(progress.searches).toBe(2);
-    expect(progress.lastEventId).toBe('e2');
-    expect(journal[0]).toContain('Search 1: vertex ai deep research');
-    expect(journal[1]).toContain('Search 2: interactions api');
+    // Two deltas, one journal entry: the fragments are coalesced at step.stop.
+    expect(progress.reasoningSteps).toBe(1);
+    expect(journal.filter((j) => j.startsWith('thought:'))).toHaveLength(1);
+    expect(journal[0]).toBe('thought: ***Generating research plan*** and mapping candidates');
+    expect(progress.reportChars).toBe('# The Report\n\n'.length);
+    expect(progress.terminal).toBe('completed');
   });
 
-  it('tracks corpus queries separately, which is the only proof grounding is used', () => {
+  it('reads content.text, the shape the API actually sends', () => {
+    // The first implementation only read content.parts[].text, found nothing,
+    // and silently journalled nothing for an entire run.
+    const { journal } = foldAll([
+      { event_type: 'step.start', index: 0, step: { type: 'thought' } },
+      { event_type: 'step.delta', index: 0, delta: { type: 'thought_summary', content: { text: 'real text', type: 'text' } } },
+      { event_type: 'step.stop', index: 0 },
+    ]);
+    expect(journal[0]).toBe('thought: real text');
+  });
+
+  it('attributes untyped deltas via the enclosing step, not the delta', () => {
+    // A model_output delta has no type of its own; only step.start says so.
+    const { progress } = foldAll([
+      { event_type: 'step.start', index: 3, step: { type: 'model_output' } },
+      { event_type: 'step.delta', index: 3, delta: { text: 'abcde' } },
+    ]);
+    expect(progress.reportChars).toBe(5);
+    expect(progress.reasoningSteps).toBe(0);
+  });
+
+  it('still counts tool calls if an agent ever emits them', () => {
+    const { progress, journal } = foldAll([
+      { event_type: 'step.delta', delta: { type: 'google_search_call', arguments: { queries: ['q'] } } },
+    ]);
+    expect(progress.searches).toBe(1);
+    expect(journal[0]).toContain('Search 1: q');
+  });
+
+  it('tracks corpus queries separately, which would be the only proof grounding is used', () => {
     const { progress, journal } = foldAll([
       { event_type: 'step.delta', delta: { type: 'file_search_call', arguments: { query: 'internal standard' } } },
     ]);
@@ -34,15 +75,24 @@ describe('foldEvent', () => {
     expect(journal[0]).toContain('Corpus query 1: internal standard');
   });
 
-  it('reads reasoning out of content.parts, not just a text field', () => {
-    const { progress, journal } = foldAll([
-      {
-        event_type: 'step.delta',
-        delta: { type: 'thought_summary', content: { parts: [{ text: '**Mapping candidates**' }, { text: ' and sources' }] } },
-      },
+  it('still handles the multi-part Content shape defensively', () => {
+    const { journal } = foldAll([
+      { event_type: 'step.start', index: 0, step: { type: 'thought' } },
+      { event_type: 'step.delta', index: 0, delta: { type: 'thought_summary', content: { parts: [{ text: 'a' }, { text: 'b' }] } } },
+      { event_type: 'step.stop', index: 0 },
     ]);
-    expect(progress.lastThought).toBe('**Mapping candidates** and sources');
-    expect(journal[0]).toBe('thought: **Mapping candidates** and sources');
+    expect(journal[0]).toBe('thought: ab');
+  });
+
+  it('carries the last event id seen, since deltas often omit it', () => {
+    // event_id is absent from step.delta on the live stream; a resume token
+    // that only updated when present must keep the newest one it saw.
+    const { progress } = foldAll([
+      { event_type: 'interaction.created', event_id: 'e1' },
+      { event_type: 'step.delta', index: 0, delta: { text: 'x' } },
+      { event_type: 'step.delta', index: 0, delta: { text: 'y' } },
+    ]);
+    expect(progress.lastEventId).toBe('e1');
   });
 
   it('advances the resume token on every event, including ones it ignores', () => {
@@ -80,9 +130,39 @@ describe('foldEvent', () => {
 
 describe('describeProgress', () => {
   it('names only the counters that moved', () => {
-    expect(describeProgress({ ...EMPTY_PROGRESS, searches: 12 })).toBe('12 searches');
-    expect(describeProgress({ ...EMPTY_PROGRESS, searches: 12, corpusQueries: 3 })).toBe(
-      '12 searches · 3 corpus queries',
+    expect(describeProgress({ ...EMPTY_PROGRESS, reasoningSteps: 4 })).toBe('4 reasoning steps');
+    expect(describeProgress({ ...EMPTY_PROGRESS, reasoningSteps: 4, searches: 12 })).toBe(
+      '4 reasoning steps · 12 searches',
     );
+  });
+
+  it('says so plainly when nothing has arrived', () => {
+    expect(describeProgress(EMPTY_PROGRESS)).toBe('no progress reported yet');
+  });
+});
+
+describe('replay of a real captured stream', () => {
+  it('folds a verbatim live stream into sane progress', async () => {
+    // tests/fixtures-live-stream.json is the actual SSE stream from a live
+    // fast-tier Deep Research run, captured unmodified. This is the test that
+    // would have caught every one of the three shape errors in the first
+    // implementation, and it is why the fixture is committed.
+    const events = (await import('./fixtures-live-stream.json', { with: { type: 'json' } })).default as unknown[];
+    const { progress, journal } = foldAll(events);
+
+    expect(events.length).toBeGreaterThan(40);
+    // A Deep Research run emits thought and model_output steps and nothing else.
+    expect(progress.reasoningSteps).toBeGreaterThan(0);
+    expect(progress.reportChars).toBeGreaterThan(1000);
+    expect(journal.some((j) => j.startsWith('thought:'))).toBe(true);
+    // Coalescing works: far fewer journal entries than raw deltas.
+    // 41 raw deltas collapse to a handful of journal entries.
+    expect(journal.length).toBeLessThan(events.length / 4);
+    expect(progress.terminal).toBe('completed');
+    // No buffer is left open once every step has stopped.
+    expect(Object.keys(progress.buffers)).toHaveLength(0);
+    // The tool-call counters stay at zero, which is the documented reality.
+    expect(progress.searches).toBe(0);
+    expect(progress.corpusQueries).toBe(0);
   });
 });
