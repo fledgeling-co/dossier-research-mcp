@@ -219,3 +219,26 @@ describe('corpus mime inference', () => {
     expect(inferMimeType('/x/file.weird')).toBe('text/plain');
   });
 });
+
+describe('user_input echo (observed live-API behaviour)', () => {
+  it('never treats the echoed prompt as the report', () => {
+    // Mid-flight, the live API returns exactly this: the submitted prompt
+    // echoed back as a `user_input` step, and nothing else yet.
+    const snap = toSnapshot('int_1', {
+      status: 'in_progress',
+      steps: [{ type: 'user_input', content: [{ type: 'text', text: '<core_directive>my prompt</core_directive>' }] }],
+    });
+    expect(snap.markdown).toBe('');
+  });
+
+  it('picks the model output even when the echo is present', () => {
+    const snap = toSnapshot('int_1', {
+      status: 'completed',
+      steps: [
+        { type: 'user_input', content: [{ type: 'text', text: 'my prompt' }] },
+        { type: 'model_output', content: [{ type: 'text', text: '# The report' }] },
+      ],
+    });
+    expect(snap.markdown).toBe('# The report');
+  });
+});

@@ -193,6 +193,8 @@ One run, or every run in flight. Reports **liveness separately from status**: a 
 #### `research_tail`
 Replays the durable progress journal from a cursor. `{ runId, sinceSeq }` → events plus the next cursor. A client that dropped at minute 3 of a 45-minute run loses nothing.
 
+> **Granularity, measured against the live API.** While a run is in flight, `interactions.get` returns only the echoed `user_input` step — the full step list is populated at completion. So the journal carries **lifecycle events** (`created`, `plan`, `progress`, `stalled`, `completed`, `failed`), not token-by-token reasoning. Live thought summaries exist only on the SSE stream, which this server does not yet consume ([#1](https://github.com/fledgeling-co/deep-research-mcp/issues/1)). Durability is unaffected: the journal is what survives your disconnect.
+
 #### `research_read`
 | `mode` | Returns |
 |---|---|

@@ -449,7 +449,7 @@ export function createServer(deps: ServerDeps): FastMCP {
   server.addTool({
     name: 'research_tail',
     description:
-      'Replay a run’s progress journal from a cursor. The server consumes progress into a durable journal, so a client that disconnected at minute 3 of a 45-minute run loses nothing — pass the returned cursor next time to get only what is new.',
+      'Replay a run’s durable progress journal from a cursor — pass the returned cursor next time to get only what is new. A client that disconnected at minute 3 of a 45-minute run loses nothing. Note the granularity: the polling path this server uses reports lifecycle events (created, plan, progress, stalled, completed, failed), not token-by-token reasoning — the API only populates its step list once the run finishes, so live thought summaries are available on the SSE stream alone.',
     annotations: { title: 'Tail research progress', readOnlyHint: true, openWorldHint: true },
     parameters: z.object({
       runId: z.string().max(64),

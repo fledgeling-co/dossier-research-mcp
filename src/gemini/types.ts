@@ -87,7 +87,13 @@ export function toSnapshot(interactionId: string, raw: unknown): InteractionSnap
   const images: { data: string; mimeType: string }[] = [];
 
   for (const step of it.steps ?? []) {
-    const isThought = (step.type ?? '').includes('thought') || (step.type ?? '') === 'reasoning';
+    const type = step.type ?? '';
+    // The API echoes the submitted prompt back as a `user_input` step. Without
+    // this guard the echoed prompt is the last text step for most of a run's
+    // life, so a mid-flight read would hand back the prompt as if it were the
+    // report. Observed against the live preview API, not hypothetical.
+    if (type === 'user_input') continue;
+    const isThought = type.includes('thought') || type.includes('reasoning') || type.includes('thinking');
     for (const item of step.content ?? []) {
       if (item.type === 'text' && 'text' in item && item.text) {
         if (isThought) thoughts.push(item.text);
