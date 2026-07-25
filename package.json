@@ -1,7 +1,7 @@
 {
   "name": "dossier-research-mcp",
-  "version": "0.1.0",
-  "description": "Dossier \u2014 Google Gemini Deep Research as an MCP server. Durable background runs, spend control, context-safe report reading, citation verification, and private-corpus grounding.",
+  "version": "0.2.0",
+  "description": "Dossier — Google Gemini Deep Research as an MCP server. Durable background runs, spend control, context-safe report reading, citation verification, and private-corpus grounding.",
   "type": "module",
   "license": "MIT",
   "author": "fledgeling-co",
