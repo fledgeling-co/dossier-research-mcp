@@ -174,18 +174,3 @@ export function resolveCorpusClient(config: Config): CorpusClient | null {
   if (config.hermetic || config.auth.mode !== 'api-key') return null;
   return createCorpusClient(config);
 }
-
-/**
- * Instruction appended to a prompt when a corpus is attached: it establishes
- * the hierarchy of truth AND asks for the contradiction diff. Without the first
- * sentence, high-fidelity internal data gets silently overwritten by whatever
- * the open web says louder.
- */
-export const CORPUS_GROUNDING_INSTRUCTION = `
-<corpus_grounding>
-A private document corpus is attached via file search. Search it alongside the public web.
-
-Hierarchy of truth: where the attached internal documents conflict with public web sources on a matter of internal fact (our own numbers, decisions, product behaviour, commitments), the internal documents are authoritative. Public sources remain authoritative for external facts.
-
-Additionally, produce a section titled "## Contradictions with the attached corpus" listing every material point where the public evidence contradicts, supersedes, or postdates the internal documents. For each: the internal claim, the external evidence with its citation, and which one you assess to be current. If there are none, say so explicitly rather than omitting the section.
-</corpus_grounding>`;

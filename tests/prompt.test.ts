@@ -171,3 +171,34 @@ describe('operatorNotes', () => {
     expect(notes.some((n) => n.includes('not legal advice'))).toBe(true);
   });
 });
+
+describe('corpus grounding placement', () => {
+  it('puts the corpus block BEFORE the final re-anchor, never after it', () => {
+    // This is the bug that shipped once. Appending the block after the closing
+    // <core_directive> put it in the weakest position in the prompt and killed
+    // the anti-drift anchor; a live run with the corpus indexed and the tool
+    // attached produced a 12,660-token report with zero references to it.
+    const { prompt } = buildPrompt({ question: 'Should we keep X disabled?', corpusGrounding: true });
+    const corpusAt = prompt.indexOf('<corpus_grounding>');
+    const lastAnchor = prompt.lastIndexOf('<core_directive>');
+    expect(corpusAt).toBeGreaterThan(-1);
+    expect(corpusAt).toBeLessThan(lastAnchor);
+    // Nothing at all may follow the re-anchor.
+    expect(prompt.trimEnd().endsWith('</core_directive>')).toBe(true);
+  });
+
+  it('adds the contradictions section to output_format, where output rules live', () => {
+    const { prompt } = buildPrompt({ question: 'q', corpusGrounding: true });
+    const outputAt = prompt.indexOf('<output_format>');
+    const outputEnd = prompt.indexOf('</output_format>');
+    const contradictionsAt = prompt.indexOf('Contradictions with the attached corpus');
+    expect(contradictionsAt).toBeGreaterThan(outputAt);
+    expect(contradictionsAt).toBeLessThan(outputEnd);
+  });
+
+  it('omits both when no corpus is attached', () => {
+    const { prompt } = buildPrompt({ question: 'q' });
+    expect(prompt).not.toContain('corpus_grounding');
+    expect(prompt).not.toContain('Contradictions with the attached corpus');
+  });
+});

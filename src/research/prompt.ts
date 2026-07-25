@@ -43,6 +43,12 @@ export interface BuildPromptArgs {
   readonly question: string;
   readonly archetype?: Archetype;
   readonly scope?: ResearchScope;
+  /**
+   * A private corpus is attached. Adds the hierarchy-of-truth block and the
+   * contradictions requirement, both placed INSIDE the scaffold rather than
+   * appended after it (see `corpusGrounding` handling below for why).
+   */
+  readonly corpusGrounding?: boolean;
 }
 
 export interface BuiltPrompt {
@@ -51,6 +57,25 @@ export interface BuiltPrompt {
   /** True when the caller's text was already scaffolded and passed through. */
   readonly preEngineered: boolean;
 }
+
+/**
+ * The private-corpus block.
+ *
+ * Placement is load-bearing and was got wrong once, live: appending this after
+ * the closing `<core_directive>` put it in the weakest position in the prompt
+ * AND destroyed the anti-drift re-anchor, which only works because it is the
+ * last thing the model reads. A run with an indexed corpus, the tool attached
+ * and this text present produced a 12,660-token report with zero references to
+ * the corpus. It now sits before the re-anchor, and the contradictions
+ * requirement is additionally folded into `<output_format>`, where output
+ * requirements actually live.
+ */
+export const CORPUS_GROUNDING_BLOCK = `A private document corpus is attached via file search. Search it alongside the public web, and treat searching it as required rather than optional.
+
+Hierarchy of truth: where the attached internal documents conflict with public web sources on a matter of internal fact (our own numbers, decisions, product behaviour, commitments), the internal documents are authoritative. Public sources remain authoritative for external facts.`;
+
+export const CORPUS_OUTPUT_REQUIREMENT =
+  '## Contradictions with the attached corpus — every material point where the public evidence contradicts, supersedes, or postdates the internal documents. For each: the internal claim, the external evidence with its citation, and which one is current. If there are genuinely none, write "No contradictions found" under the heading rather than omitting it.';
 
 /**
  * Markers of an already-engineered brief. `<core_directive>` is the strongest
@@ -135,6 +160,7 @@ export function buildPrompt(args: BuildPromptArgs): BuiltPrompt {
   ];
 
   const lenses = [...o.lens, ...(scope.analysisLenses ?? [])];
+  const corpus = args.corpusGrounding === true;
 
   const sections = [
     block(
@@ -236,6 +262,7 @@ export function buildPrompt(args: BuildPromptArgs): BuiltPrompt {
         '## Evidence Table — | Claim | Primary Source | Publication Date | Evidence Type | URL |, mapping every major claim to a verifiable source.',
         '## Knowledge Gaps — what could not be answered, categorised by cause.',
         '## Recommended Next Steps — 3-5 follow-up investigations, each with a stated rationale.',
+        ...(corpus ? [CORPUS_OUTPUT_REQUIREMENT] : []),
         ...o.output,
       ])}`,
     ),
@@ -248,7 +275,10 @@ export function buildPrompt(args: BuildPromptArgs): BuiltPrompt {
         'Cite inline at the point of the claim, never aggregated at the end.',
       ]),
     ),
+    // Corpus grounding sits HERE, before the re-anchor, never after it.
+    ...(corpus ? [block('corpus_grounding', CORPUS_GROUNDING_BLOCK)] : []),
     // The anti-drift re-anchor: the directive repeated verbatim at the very end.
+    // Nothing may follow this block.
     block('core_directive', directive),
   ];
 

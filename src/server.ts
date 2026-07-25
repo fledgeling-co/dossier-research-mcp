@@ -3,12 +3,7 @@ import { FastMCP, UserError } from 'fastmcp';
 import { z } from 'zod';
 import { createUtilityModel, type UtilityModel } from './ai/utility.js';
 import { describeAuth, loadConfig, type Config } from './config.js';
-import {
-  CORPUS_GROUNDING_INSTRUCTION,
-  assertStoreName,
-  resolveCorpusClient,
-  type CorpusClient,
-} from './corpus/files.js';
+import { assertStoreName, resolveCorpusClient, type CorpusClient } from './corpus/files.js';
 import {
   DEFAULT_BASE_AGENT,
   RESEARCH_AGENT_INSTRUCTION,
@@ -21,7 +16,13 @@ import { AGENT_BY_TIER, RESEARCH_TIERS } from './gemini/types.js';
 import { ARCHETYPE_NAMES, ARCHETYPE_OVERRIDES, type Archetype } from './research/archetypes.js';
 import { renderScorecard, scoreCitations, verifyCitations } from './research/citations.js';
 import { fingerprintMatches } from './research/contract.js';
-import { buildPrompt, operatorNotes, type ResearchScope } from './research/prompt.js';
+import {
+  CORPUS_GROUNDING_BLOCK,
+  CORPUS_OUTPUT_REQUIREMENT,
+  buildPrompt,
+  operatorNotes,
+  type ResearchScope,
+} from './research/prompt.js';
 import {
   clampToTokens,
   estimateTokens,
@@ -113,15 +114,23 @@ function resolvePrompt(args: {
   scope?: ResearchScope | undefined;
   corpusStores?: readonly string[] | undefined;
 }): { prompt: string; archetype: Archetype; preEngineered: boolean } {
+  const hasCorpus = (args.corpusStores?.length ?? 0) > 0;
   const built = buildPrompt({
     question: args.question,
+    corpusGrounding: hasCorpus,
     ...(args.archetype ? { archetype: args.archetype } : {}),
     ...(args.scope ? { scope: args.scope } : {}),
   });
-  const prompt =
-    args.corpusStores && args.corpusStores.length > 0
-      ? `${built.prompt}\n\n${CORPUS_GROUNDING_INSTRUCTION.trim()}`
-      : built.prompt;
+  // A pre-engineered brief is sent verbatim, so the corpus block cannot be
+  // woven into its scaffold. Insert it before that brief's own trailing
+  // re-anchor where one exists, rather than after it — appending after the
+  // final `<core_directive>` is what made the instruction invisible once.
+  let prompt = built.prompt;
+  if (hasCorpus && built.preEngineered) {
+    const anchor = prompt.lastIndexOf('<core_directive>');
+    const insert = `<corpus_grounding>\n${CORPUS_GROUNDING_BLOCK}\n\n${CORPUS_OUTPUT_REQUIREMENT}\n</corpus_grounding>\n\n`;
+    prompt = anchor > 0 ? prompt.slice(0, anchor) + insert + prompt.slice(anchor) : `${insert}${prompt}`;
+  }
   return { prompt, archetype: built.archetype, preEngineered: built.preEngineered };
 }
 
