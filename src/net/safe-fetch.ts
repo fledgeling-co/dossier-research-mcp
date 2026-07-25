@@ -158,7 +158,7 @@ export async function safeFetch(
     // simply wrong server may understate.
     let body = '';
     if (opts.method !== 'HEAD' && response.body) {
-      const reader = response.body.getReader();
+      const reader: ReadableStreamDefaultReader<Uint8Array> = response.body.getReader();
       const decoder = new TextDecoder();
       let total = 0;
       for (;;) {

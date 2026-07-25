@@ -1,7 +1,7 @@
 {
   "name": "deep-research-mcp",
   "version": "0.1.0",
-  "description": "MCP server for Google Gemini Deep Research — durable background runs, spend control, context-safe report reading, citation verification, and private-corpus grounding.",
+  "description": "MCP server for Google Gemini Deep Research \u2014 durable background runs, spend control, context-safe report reading, citation verification, and private-corpus grounding.",
   "type": "module",
   "license": "MIT",
   "author": "fledgeling-co",
@@ -48,14 +48,15 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsgo -p tsconfig.build.json",
     "dev": "tsx src/index.ts",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsgo --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "inspect": "npm run build && npx fastmcp inspect dist/index.js",
-    "gate": "npm run typecheck && npm run test && npm run build",
-    "prepublishOnly": "npm run build"
+    "gate": "npm run typecheck && npm run lint && npm run test && npm run build",
+    "prepublishOnly": "npm run build",
+    "lint": "eslint ."
   },
   "dependencies": {
     "@ai-sdk/google": "^4.0.24",
@@ -65,9 +66,15 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@swc/core": "^1.15.46",
     "@types/node": "^26.1.1",
+    "@typescript/native-preview": "^7.0.0-dev.20260707.2",
+    "eslint": "^10.8.0",
     "tsx": "^4.23.1",
-    "typescript": "^7.0.2",
+    "typescript": "~6.0",
+    "typescript-eslint": "^8.65.0",
+    "unplugin-swc": "^1.5.9",
     "vitest": "^4.1.10"
   },
   "overrides": {

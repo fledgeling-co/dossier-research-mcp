@@ -140,6 +140,9 @@ function tokenAuthenticator(tokens: readonly string[]) {
       (candidate) => candidate.length === presented.length && timingSafeEqual(candidate, presented),
     );
     if (!ok) {
+      // FastMCP's documented auth contract: throwing a Response is how a
+      // rejection becomes a 401 on the wire. An Error would surface as a 500.
+      // eslint-disable-next-line @typescript-eslint/only-throw-error -- see above
       throw new Response(null, { status: 401, statusText: 'Unauthorized' });
     }
     return Promise.resolve({ id: 'token' });
@@ -151,7 +154,7 @@ export function createServer(deps: ServerDeps): FastMCP {
 
   const server = new FastMCP({
     name: 'deep-research',
-    version: version as `${number}.${number}.${number}`,
+    version,
     ...(config.httpTokens.length > 0
       ? { authenticate: tokenAuthenticator(config.httpTokens) }
       : {}),

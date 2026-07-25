@@ -89,9 +89,16 @@ function failure(e: unknown): { ok: false; error: string } {
   if (e instanceof Error) {
     // AI SDK errors nest the useful detail (a provider message, a schema
     // validation failure) in `cause`; the outer message alone is often generic.
-    const cause = (e as { cause?: unknown }).cause;
-    const causeText =
-      cause instanceof Error ? ` — ${cause.message}` : cause ? ` — ${String(cause)}` : '';
+    const cause: unknown = (e as { cause?: unknown }).cause;
+    const causeText = cause instanceof Error
+      ? ` — ${cause.message}`
+      : typeof cause === 'string'
+        ? ` — ${cause}`
+        // Anything else stringifies to "[object Object]", which is worse than
+        // saying nothing — JSON at least carries the provider's payload.
+        : cause != null
+          ? ` — ${JSON.stringify(cause).slice(0, 300)}`
+          : '';
     return { ok: false, error: `${e.name}: ${e.message}${causeText}`.slice(0, 800) };
   }
   return { ok: false, error: String(e).slice(0, 800) };

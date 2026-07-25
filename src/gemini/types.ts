@@ -29,7 +29,7 @@ const ContentItemSchema = z.union([
     mime_type: z.string().optional(),
   }),
   // Any other content type the preview API grows: keep the step parseable.
-  z.object({ type: z.string() }).transform((v) => ({ type: v.type as string })),
+  z.object({ type: z.string() }).transform((v) => ({ type: v.type })),
 ]);
 
 export type ContentItem = z.infer<typeof ContentItemSchema>;

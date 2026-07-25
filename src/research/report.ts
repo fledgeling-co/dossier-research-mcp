@@ -134,7 +134,9 @@ export function grepReport(
     try {
       re = new RegExp(pattern, 'i');
     } catch (e: unknown) {
-      throw new Error(`Invalid regular expression: ${e instanceof Error ? e.message : 'unknown'}`);
+      throw new Error(`Invalid regular expression: ${e instanceof Error ? e.message : 'unknown'}`, {
+        cause: e,
+      });
     }
   } else {
     re = new RegExp(pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
