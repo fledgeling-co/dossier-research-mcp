@@ -41,6 +41,22 @@ export default defineConfig({
       {
         extends: true,
         test: {
+          // Spends real money. Deliberately NOT in `test:all`, so it can
+          // never run in the gate or block a deploy; it needs
+          // DOSSIER_PAID_TESTS=1 plus a real key, and skips itself otherwise.
+          // No `env` override here on purpose: `shared` sets DOSSIER_HERMETIC,
+          // which would stop the very thing this project exists to test.
+          name: 'paid',
+          environment: 'node' as const,
+          include: ['tests/paid/**/*.test.ts'],
+          fileParallelism: false,
+          testTimeout: 65 * 60_000,
+          hookTimeout: 120_000,
+        },
+      },
+      {
+        extends: true,
+        test: {
           ...shared,
           name: 'acceptance',
           include: ['tests/acceptance/**/*.acceptance.test.ts'],

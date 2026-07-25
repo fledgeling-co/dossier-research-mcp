@@ -80,6 +80,16 @@ Acceptance criteria are taken from the README's tool contracts and the tool desc
 | **SEC-03** | Tool arguments are length-capped; oversized input is refused | `adversarial` | ✓ |
 | **SEC-04** | A prompt-injection payload in a question is data, never instruction | `adversarial` | ✓ |
 | **SEC-05** | No response leaks a credential or a store path outside the store dir | `adversarial` | ✓ |
+| **HTTP-01** | Health is open; `/mcp` rejects absent, wrong, same-length-wrong and scheme-less tokens | `http-transport` | ✓ |
+| **HTTP-02** | A malformed body is a 4xx, and the server survives it | `http-transport` | ✓ |
+| **VERTEX-01** | The server names every Vertex limitation, at start-up and in capabilities | `known-limits` | ✓ |
+| **VERTEX-02** | A live Vertex run works | `known-limits` | ◑ written, skipped without a project |
+| **STREAM-03** | The tail description does not promise a live feed the API does not give | `known-limits` | ✓ |
+| **PAID-01** | A real run completes with structure, confidence qualifiers and resolvable citations | `paid` | ✓ |
+| **PAID-02** | Collaborative planning returns a reviewable plan, not the echoed prompt | `paid` | ✓ |
+| **PAID-03** | Corpus grounding produces the contradictions section | `paid` | ✓ |
+| **PAID-04** | A document attachment is actually read | `paid` | ✓ |
+| **PAID-05** | The max tier runs and commits the higher band | `paid` | ◑ opt-in via `DOSSIER_PAID_MAX` |
 | **DEGRADE-01** | Corpus tools explain the Vertex limitation rather than failing opaquely | `state-matrix` | ✓ |
 | **DEGRADE-02** | `research://capabilities` reports `degraded` and the backend limitations | `protocol` | ✓ |
 | **RES-01** | `research://run/{id}` returns the record and omits the bulky prompt | `protocol` | ✓ |
@@ -87,16 +97,24 @@ Acceptance criteria are taken from the README's tool contracts and the tool desc
 | **STREAM-01** | Live counters surface in status when present | `state-matrix` | ✓ |
 | **STREAM-02** | An abandoned stream is disclosed rather than looking stuck | `state-matrix` | ✓ |
 
-### Known gaps, named
+### The paid project
 
-| AC | Why it is not covered here |
+`tests/paid/` spends real money against the live API, so it is a **separate vitest project that is deliberately excluded from `test:all` and therefore from the gate**. It cannot block a deploy. It needs both `DOSSIER_PAID_TESTS=1` and a real `GEMINI_API_KEY`, and skips itself entirely without them.
+
+```bash
+DOSSIER_PAID_TESTS=1 GEMINI_API_KEY=... npm run test:paid
+```
+
+Roughly **$2–4** per full run at `fast` tier. `PAID-05` (the `max` tier, $3–7 on its own) needs a further `DOSSIER_PAID_MAX=1`, because it exercises the same code path with a different agent id and is rarely worth the money.
+
+The suite gives itself a `DOSSIER_BUDGET_USD=15` ceiling so a bug in the tests cannot drain a real budget, and cancels every run it started in `afterAll`, because an abandoned run keeps billing.
+
+### Remaining gaps, named
+
+| AC | Why it is still open |
 |---|---|
-| **PAID-01** a real run completes | Costs $1–7 and takes up to an hour. Verified by hand; the run and its outputs are quoted in the README. |
-| **PAID-02** collaborative planning end to end | Same. Verified live: plan returned in 20s, approved with an amendment. |
-| **PAID-03** corpus contradictions section | Same. Verified live after the placement fix. |
-| **VERTEX-01** the Vertex backend works | No GCP project with `aiplatform.interactions.create`. Documented as unverified rather than claimed. |
-| **HTTP-01** bearer auth over the HTTP transport | Verified live (401 for absent, wrong and same-length-wrong tokens; 200 for correct). Not automated because it needs a free port and a second process. |
-| **STREAM-03** live mid-run progress | The API buffers its stream; there is nothing to observe. Tracked in [#1](https://github.com/fledgeling-co/dossier-research-mcp/issues/1). |
+| **VERTEX-02** a live Vertex run | Needs a GCP project with `aiplatform.interactions.create`; the one available returns `PERMISSION_DENIED`. The test is written and skips itself, so it runs the moment a project exists. |
+| **STREAM-03** live mid-run progress | Not a gap in the tests. The API buffers its stream: a 7.1-minute run delivered nothing until completion. There is nothing to observe, so the suite asserts the docs do not promise it. Tracked in [#1](https://github.com/fledgeling-co/dossier-research-mcp/issues/1). |
 
 ## Discipline
 

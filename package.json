@@ -64,7 +64,8 @@
     "version": "node scripts/sync-version.mjs && git add src/version.ts",
     "postversion": "git push --follow-tags",
     "test:acceptance": "vitest run --project acceptance",
-    "test:all": "vitest run"
+    "test:all": "vitest run --project unit --project acceptance",
+    "test:paid": "vitest run --project paid"
   },
   "dependencies": {
     "@ai-sdk/google": "^4.0.24",

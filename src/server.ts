@@ -144,10 +144,17 @@ function tokenAuthenticator(tokens: readonly string[]) {
   return (request: { headers: Record<string, string | string[] | undefined> }): Promise<{ id: string }> => {
     const raw = request.headers['authorization'];
     const header = Array.isArray(raw) ? raw[0] : raw;
-    const presented = Buffer.from((header ?? '').replace(/^Bearer\s+/i, ''));
-    const ok = expected.some(
-      (candidate) => candidate.length === presented.length && timingSafeEqual(candidate, presented),
-    );
+    // The scheme is required, not optional. An Authorization header without
+    // one is malformed per RFC 7235, and accepting a bare token means a
+    // client sending the wrong header shape still authenticates, which hides
+    // the mistake until something else depends on the shape.
+    const match = /^Bearer\s+(\S+)$/i.exec(header ?? '');
+    const presented = Buffer.from(match?.[1] ?? '');
+    const ok =
+      presented.length > 0 &&
+      expected.some(
+        (candidate) => candidate.length === presented.length && timingSafeEqual(candidate, presented),
+      );
     if (!ok) {
       // FastMCP's documented auth contract: throwing a Response is how a
       // rejection becomes a 401 on the wire. An Error would surface as a 500.
