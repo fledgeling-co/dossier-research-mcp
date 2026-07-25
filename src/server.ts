@@ -153,7 +153,7 @@ export function createServer(deps: ServerDeps): FastMCP {
   const { config, store, runner } = deps;
 
   const server = new FastMCP({
-    name: 'deep-research',
+    name: 'dossier',
     version,
     ...(config.httpTokens.length > 0
       ? { authenticate: tokenAuthenticator(config.httpTokens) }

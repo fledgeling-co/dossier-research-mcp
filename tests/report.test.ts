@@ -10,6 +10,7 @@ import {
   readSection,
   renderOutline,
 } from '../src/research/report.js';
+import { extractPlan } from '../src/research/plan.js';
 
 const REPORT = `## Executive Summary
 
@@ -155,5 +156,39 @@ describe('clampToTokens', () => {
     expect(text).toContain('truncated at the requested token budget');
     expect(text).toContain('estimated tokens remain');
     expect(estimateTokens(text)).toBeLessThan(estimateTokens(long));
+  });
+});
+
+describe('extractPlan (collaborative planning)', () => {
+  // The exact shape the live API returns: a title, the whole submitted prompt
+  // echoed back, then the actual plan.
+  const PROMPT = `<role>\nYou are a senior research analyst evaluating software stacks.\n</role>\n\n<core_directive>\nAnswer this decisively: what changed?\n</core_directive>`;
+  const RAW = `**Title:** Model Context Protocol Specification Analysis\n**Input:** ${PROMPT}\n**Research Plan:**\n(1) Locate the official specification.\n(2) Extract transport details.`;
+
+  it('returns the plan, not the echoed prompt', () => {
+    const { plan, title, strippedEcho } = extractPlan(RAW, PROMPT);
+    expect(plan).toBe('(1) Locate the official specification.\n(2) Extract transport details.');
+    expect(plan).not.toContain('senior research analyst');
+    expect(title).toBe('Model Context Protocol Specification Analysis');
+    expect(strippedEcho).toBe(true);
+  });
+
+  it('falls back to matching the submitted prompt when no marker is present', () => {
+    const noMarker = `**Title:** X\n**Input:** ${PROMPT}\nJust do these three things.`;
+    const { plan, strippedEcho } = extractPlan(noMarker, PROMPT);
+    expect(plan).toContain('Just do these three things.');
+    expect(plan).not.toContain('senior research analyst');
+    expect(strippedEcho).toBe(true);
+  });
+
+  it('returns text unchanged when it is already a bare plan', () => {
+    const bare = '(1) Do the thing.\n(2) Do the other thing.';
+    const { plan, strippedEcho } = extractPlan(bare);
+    expect(plan).toBe(bare);
+    expect(strippedEcho).toBe(false);
+  });
+
+  it('handles an empty turn without throwing', () => {
+    expect(extractPlan('').plan).toBe('');
   });
 });

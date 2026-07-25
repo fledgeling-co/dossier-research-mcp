@@ -6,6 +6,31 @@ Google ships two things that both look like "an AI that does research for you", 
 
 ---
 
+## Choosing, in one diagram
+
+```mermaid
+flowchart TD
+    Q{"What is the<br/>deliverable?"}
+    Q -->|"a cited report<br/>a human will act on"| DR["<b>Deep Research API</b><br/>research_start"]
+    Q -->|"files, code run over<br/>your data, a reusable persona"| MA["<b>Managed Agents API</b><br/>agent_create → agent_run"]
+    Q -->|"typed records<br/>at scale"| OWN["<b>Roll your own</b><br/>tool-loop + structured output"]
+
+    DR --> DC{"decision-<br/>critical?"}
+    DC -->|yes| PLAN["collaborativePlanning: true<br/><i>edit the plan first</i>"]
+    DC -->|no| AUTO["autonomous"]
+
+    DR -.->|"research → artifact"| MA
+    DR -.->|"private context"| FS["corpusStores<br/>File Search"]
+
+    style DR fill:#C8321F,stroke:#7C1A0B,color:#ffffff
+    style MA fill:#1B1513,stroke:#C8321F,color:#F0E6CE
+    style OWN fill:#2E2622,stroke:#6E1206,color:#F0E6CE
+    style PLAN fill:#1B1513,stroke:#C8321F,color:#F0E6CE
+    style FS fill:#1B1513,stroke:#C8321F,color:#F0E6CE
+```
+
+---
+
 ## The one-paragraph version
 
 **Deep Research** is a *finished product*: one call buys you a planned, executed and synthesised research report with 80–160 web searches behind it and inline citations, and you cannot change how it works. **Managed Agents** is a *harness*: one call buys you a Linux sandbox with a Gemini Flash model that will do whatever you told it to do, including research — and the methodology, the search discipline and the citation rigour are now your job. Use Deep Research when you want the report. Use a managed agent when you want files, code execution over your data, or a reusable persona that does research as one step of something longer.

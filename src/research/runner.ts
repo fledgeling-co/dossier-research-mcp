@@ -6,6 +6,7 @@ import { newRunId, Store } from '../store/store.js';
 import { TERMINAL_STATES, type RunRecord, type RunState } from '../store/types.js';
 import type { Archetype } from './archetypes.js';
 import { fingerprint } from './contract.js';
+import { extractPlan } from './plan.js';
 import { extractCitedUrls, normaliseCitations } from './report.js';
 
 /**
@@ -260,7 +261,14 @@ export class Runner {
         // A collaborative-planning first turn also comes back `completed`: the
         // plan IS the output of that turn. Distinguish by approval state.
         if (!next.planApproved && next.state === 'planning') {
-          next = { ...next, plan: snapshot.markdown };
+          // The planning turn wraps the plan behind an echo of the submitted
+          // prompt; store only the reviewable part (see research/plan.ts).
+          const extracted = extractPlan(snapshot.markdown, next.prompt);
+          next = {
+            ...next,
+            plan: extracted.plan,
+            ...(extracted.title ? { title: extracted.title } : {}),
+          };
           await this.store.appendJournal(
             run.id,
             'plan',
