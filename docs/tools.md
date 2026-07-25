@@ -173,25 +173,47 @@ Classification is coarse and admits it: an unrecognised domain is `other`, never
 
 The **citation registry** is the other half. One numbered, deduplicated list built from the report, in which the same page cited three different ways is entry 7 three times rather than 7, 12 and 19. `research_followup` answers from it rather than from the report's prose, which closes the failure where a model invents a plausible reference mid-answer to support a sentence it wanted to write.
 
-### `research_verify_claims`, spends money
+### `research_verify_claims`, free or paid, your choice
 
-Fetches the pages a report cites and asks a model whether each one actually says what the report says it says.
+Tests whether each cited source actually contains the claim attached to it.
 
-This is the tool `research_verify_citations` is not. That one proves a link resolves. This one tests whether the page contains the claim, and the verdict that earns its keep is `not_addressed`: a source that is *about* the topic without containing the specific assertion is the most common failure in a cited report, and it is completely invisible to link-checking because the link works perfectly.
+This is the tool `research_verify_citations` is not. That one proves a link resolves. This one tests whether the page contains the claim, and the verdict that earns its keep is `not_addressed`: a source that is *about* the topic without containing the specific assertion is the most common failure in a cited report, and it's completely invisible to link-checking because the link works perfectly.
+
+**You can do the judging, and it costs nothing.** Pass the claims you pulled out of the report, get each cited page's text back, numbered, then send your verdicts.
+
+```
+research_verify_claims { runId, claims: [{ claim, url }] }   → the pages, numbered
+research_verify_claims { runId, verdicts: [{ n, verdict }] } → the tally
+```
+
+**Or a model can, and that bills** (one small call per claim, needs `GEMINI_API_KEY`): pass `sample` and it runs end to end.
 
 | Parameter | Type | Notes |
 |---|---|---|
 | `runId` | `string` | The completed run |
-| `sample` | `1-25` | Claims to check. One fetch plus one small model call each, so this is the cost dial |
+| `claims` | `object[]` | Caller mode step 1: `{ claim, url }` pairs you extracted |
+| `verdicts` | `object[]` | Caller mode step 2: `{ n, verdict, quote?, note? }` |
+| `sample` | `1-25` | Model mode: claims to check. One fetch plus one small model call each |
+
+Whoever judges, three things stay server-side: the fetching (SSRF-checked, redirect-validated), the sample, and the tally. **A verdict on a claim that was never fetched is discarded**, because a verdict on a page nobody opened is the same defect as a report citing a source it never read.
 
 > [!IMPORTANT]
 > It catches a source that does not support its claim. It does not catch a report whose facts are each correct and whose conclusion does not follow, which is the harder failure and the one a 2026 review found in the wild: three facts established correctly, two of them multiplied, the third ignored, and an inflated estimate presented confidently. For that, read the reasoning, or run `research_counter_review`.
 
-### `research_counter_review`, spends money
+### `research_counter_review`, free or paid, your choice
 
 Four lenses over a finished report, each a separate pass, each told to **refute** rather than summarise: claim validation, source diversity, recency, internal contradiction.
 
-Coverage is required; an issue quota is not. Each lens reports what it checked, and "checked, found nothing" is a real answer. Demanding a minimum number of issues rewards inventing objections to hit a number, which is worse than a quiet lens.
+**You can run the lenses, and it costs nothing.** Call it and you get the four briefs; do the reviewing and send `findings` back.
+
+```
+research_counter_review { runId }                          → the four lens briefs
+research_counter_review { runId, findings: [{ lens, checked, issues }] }
+```
+
+**Or a model can, and that bills** (one small call per lens, needs `GEMINI_API_KEY`).
+
+Coverage is required; an issue quota is not. Each lens reports what it checked, and "checked, found nothing" is a real answer. Demanding a minimum number of issues rewards inventing objections to hit a number, which is worse than a quiet lens. A lens you never applied is named as such rather than counted as one that found nothing.
 
 > [!NOTE]
 > If all four lenses come back empty, the tool says so as a **failed review rather than a clean report**. Four adversarial passes finding nothing in a long research report usually means the passes did not bite.

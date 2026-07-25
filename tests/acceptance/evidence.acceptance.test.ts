@@ -83,15 +83,19 @@ describe('EVID-04: the search trace records what was asked', () => {
 });
 
 describe('EVID-05: the paid checks refuse clearly before they spend', () => {
-  it('says which credential claim verification needs', async () => {
+  it('offers to let the caller do the judging rather than demanding a key', async () => {
+    // It used to refuse without GEMINI_API_KEY. Fetching safely and holding the
+    // sample is what a server is for; reading a page is what the caller is for,
+    // so a missing key is a different division of labour, not a dead end.
     const result = await mcp.callTool('research_verify_claims', { runId: RUN });
-    expect(result.text).toMatch(/utility model/);
-    expect(result.text).toMatch(/GEMINI_API_KEY/);
+    expect(result.text).toMatch(/you do the judging/i);
+    expect(result.text).not.toMatch(/needs a utility model/);
   });
 
   it('says the same for counter-review', async () => {
     const result = await mcp.callTool('research_counter_review', { runId: RUN });
-    expect(result.text).toMatch(/utility model/);
+    expect(result.text).toMatch(/you run the lenses/i);
+    expect(result.text).toMatch(/REFUTE/);
   });
 
   it('explains a missing report by state rather than erroring opaquely', async () => {
@@ -107,7 +111,11 @@ describe('EVID-05: the paid checks refuse clearly before they spend', () => {
     expect(byName.get('research_verify_claims')?.annotations?.readOnlyHint).toBe(false);
     expect(byName.get('research_counter_review')?.annotations?.readOnlyHint).toBe(false);
     expect(byName.get('research_evidence')?.annotations?.readOnlyHint).toBe(true);
-    expect(byName.get('research_verify_claims')?.description).toMatch(/SPENDS MONEY/);
+    // It no longer spends money unconditionally, so the description must say
+    // both halves: free when you judge, billed when a model does.
+    const verify = byName.get('research_verify_claims')?.description ?? '';
+    expect(verify).toMatch(/free/i);
+    expect(verify).toMatch(/spends money/i);
   });
 });
 
@@ -159,5 +167,79 @@ describe('IMPORT-01: a report from elsewhere becomes a normal run', () => {
     const after = await mcp.callTool('research_budget');
     const committed = (text: string) => /Committed: \*\*\$([\d.]+)\*\*/.exec(text)?.[1];
     expect(committed(after.text)).toBe(committed(before.text));
+  });
+});
+
+describe('EVID-06: the checking tools work with no key at all', () => {
+  // The whole argument for this server is that the calling assistant can do the
+  // thinking. These two were the last tools that disagreed, and the harness runs
+  // hermetic with every credential blank, so this is the real no-key path.
+  let runId: string;
+
+  beforeAll(async () => {
+    const started = await mcp.callTool('research_local_start', {
+      question: 'binary quantization support in vector databases',
+      maxTasks: 1,
+    });
+    runId = /`(dr_[a-z0-9]+)`/.exec(started.text)?.[1] ?? '';
+    await mcp.callTool('research_local_note', {
+      runId,
+      taskId: 't1',
+      findings: [{ claim: 'Qdrant documents binary quantization', url: 'https://qdrant.tech/documentation/' }],
+    });
+    await mcp.callTool('research_local_draft', { runId });
+    await mcp.callTool('research_local_submit', {
+      runId,
+      markdown:
+        '# BQ\n\n## Executive Summary\n\n- Qdrant documents it <cite url="https://qdrant.tech/documentation/">1</cite>.\n',
+    });
+  }, 60_000);
+
+  it('offers the caller path instead of demanding a credential', async () => {
+    const result = await mcp.callTool('research_verify_claims', { runId });
+    expect(result.text).toMatch(/you do the judging/i);
+    expect(result.text).toMatch(/research_verify_claims \{ runId/);
+  });
+
+  it('refuses a verdict on a claim it never fetched', async () => {
+    // The reason the sample is held server-side. A verdict on a page nobody
+    // opened is the same defect as a report citing a source it never read.
+    const result = await mcp.callTool('research_verify_claims', {
+      runId,
+      verdicts: [{ n: 99, verdict: 'supports' }],
+    });
+    expect(result.text).toMatch(/No claim sample is held|never fetched/);
+  });
+
+  it('hands over four lens briefs, each told to refute', async () => {
+    const result = await mcp.callTool('research_counter_review', { runId });
+    expect(result.text).toMatch(/REFUTE/);
+    for (const lens of ['claim validator', 'source diversity', 'recency', 'contradiction']) {
+      expect(result.text, lens).toContain(lens);
+    }
+  });
+
+  it('applies the coverage rule to caller-supplied findings', async () => {
+    const result = await mcp.callTool('research_counter_review', {
+      runId,
+      findings: [
+        { lens: 'claim validator', checked: 'every cited claim against its source', issues: [] },
+        { lens: 'source diversity', checked: 'domain concentration across the registry', issues: [] },
+        { lens: 'recency', checked: 'publication dates on every citation', issues: [] },
+        { lens: 'contradiction', checked: 'the summary against the body', issues: [] },
+      ],
+    });
+    // Four adversarial passes finding nothing is a failed review, not a pass,
+    // and that rule has to hold whoever did the reviewing.
+    expect(result.text).toMatch(/failed review/i);
+  });
+
+  it('names the lenses that were never applied', async () => {
+    const result = await mcp.callTool('research_counter_review', {
+      runId,
+      findings: [{ lens: 'recency', checked: 'publication dates across the report', issues: [] }],
+    });
+    expect(result.text).toMatch(/Not run: claim validator/);
+    expect(result.text).toMatch(/never applied is not a lens that found nothing/);
   });
 });

@@ -1581,9 +1581,9 @@ function registerEvidenceTools(server: FastMCP, deps: ServerDeps): void {
   server.addTool({
     name: 'research_verify_claims',
     description:
-      'Fetch the sources a report cites and ask a model whether each one ACTUALLY supports the claim attached to it. THIS SPENDS MONEY (one small model call per sampled claim) and it SENDS THE TEXT OF EACH FETCHED PAGE to the utility model. Different from `research_verify_citations` in the way that matters: that one proves a link resolves, this one tests whether the page says what the report says it says. The failure it targets is the one 2026 reviews converge on, where every fact is right and the conclusion is wrong.',
+      'Test whether each cited source ACTUALLY contains the claim attached to it. Different from `research_verify_citations` in the way that matters: that one proves a link resolves, this one tests whether the page says what the report says it says. Two ways to run it. **You do the judging** (free): pass `claims`, get back the fetched page text for each, then pass `verdicts`. **Or a model does it** (spends money, one small call per claim): pass `sample` and it runs end to end, which needs GEMINI_API_KEY. Either way the fetching, the sampling and the tally happen here, so a verdict cannot be recorded for a claim that was never checked.',
     annotations: {
-      title: 'Verify claims against their sources (spends money)',
+      title: 'Verify claims against their sources',
       readOnlyHint: false,
       destructiveHint: false,
       openWorldHint: true,
@@ -1596,12 +1596,113 @@ function registerEvidenceTools(server: FastMCP, deps: ServerDeps): void {
         .min(1)
         .max(25)
         .default(8)
-        .describe('How many claims to check. Each is a fetch plus a model call, so this is the cost dial.'),
+        .describe('Model mode: how many claims to check. Each is a fetch plus a model call, so this is the cost dial.'),
+      claims: z
+        .array(
+          z.object({
+            claim: z.string().min(5).max(2000).describe('The claim as the report states it.'),
+            url: z.string().url().max(2000).describe('The source the report cites for it.'),
+          }),
+        )
+        .min(1)
+        .max(25)
+        .optional()
+        .describe('Caller mode, step 1: claims you extracted from the report. Returns each cited page’s text for you to judge.'),
+      verdicts: z
+        .array(
+          z.object({
+            n: z.number().int().min(1).describe('The number from step 1.'),
+            verdict: z.enum(['supports', 'partially_supports', 'contradicts', 'not_addressed', 'unreadable']),
+            quote: z.string().max(1000).optional().describe('The sentence from the page that decides it, verbatim.'),
+            note: z.string().max(600).optional(),
+          }),
+        )
+        .min(1)
+        .max(25)
+        .optional()
+        .describe('Caller mode, step 2: your verdicts on the pages returned by step 1.'),
     }),
     execute: async (args, { reportProgress }) => {
       const run = await requireRun(deps, args.runId);
       const markdown = await store.readReport(args.runId);
       if (!markdown) throw new UserError(`No report for \`${run.id}\` (state: ${run.state}). ${stateHint(run.state)}`);
+
+      // ── Caller mode, step 2: tally the verdicts against the held sample ──
+      if (args.verdicts) {
+        const held = ClaimSampleSchema.safeParse(await store.readSession(`${run.id}-claims`));
+        if (!held.success) {
+          throw new UserError(
+            `No claim sample is held for \`${run.id}\`. Call this with \`claims\` first: the sample is kept here so a verdict cannot be recorded against a claim that was never fetched.`,
+          );
+        }
+        return renderClaimVerdicts(run.id, held.data, args.verdicts);
+      }
+
+      // ── Caller mode, step 1: fetch the pages and hand them over ──
+      if (args.claims || !deps.utility) {
+        if (!args.claims) {
+          return [
+            `## Claim checking for \`${run.id}\`, without a key`,
+            '',
+            'No utility model is configured, so you do the judging. That is the better division of labour anyway: fetching safely and holding the sample is what this server is for, and reading a page is what you are for.',
+            '',
+            `1. Read the report: \`research_read { runId: "${run.id}" }\`, then pull the sections that carry its load-bearing claims.`,
+            '2. Call this again with the claims and the URL each one cites:',
+            '',
+            '```',
+            `research_verify_claims { runId: "${run.id}", claims: [{ claim: "...", url: "https://..." }] }`,
+            '```',
+            '',
+            'You get each page’s text back, numbered. Judge them, then send `verdicts`. A source that is *about* the right topic without containing the specific claim is `not_addressed`, and it is the verdict that earns its keep: link-checking cannot see it, because the link resolves perfectly.',
+          ].join('\n');
+        }
+
+        const fetched: { n: number; claim: string; url: string; text: string; error?: string }[] = [];
+        for (const [i, c] of args.claims.entries()) {
+          await reportProgress({ progress: i, total: args.claims.length });
+          try {
+            const res = await safeFetch(c.url, { method: 'GET', timeoutMs: 15_000, maxBytes: 512 * 1024 });
+            fetched.push({ n: i + 1, claim: c.claim, url: c.url, text: stripToText(res.body).slice(0, 6000) });
+          } catch (e: unknown) {
+            fetched.push({
+              n: i + 1, claim: c.claim, url: c.url, text: '',
+              error: e instanceof Error ? e.message.slice(0, 200) : 'fetch failed',
+            });
+          }
+        }
+        await reportProgress({ progress: args.claims.length, total: args.claims.length });
+        await store.saveSession(`${run.id}-claims`, {
+          runId: run.id,
+          at: new Date().toISOString(),
+          claims: fetched.map((f) => ({ n: f.n, claim: f.claim, url: f.url, fetched: !f.error })),
+        });
+
+        return [
+          `## ${String(fetched.length)} page(s) fetched for \`${run.id}\``,
+          '',
+          'Judge each one **from the page text alone**. What you already know about the topic is irrelevant here and using it defeats the check.',
+          '',
+          ...fetched.flatMap((f) => [
+            `### ${String(f.n)}. ${f.claim.slice(0, 300)}`,
+            `Source: ${f.url}`,
+            f.error ? `**Could not fetch:** ${f.error}` : '',
+            f.error ? '' : '```',
+            f.error ? '' : f.text || '(the page returned no readable text)',
+            f.error ? '' : '```',
+            '',
+          ].filter((x) => x !== '')),
+          '',
+          'Then send your verdicts:',
+          '',
+          '```',
+          `research_verify_claims { runId: "${run.id}", verdicts: [{ n: 1, verdict: "not_addressed", quote: "..." }] }`,
+          '```',
+          '',
+          '`supports` · `partially_supports` (a weaker or narrower version) · `contradicts` · `not_addressed` (readable, but the claim is not in it) · `unreadable` (a cookie wall, a login page, an empty body).',
+        ].join('\n');
+      }
+
+      // ── Model mode: unchanged, and it bills ──
       const utility = requireUtility('Claim verification');
 
       await runner.reserveUtilitySpend(`verify-claims-extract:${run.id}`);
@@ -1684,9 +1785,9 @@ function registerEvidenceTools(server: FastMCP, deps: ServerDeps): void {
   server.addTool({
     name: 'research_counter_review',
     description:
-      'Adversarial review of a finished report through four independent lenses: claim validation, source diversity, recency, and internal contradiction. THIS SPENDS MONEY (one small model call per lens). Each lens is prompted to REFUTE rather than summarise, because reviewers who are not told to argue agree with fluent prose. A review that finds nothing on every lens is reported as a failed review, not as a clean bill of health.',
+      'Adversarial review of a finished report through four independent lenses: claim validation, source diversity, recency, and internal contradiction. Each lens REFUTES rather than summarises, because a reviewer not told to argue agrees with fluent prose. Two ways to run it. **You do the reviewing** (free): call it, get the four lens briefs, then send `findings`. **Or a model does it** (spends money, one small call per lens), which needs GEMINI_API_KEY. Either way the coverage rule is enforced here: four lenses finding nothing is reported as a FAILED review, not a clean bill of health.',
     annotations: {
-      title: 'Counter-review a report (spends money)',
+      title: 'Counter-review a report',
       readOnlyHint: false,
       destructiveHint: false,
       openWorldHint: true,
@@ -1698,57 +1799,84 @@ function registerEvidenceTools(server: FastMCP, deps: ServerDeps): void {
         .min(1)
         .max(4)
         .optional()
-        .describe('Which lenses to run. Omit for all four; each one costs a model call.'),
+        .describe('Which lenses to run. Omit for all four.'),
+      findings: z
+        .array(
+          z.object({
+            lens: z.enum(['claim validator', 'source diversity', 'recency', 'contradiction']),
+            checked: z
+              .string()
+              .min(10)
+              .max(2000)
+              .describe('What you actually examined. Required even when you found nothing: "checked, found nothing" is a real answer and an unexamined lens is not.'),
+            issues: z
+              .array(
+                z.object({
+                  severity: z.enum(['high', 'medium', 'low']),
+                  where: z.string().max(300).describe('The section or claim this is about.'),
+                  problem: z.string().max(1200),
+                }),
+              )
+              .max(20),
+          }),
+        )
+        .min(1)
+        .max(4)
+        .optional()
+        .describe('Caller mode: your results, one entry per lens you ran.'),
     }),
     execute: async (args, { reportProgress }) => {
       const run = await requireRun(deps, args.runId);
       const markdown = await store.readReport(args.runId);
       if (!markdown) throw new UserError(`No report for \`${run.id}\` (state: ${run.state}). ${stateHint(run.state)}`);
+
+      // ── Caller mode, step 2: apply the coverage rule to what came back ──
+      if (args.findings) {
+        return renderCounterReview(
+          run.id,
+          args.findings.map((f) => ({ name: f.lens, checked: f.checked, issues: f.issues })),
+          args.findings.length,
+        );
+      }
+
+      // ── Caller mode, step 1: hand over the lens briefs ──
+      if (!deps.utility) {
+        const chosenLenses = args.lenses ? LENSES.filter((l) => args.lenses?.includes(l.name)) : LENSES;
+        return [
+          `## Counter-review of \`${run.id}\`, without a key`,
+          '',
+          'No utility model is configured, so you run the lenses. Read the report first with `research_read`; you cannot refute what you have not read.',
+          '',
+          '**Each lens is a separate pass, and each one is trying to REFUTE.** Not to summarise, and not to agree: a reviewer who is not told to argue agrees with fluent prose, which is the whole reason this exists.',
+          '',
+          ...chosenLenses.flatMap((l) => [`### ${l.name}`, '', `**${l.question}**`, '', l.instruction, '']),
+          '**Report what you checked on every lens, including where you found nothing.** "Checked, found nothing" is a real answer; an unexamined lens is not, and padding the issue list to look thorough is worse than either.',
+          '',
+          'Then send it back:',
+          '',
+          '```',
+          `research_counter_review { runId: "${run.id}", findings: [{ lens: "recency", checked: "...", issues: [] }] }`,
+          '```',
+        ].join('\n');
+      }
+
+      // ── Model mode: unchanged, and it bills ──
       const utility = requireUtility('Counter-review');
 
       const chosen = args.lenses ? LENSES.filter((l) => args.lenses?.includes(l.name)) : LENSES;
-      const sections: string[] = [];
-      let issues = 0;
-      let ran = 0;
-
+      const gathered: LensResult[] = [];
       for (const [i, lens] of chosen.entries()) {
         await reportProgress({ progress: i, total: chosen.length });
         await runner.reserveUtilitySpend(`counter-review:${run.id}:${lens.name}`);
         const result = await utility.review(lens, markdown);
         if (!result.ok) {
-          sections.push(`### ${lens.name}\n\n_This lens did not run: ${result.error.slice(0, 300)}_`);
+          gathered.push({ name: lens.name, failed: result.error.slice(0, 300) });
           continue;
         }
-        ran += 1;
-        issues += result.value.issues.length;
-        sections.push(
-          [
-            `### ${lens.name}`,
-            '',
-            `**Checked:** ${result.value.checked}`,
-            '',
-            result.value.issues.length === 0
-              ? '_Nothing found on this lens._'
-              : result.value.issues
-                  .sort((a, b) => severityRank(a.severity) - severityRank(b.severity))
-                  .map((x) => `- **${x.severity}** · ${x.where} — ${x.problem}`)
-                  .join('\n'),
-          ].join('\n'),
-        );
+        gathered.push({ name: lens.name, checked: result.value.checked, issues: result.value.issues });
       }
       await reportProgress({ progress: chosen.length, total: chosen.length });
-
-      return [
-        `## Counter-review of \`${run.id}\``,
-        '',
-        `${String(ran)} of ${String(chosen.length)} lens(es) ran. **${String(issues)} issue(s)** raised.`,
-        '',
-        ...sections,
-        '',
-        ran > 0 && issues === 0
-          ? '> [!WARNING]\n> Every lens returned nothing. Treat that as a **failed review rather than a clean report**: four adversarial passes finding zero problems in a long research report is more often a sign the review did not bite than a sign the report is flawless. Re-run it, or read the reasoning yourself.'
-          : '_Issues here are a reviewer’s objections, not established errors. Check them against the report before acting on either._',
-      ].join('\n');
+      return renderCounterReview(run.id, gathered, chosen.length);
     },
   });
 
@@ -1812,6 +1940,140 @@ function registerEvidenceTools(server: FastMCP, deps: ServerDeps): void {
         .join('\n');
     },
   });
+}
+
+/**
+ * The claim sample, held between the two caller-driven steps.
+ *
+ * Kept server-side for one reason: without it a caller could report a verdict
+ * on a claim that was never fetched, which is the same defect as a report
+ * citing a source it never read. The tally is only meaningful over a sample
+ * somebody else fixed.
+ */
+const ClaimSampleSchema = z.object({
+  runId: z.string(),
+  at: z.string(),
+  claims: z.array(
+    z.object({ n: z.number().int(), claim: z.string(), url: z.string(), fetched: z.boolean() }),
+  ),
+});
+type ClaimSample = z.infer<typeof ClaimSampleSchema>;
+
+/** Tally caller-supplied verdicts against the held sample and render them. */
+function renderClaimVerdicts(
+  runId: string,
+  held: ClaimSample,
+  verdicts: readonly { n: number; verdict: string; quote?: string | undefined; note?: string | undefined }[],
+): string {
+  const byN = new Map(held.claims.map((c) => [c.n, c]));
+  const tally: Record<string, number> = {
+    supports: 0, partially_supports: 0, contradicts: 0, not_addressed: 0, unreadable: 0,
+  };
+  const lines: string[] = [];
+  const unknown: number[] = [];
+
+  for (const v of verdicts) {
+    const claim = byN.get(v.n);
+    if (!claim) {
+      unknown.push(v.n);
+      continue;
+    }
+    tally[v.verdict] = (tally[v.verdict] ?? 0) + 1;
+    const icon = { supports: '✅', partially_supports: '🟡', contradicts: '❌', not_addressed: '⚠️', unreadable: '⚫' }[
+      v.verdict as 'supports'
+    ] ?? '·';
+    lines.push(
+      [
+        `- ${icon} **${v.verdict}** — ${claim.claim.slice(0, 300)}`,
+        `    ${claim.url}`,
+        v.quote ? `    > ${v.quote.slice(0, 300)}` : '',
+        v.note ? `    _${v.note.slice(0, 250)}_` : '',
+      ]
+        .filter(Boolean)
+        .join('\n'),
+    );
+  }
+
+  const unjudged = held.claims.filter((c) => !verdicts.some((v) => v.n === c.n));
+  return [
+    `## Claim-to-source check for \`${runId}\``,
+    '',
+    `Judged **${String(verdicts.length - unknown.length)}** of ${String(held.claims.length)} fetched claim(s).`,
+    '',
+    `- ✅ supports: **${String(tally['supports'] ?? 0)}**`,
+    `- 🟡 partially supports: **${String(tally['partially_supports'] ?? 0)}**`,
+    `- ❌ contradicts: **${String(tally['contradicts'] ?? 0)}**`,
+    `- ⚠️ source does not address the claim: **${String(tally['not_addressed'] ?? 0)}**`,
+    `- ⚫ unreadable: **${String(tally['unreadable'] ?? 0)}**`,
+    '',
+    ...lines,
+    '',
+    unknown.length > 0
+      ? `> [!WARNING]\n> ${String(unknown.length)} verdict(s) referenced a claim number that was never fetched (${unknown.join(', ')}), and were discarded. A verdict on a page nobody opened is not a check.`
+      : '',
+    unjudged.length > 0
+      ? `_${String(unjudged.length)} fetched claim(s) went unjudged: ${unjudged.map((c) => c.n).join(', ')}. Silence is not a pass._`
+      : '',
+    '',
+    '> [!IMPORTANT]',
+    '> This is a sample. It catches a source that does not contain the claim attached to it, which link-checking cannot. It does not catch a report whose facts are each correct and whose conclusion does not follow; for that, run `research_counter_review`.',
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
+
+/** One lens's result, however it was produced. */
+interface LensResult {
+  readonly name: string;
+  readonly checked?: string;
+  readonly issues?: readonly { severity: 'high' | 'medium' | 'low'; where: string; problem: string }[];
+  readonly failed?: string;
+}
+
+/**
+ * Render a counter-review, and enforce the rule that makes it worth running.
+ *
+ * Shared by both modes deliberately. The coverage rule is the whole product
+ * here, and a rule implemented twice is a rule that will eventually mean two
+ * different things.
+ */
+function renderCounterReview(runId: string, results: readonly LensResult[], expected: number): string {
+  const ran = results.filter((r) => !r.failed);
+  const issues = ran.reduce((n, r) => n + (r.issues?.length ?? 0), 0);
+  const sections = results.map((r) =>
+    r.failed
+      ? `### ${r.name}\n\n_This lens did not run: ${r.failed}_`
+      : [
+          `### ${r.name}`,
+          '',
+          `**Checked:** ${r.checked ?? '(not stated)'}`,
+          '',
+          (r.issues?.length ?? 0) === 0
+            ? '_Nothing found on this lens._'
+            : [...(r.issues ?? [])]
+                .sort((a, b) => severityRank(a.severity) - severityRank(b.severity))
+                .map((x) => `- **${x.severity}** · ${x.where} — ${x.problem}`)
+                .join('\n'),
+        ].join('\n'),
+  );
+
+  const missing = LENSES.map((l) => l.name).filter((n) => !results.some((r) => r.name === n));
+  return [
+    `## Counter-review of \`${runId}\``,
+    '',
+    `${String(ran.length)} of ${String(expected)} lens(es) ran. **${String(issues)} issue(s)** raised.`,
+    '',
+    ...sections,
+    '',
+    missing.length > 0 && results.length < LENSES.length
+      ? `_Not run: ${missing.join(', ')}. A lens that was never applied is not a lens that found nothing._`
+      : '',
+    ran.length > 0 && issues === 0
+      ? '> [!WARNING]\n> Every lens returned nothing. Treat that as a **failed review rather than a clean report**: four adversarial passes finding zero problems in a long research report is more often a sign the review did not bite than a sign the report is flawless. Re-run it, or read the reasoning yourself.'
+      : '_Issues here are a reviewer’s objections, not established errors. Check them against the report before acting on either._',
+  ]
+    .filter(Boolean)
+    .join('\n');
 }
 
 function severityRank(s: 'high' | 'medium' | 'low'): number {

@@ -133,7 +133,10 @@ Acceptance criteria are taken from the README's tool contracts and the tool desc
 | **EVID-02** | One organisation cited through three of its own pages counts as one domain | `evidence` | ✓ |
 | **EVID-03** | The citation registry is numbered from one and deduplicated by canonical URL | `evidence` | ✓ |
 | **EVID-04** | The search trace records the backend and declines to promise reproducibility | `evidence` | ✓ |
-| **EVID-05** | The paid evidence tools refuse clearly, name the credential, and are not read-only | `evidence` | ✓ |
+| **EVID-05** | With no key, both checking tools hand the work to the caller rather than refusing | `evidence` | ✓ |
+| **EVID-12** | A verdict on a claim that was never fetched is discarded | `evidence` | ✓ |
+| **EVID-13** | Four caller-supplied empty lenses are reported as a failed review | `evidence` | ✓ |
+| **EVID-14** | A lens that was never applied is named, not counted as one that found nothing | `evidence` | ✓ |
 | **EVID-06** | A failed quality floor is reported as advisory; nothing is ever withheld | unit: `evidence` | ✓ |
 | **EVID-07** | An unrecognised domain is classified `other`, never guessed into `official` | unit: `evidence` | ✓ |
 | **EVID-08** | A user's own document is never independent corroboration of an external fact | unit: `evidence` | ✓ |

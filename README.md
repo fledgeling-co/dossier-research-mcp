@@ -81,11 +81,13 @@ Then ask for research, and Claude does the searching with the web search it alre
 
 Dossier plans the search tasks, holds the registry, freezes it before you draft, and refuses a report that cites anything you never gathered. That's the whole method, and it costs nothing.
 
-With no key at all you get: the local loop, `research_import` for a report you ran on a subscription, outline-first reading, citation dereferencing, evidence profiling, the spend ledger, and all four prompts. If you have Claude Code, Codex, Cursor or Grok installed, `provider: "local"` runs the research through that instead, still without an API bill.
+With no key at all you get: the local loop, `research_import` for a report you ran on a subscription, outline-first reading, citation dereferencing, claim-to-source checking, adversarial counter-review, evidence profiling, the spend ledger, and all four prompts. That is every tool except the hosted backends themselves. If you have Claude Code, Codex, Cursor or Grok installed, `provider: "local"` runs the research through that instead, still without an API bill.
 
 ### When a key is worth adding
 
-One thing genuinely needs a hosted backend: **a long unattended investigation.** Forty minutes across a hundred sources, running while your laptop is shut, is not something the calling assistant can do for you. A Gemini key is the one to add first, since it's the only backend that lets you edit the plan before it spends, and it's what powers `research_verify_claims` and `research_counter_review`.
+One thing genuinely needs a hosted backend: **a long unattended investigation.** Forty minutes across a hundred sources, running while your laptop is shut, is not something the calling assistant can do for you; it needs your session alive and your attention in the loop. That's a real capability difference rather than a paywall, and it's the only one.
+
+Everything else a key buys is convenience. `research_verify_claims` and `research_counter_review` will let a model do the judging if one is configured, and hand the work to you if not. A Gemini key is the one to add first, since it's the only backend that lets you edit the plan before it spends.
 
 ```bash
 claude mcp add dossier -e GEMINI_API_KEY=your-key-here -- npx -y dossier-research-mcp
@@ -225,8 +227,8 @@ Every provider produces citations. None of them grade them. This is the part tha
 | | |
 |---|---|
 | **`research_verify_citations`** | Dereferences every cited URL. Free of judgement: it tells you the link resolves |
-| **`research_verify_claims`** | Fetches the page and asks whether it **actually contains the claim**. The verdict that earns its keep is `not_addressed`: a source about the right topic that doesn't say the thing |
-| **`research_counter_review`** | Four lenses over the report, each told to **refute** rather than summarise: claim validation, source diversity, recency, internal contradiction |
+| **`research_verify_claims`** | Fetches the page and tests whether it **actually contains the claim**. The verdict that earns its keep is `not_addressed`: a source about the right topic that doesn't say the thing. Free if you judge, billed if a model does |
+| **`research_counter_review`** | Four lenses over the report, each told to **refute** rather than summarise. Free if you review, billed if a model does |
 | **`research_evidence`** | Free. Profiles the source mix, spots one organisation cited through three of its own pages, and gives you the numbered citation registry |
 
 > [!CAUTION]
