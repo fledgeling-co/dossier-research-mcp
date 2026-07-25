@@ -264,3 +264,44 @@ describe('approve_plan and cancel guards', () => {
     expect(await runner.cancel('dr_doesnotexist')).toBeNull();
   });
 });
+
+describe('the documented public library surface', () => {
+  it('exports everything the README tells people to import', async () => {
+    // v0.2.0 shipped a README example importing `buildPrompt` from
+    // `dossier-research-mcp/server`, which did not export it. Documenting an
+    // API is a promise; this asserts the promise is kept, because a doc-only
+    // check would not have caught it and did not.
+    const surface = await import('../src/server.js');
+    for (const name of [
+      'createServer',
+      'buildDeps',
+      'buildPrompt',
+      'selectArchetype',
+      'outlineReport',
+      'findSection',
+      'grepReport',
+      'extractCitedUrls',
+      'verifyCitations',
+      'scoreCitations',
+      'extractPlan',
+      'estimateCost',
+      'loadConfig',
+      'backendLimitations',
+    ]) {
+      expect(surface, name).toHaveProperty(name);
+      expect(typeof (surface as Record<string, unknown>)[name], name).toBe('function');
+    }
+  });
+
+  it('buildPrompt works standalone, exactly as the README shows it', async () => {
+    const { buildPrompt } = await import('../src/server.js');
+    const built = buildPrompt({
+      question: 'What disclosure obligations apply to dual-listed issuers?',
+      scope: { jurisdiction: 'UK and Singapore', decisionContext: 'inform a board paper' },
+    });
+    expect(built.archetype).toBe('regulatory');
+    expect(built.preEngineered).toBe(false);
+    expect(built.prompt).toContain('UK and Singapore');
+    expect(built.prompt).toContain('inform a board paper');
+  });
+});

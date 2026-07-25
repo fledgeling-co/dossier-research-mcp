@@ -37,6 +37,53 @@ import { Store } from './store/store.js';
 import { RUN_STATES, type RunRecord } from './store/types.js';
 import { version } from './version.js';
 
+/**
+ * The public library surface.
+ *
+ * `dossier-research-mcp/server` is the documented import path, and until now it
+ * exposed only `createServer` and `buildDeps` while the README told people to
+ * import `buildPrompt` from it. Re-exported here so the documented API is the
+ * real one; a consumer wanting the prompt architect, the report reader or the
+ * citation verifier should not have to reach past `exports` to get them.
+ */
+export {
+  buildPrompt,
+  extractCoreDirective,
+  isPreEngineered,
+  operatorNotes,
+  type BuildPromptArgs,
+  type BuiltPrompt,
+  type ResearchScope,
+} from './research/prompt.js';
+export {
+  ARCHETYPE_NAMES,
+  ARCHETYPE_OVERRIDES,
+  selectArchetype,
+  type Archetype,
+} from './research/archetypes.js';
+export {
+  clampToTokens,
+  estimateTokens,
+  extractCitedUrls,
+  findSection,
+  grepReport,
+  normaliseCitations,
+  outlineReport,
+  readSection,
+  renderOutline,
+  type ReportSection,
+} from './research/report.js';
+export {
+  renderScorecard,
+  scoreCitations,
+  verifyCitations,
+  type CitationScorecard,
+} from './research/citations.js';
+export { extractPlan, type ExtractedPlan } from './research/plan.js';
+export { estimateCost, estimateDuration, formatCostBand, type CostBand } from './gemini/cost.js';
+export { AGENT_BY_TIER, RESEARCH_TIERS, type ResearchTier } from './gemini/types.js';
+export { backendLimitations, describeAuth, loadConfig, type Config } from './config.js';
+
 /** Everything the tools need, assembled once at start-up. */
 export interface ServerDeps {
   readonly config: Config;
