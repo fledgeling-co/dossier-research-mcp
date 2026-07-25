@@ -123,6 +123,27 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   };
 }
 
+/**
+ * What a given backend cannot do.
+ *
+ * Vertex is not simply "the API key plus enterprise controls": measured
+ * against the docs, the Interactions API on Vertex serves managed agents and
+ * specialised media models but NOT standard Gemini models, and File Search is
+ * Developer-API-only. So a Vertex deployment loses follow-ups, corpus
+ * grounding, and every utility-model feature built on them. Naming that here
+ * once means the server can say it at start-up, in `research://capabilities`,
+ * and in the tool that would otherwise fail confusingly.
+ */
+export function backendLimitations(config: Config): readonly string[] {
+  if (config.auth.mode !== 'vertex') return [];
+  return [
+    'Corpus grounding is unavailable: File Search stores are a Gemini Developer API feature.',
+    'research_followup is unavailable: the Interactions API on Vertex serves agents and media models, not the standard Gemini models a follow-up turn needs.',
+    'AI titles, summaries and research_claims are unavailable: they run on the same standard models.',
+    'Deep Research runs and managed agents are expected to work, but this path has not been verified against a live Vertex project.',
+  ];
+}
+
 /** Human-readable auth description for the capabilities resource (never the key). */
 export function describeAuth(config: Config): string {
   switch (config.auth.mode) {

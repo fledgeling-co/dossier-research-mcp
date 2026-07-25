@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { loadConfig } from '../src/config.js';
+import { backendLimitations, loadConfig } from '../src/config.js';
 import { toSnapshot } from '../src/gemini/types.js';
 import { isPrivateAddress, safeFetch } from '../src/net/safe-fetch.js';
 import { scoreCitations } from '../src/research/citations.js';
@@ -297,5 +297,22 @@ describe('user_input echo (observed live-API behaviour)', () => {
       ],
     });
     expect(snap.markdown).toBe('# The report');
+  });
+});
+
+describe('backend limitations', () => {
+  it('reports nothing for an API key, which is the full-capability backend', () => {
+    expect(backendLimitations(loadConfig({ GEMINI_API_KEY: 'k' }))).toEqual([]);
+  });
+
+  it('names every Vertex gap, not just File Search', () => {
+    // The docs used to claim File Search was the only Vertex trade-off. It is
+    // not: the Interactions API on Vertex serves agents and media models, not
+    // the standard Gemini models a follow-up or a summary needs.
+    const limits = backendLimitations(loadConfig({ VERTEX_PROJECT: 'p' }));
+    expect(limits.length).toBeGreaterThan(1);
+    expect(limits.join(' ')).toContain('Corpus grounding is unavailable');
+    expect(limits.join(' ')).toContain('research_followup is unavailable');
+    expect(limits.join(' ')).toContain('not been verified against a live Vertex project');
   });
 });

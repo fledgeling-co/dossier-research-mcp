@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { describeAuth, loadConfig } from './config.js';
+import { backendLimitations, describeAuth, loadConfig } from './config.js';
 import { buildDeps, createServer } from './server.js';
 import { version } from './version.js';
 
@@ -81,8 +81,11 @@ async function main(): Promise<void> {
   );
   if (!deps.client) {
     process.stderr.write(
-      'WARNING: no Gemini credentials — read-only tools work, but no run can be started.\n',
+      'WARNING: no Gemini credentials, so read-only tools work but no run can be started.\n',
     );
+  }
+  for (const limitation of backendLimitations(config)) {
+    process.stderr.write(`NOTE: ${limitation}\n`);
   }
 
   // Resume anything left in flight by a previous process before accepting work,

@@ -2,7 +2,7 @@ import { timingSafeEqual } from 'node:crypto';
 import { FastMCP, UserError } from 'fastmcp';
 import { z } from 'zod';
 import { createUtilityModel, type UtilityModel } from './ai/utility.js';
-import { describeAuth, loadConfig, type Config } from './config.js';
+import { backendLimitations, describeAuth, loadConfig, type Config } from './config.js';
 import { assertStoreName, resolveCorpusClient, type CorpusClient } from './corpus/files.js';
 import {
   DEFAULT_BASE_AGENT,
@@ -1030,6 +1030,7 @@ function registerResources(server: FastMCP, deps: ServerDeps): void {
             version,
             auth: describeAuth(config),
             degraded: !deps.client,
+            limitations: backendLimitations(config),
             tiers: RESEARCH_TIERS.map((tier) => ({
               tier,
               agent: AGENT_BY_TIER[tier],

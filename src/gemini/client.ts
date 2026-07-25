@@ -235,6 +235,14 @@ export function createLiveClient(config: Config): DeepResearchClient {
     },
 
     async followUp(args) {
+      if (config.auth.mode === 'vertex') {
+        // The Interactions API on Vertex serves agents and specialised media
+        // models; a follow-up turn passes a standard Gemini model, which it
+        // will not route. Fail with the reason rather than a routing error.
+        throw new Error(
+          'Follow-up turns need a standard Gemini model, which the Interactions API does not serve on Vertex. Use GEMINI_API_KEY, or read the report directly with research_read.',
+        );
+      }
       let raw: unknown;
       try {
         raw = await interactions.create({

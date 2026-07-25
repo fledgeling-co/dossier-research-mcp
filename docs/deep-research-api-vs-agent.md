@@ -144,6 +144,21 @@ Need research THEN an artifact?                    → Deep Research → researc
 
 ---
 
+## A note on Vertex AI
+
+Worth stating plainly, because it runs against the usual assumption: for the features this server uses, **a Gemini Developer API key is a superset of Vertex**, not a subset.
+
+| | API key | Vertex |
+|---|---|---|
+| Deep Research agents | Verified working | Expected to work, unverified |
+| Managed Agents | Verified working | Expected to work, unverified |
+| File Search (corpus grounding) | Yes | **No.** Developer API only |
+| Standard models through the Interactions API | Yes | **No.** Vertex serves agents and specialised media models |
+| Follow-up turns, AI titles, claim extraction | Yes | **No.** They need standard models |
+| VPC-SC, CMEK, data residency, IAM | No | Yes |
+
+Google's own migration guidance says most developers should use the Developer API unless they need specific enterprise controls, and for this workload that reads as sound. Choose Vertex when compliance requires it, and expect to lose corpus grounding and every follow-up feature when you do.
+
 ## Sources
 
 - [Gemini API: Deep Research](https://ai.google.dev/gemini-api/docs/deep-research)

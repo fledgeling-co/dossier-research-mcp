@@ -143,7 +143,13 @@ gcloud auth application-default login
 ```
 
 > [!IMPORTANT]
-> **The Vertex trade-off:** File Search stores (`corpusStores`) are a Gemini Developer API feature and aren't available on Vertex. If you want private-corpus grounding, use an API key.
+> **An API key is the fuller backend, not the lesser one.** Vertex adds enterprise controls (VPC-SC, CMEK, data residency, IAM) and loses capability, which is the opposite of what most people expect. On Vertex you don't get:
+>
+> - **Corpus grounding.** File Search stores are a Gemini Developer API feature.
+> - **`research_followup`.** The Interactions API on Vertex serves agents and specialised media models, not the standard Gemini models a follow-up turn needs.
+> - **AI titles, summaries and `research_claims`.** Same reason; they run on standard models.
+>
+> Deep Research runs and managed agents are expected to work there, but I haven't verified that against a live Vertex project. The server prints these limitations at start-up and lists them in `research://capabilities`, so pick Vertex when compliance requires it, not by default.
 
 With no credentials the server still starts and every read-only tool works. You just can't start a run.
 
