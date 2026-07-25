@@ -14,9 +14,11 @@ import type {
 /**
  * OpenAI as a provider.
  *
- * Deliberately **not** the deep-research models. `o3-deep-research` and
- * `o4-mini-deep-research` reached end of access on 23 July 2026; OpenAI's own
- * deep-research guide still documents them, which is a good reminder that a
+ * Deliberately **not** the deep-research models. `o3-deep-research` reached end
+ * of access on 23 July 2026 and is gone from the model list; `o4-mini-deep-research`
+ * was *also* announced as retiring and is still listed as of 25 July 2026
+ * (verified against a live `/v1/models` call). Either way OpenAI's own
+ * deep-research guide still documents both, which is the reminder that a
  * capability matrix keyed on a provider name rather than a provider *and model*
  * goes stale within months.
  *
@@ -158,7 +160,13 @@ export function openAiProvider(config: Config): ResearchProvider {
 
     async getRun(interactionId: string): Promise<InteractionSnapshot> {
       const raw = await request(`/responses/${encodeURIComponent(interactionId)}`, { method: 'GET' });
-      const status = typeof raw['status'] === 'string' ? raw['status'] : 'in_progress';
+      // Lower-cased defensively. Perplexity's async endpoint returns `COMPLETED`
+      // against its own lower-case documentation, and a case-sensitive check
+      // there meant finished runs polled forever and paid-for reports were
+      // never stored. OpenAI returns lower case today; this costs nothing and
+      // removes the whole class.
+      const rawStatus = raw['status'];
+      const status = (typeof rawStatus === 'string' ? rawStatus : 'in_progress').toLowerCase();
       const done = ['completed', 'failed', 'cancelled', 'incomplete'].includes(status);
       return {
         interactionId,

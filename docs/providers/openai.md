@@ -1,9 +1,11 @@
 # OpenAI
 
 > [!IMPORTANT]
-> **Status: implemented, and NOT confirmed working.** On 25 July 2026 a live job was created successfully and then failed on retrieval with "does not have access to model `gpt-5.6-terra`". That was an account limitation rather than a defect (the test project could reach only `gpt-4o`, `gpt-4o-mini` and an embedding model), so the model name itself is still unverified: no key available at the time could reach any gpt-5 model. Treat this backend as untested until you have run `npm run test:paid` against a project with gpt-5 access.
+> **Status: the adapter is verified against the live API; the model name is not.** On 25 July 2026 a real background job went through this code path end to end (request body accepted, `queued` then `completed`, text extracted by the adapter's own extractor). What could not be exercised is `gpt-5.6-terra` itself: the test key belonged to a project whose model allow-list permitted `gpt-4o` and refused every gpt-5 model, including 5.2 and 5.5. The model IDs `gpt-5.6-sol`, `gpt-5.6-terra` and `gpt-5.6-luna` **do** appear in that organisation's `/v1/models` listing, so the names are right and the block is a project setting.
 >
-> Worth knowing regardless of the cause: **the Responses API accepts a job for a model you cannot use, returns 200 with an id, and reports `in_progress` on the first poll.** It only fails a second or two later. Anything that checks a run once and calls it started will call that a success.
+> If you hit `Project ... does not have access to model`, that is a per-project allow-list rather than a billing problem. Change it under Project → Limits in the OpenAI dashboard, or use a key from an unrestricted project.
+>
+> Worth knowing regardless: **in background mode the Responses API accepts a job for a model you cannot use**, returns 200 with an id, and reports `in_progress` on the first poll. It only fails a second or two later. The same request without `background` 403s immediately. Anything that checks a run once and calls it started will call that a success.
 
 OpenAI's deep research models are the strongest option for academic and primary-literature work, and the only ones that can pull private data from a remote MCP server as a first-class source. They're also the most expensive per run and the most obviously aging.
 

@@ -3,8 +3,8 @@ import { loadConfig } from '../src/config.js';
 import { ProviderRegistry } from '../src/providers/registry.js';
 import { decodeFilters, encodeFilters, perplexityProvider } from '../src/providers/perplexity.js';
 import { extractCitedUrls } from '../src/research/report.js';
-import { decodeXaiOptions, encodeXaiOptions } from '../src/providers/xai.js';
-import { decodeOpenAiOptions, encodeOpenAiOptions } from '../src/providers/openai.js';
+import { decodeXaiOptions, encodeXaiOptions, xaiProvider } from '../src/providers/xai.js';
+import { decodeOpenAiOptions, encodeOpenAiOptions, openAiProvider } from '../src/providers/openai.js';
 import { describeShaping, shapeRequest } from '../src/providers/options.js';
 
 const withKeys = (env: Record<string, string>) =>
@@ -278,3 +278,25 @@ async function parseWith(
     globalThis.fetch = original;
   }
 }
+
+describe('no adapter trusts the case of a status string', () => {
+  // Perplexity documents lower case and returns `COMPLETED`. Once one API does
+  // that, assuming any of them will not is a choice rather than an oversight,
+  // and the failure is silent: a finished run polls until the watchdog gives up
+  // and the paid-for report is never stored.
+  const config = loadConfig({
+    DOSSIER_STORE_DIR: '/tmp/x',
+    PERPLEXITY_API_KEY: 'k',
+    OPENAI_API_KEY: 'k',
+    XAI_API_KEY: 'k',
+  });
+
+  it.each([
+    ['perplexity', perplexityProvider(config).client(), { status: 'COMPLETED', response: { choices: [{ message: { content: 'done' } }] } }],
+    ['openai', openAiProvider(config).client(), { status: 'Completed', output_text: 'done' }],
+    ['xai', xaiProvider(config).client(), { status: 'COMPLETED', output_text: 'done' }],
+  ])('%s treats a shouted terminal status as terminal', async (_name, client, payload) => {
+    const snapshot = await parseWith(client, payload);
+    expect(snapshot.status).toBe('completed');
+  });
+});

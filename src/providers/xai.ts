@@ -167,7 +167,11 @@ export function xaiProvider(config: Config): ResearchProvider {
 
     async getRun(interactionId: string): Promise<InteractionSnapshot> {
       const raw = await request(`/responses/${encodeURIComponent(interactionId)}`, { method: 'GET' });
-      const status = typeof raw['status'] === 'string' ? raw['status'] : 'in_progress';
+      // Lower-cased for the reason recorded in the Perplexity adapter: an API
+      // that documents lower-case status values and returns upper-case ones
+      // leaves a finished run polling forever.
+      const rawStatus = raw['status'];
+      const status = (typeof rawStatus === 'string' ? rawStatus : 'in_progress').toLowerCase();
       const done = ['completed', 'failed', 'cancelled'].includes(status);
       return {
         interactionId,

@@ -448,6 +448,14 @@ Convergent evidence for the plan's design: fan out, cross-check, vote per claim,
 
 WebSearch/WebFetch are built in with **no per-search fee on a subscription** (the API charges $10/1,000 searches). Limit of **200 WebSearch calls per session**, shared across subagents; raise with `CLAUDE_CODE_MAX_WEB_SEARCHES_PER_SESSION`.
 
+**Measured against the live API, 25 July 2026.** The organisation's `/v1/models` lists 125 models including `gpt-5.6-sol`, `gpt-5.6-terra` and `gpt-5.6-luna`, so those IDs are correct. `o3-deep-research` is **gone** from the list; **`o4-mini-deep-research` is still listed**, despite the same retirement announcement, so "both retired on 23 July 2026" is not what the API shows.
+
+Model access is enforced **per project**, separately from the organisation. A key on a restricted project returns `403 Project ... does not have access to model X` for every gpt-5 model while `gpt-4o` succeeds, even though the org-wide model list shows all of them. Fix it under Project → Limits rather than in billing.
+
+Background mode changes when that failure surfaces: `POST /v1/responses` with `background: true` returns **200 with an id** for a model the project cannot use, reports `queued`/`in_progress` on the first poll, and only flips to `failed` a second or two later. The same request without `background` returns 403 synchronously. A verification that polls once will call the first case a success.
+
+A completed background run returns `output` as an array of items with `type: "message"`, each carrying `content[]` entries of `type: "output_text"`. `output_text` at the top level is also populated.
+
 ### Codex CLI
 
 ```bash
