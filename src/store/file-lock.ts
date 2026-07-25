@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { link, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { hostname } from 'node:os';
 
@@ -66,6 +67,20 @@ interface LockHolder {
   readonly pid: number;
   readonly host: string;
   readonly at: number;
+  /**
+   * Who holds it, unforgeably.
+   *
+   * Without this, release is "delete the path", which deletes whoever holds it
+   * *now* rather than whoever held it when we acquired. If B breaks A's lock on
+   * age and A then releases, A deletes B's lock and C walks in beside B. Two
+   * processes in the spend gate, from a release that looked correct.
+   *
+   * Optional because a lock written by a version that predates it is still a
+   * lock. Treating one as unreadable would break it after the grace window even
+   * while its owner was alive and working, which is precisely the failure this
+   * field was added to prevent, arriving during an upgrade instead.
+   */
+  readonly token?: string;
 }
 
 /** Makes the temp name unique within a process; the pid covers across them. */
@@ -132,6 +147,9 @@ export class LockTimeoutError extends Error {
 }
 
 export class FileLock {
+  /** The token written when this instance last acquired. */
+  private token: string | null = null;
+
   constructor(
     private readonly path: string,
     private readonly opts: FileLockOptions = {},
@@ -166,9 +184,11 @@ export class FileLock {
       // window in which a contender reads nothing and breaks a live lock.
       const temp = `${this.path}.${String(process.pid)}.${String((tempCounter += 1))}.tmp`;
       try {
-        const holder: LockHolder = { pid: process.pid, host: hostname(), at: Date.now() };
+        const token = randomUUID();
+        const holder: LockHolder = { pid: process.pid, host: hostname(), at: Date.now(), token };
         await writeFile(temp, JSON.stringify(holder), { mode: 0o600 });
         await link(temp, this.path);
+        this.token = token;
         return;
       } catch (e: unknown) {
         if ((e as { code?: string }).code !== 'EEXIST') throw e;
@@ -185,8 +205,15 @@ export class FileLock {
             // past the grace window, so a half-written file costs a short wait
             // rather than admitting a second holder.
             (await this.ageMs()) >= graceMs
-          : Date.now() - lastHolder.at > staleMs ||
-            (lastHolder.host === hostname() && !isAlive(lastHolder.pid));
+          : // A holder we can prove is alive is never broken on age alone. The
+            // critical section reads the ledger and the run directory off disk,
+            // so a slow-but-healthy holder is normal, and stealing its lock puts
+            // two processes inside the gate — the exact thing this prevents.
+            // Age only breaks a lock we cannot check: another host, or a pid
+            // that is gone.
+            lastHolder.host === hostname()
+            ? !isAlive(lastHolder.pid)
+            : Date.now() - lastHolder.at > staleMs;
 
       if (abandoned) {
         // Break it and retry. Racing to break is safe: whoever wins the
@@ -223,13 +250,32 @@ export class FileLock {
       if (typeof h.pid !== 'number' || typeof h.at !== 'number' || typeof h.host !== 'string') {
         return null; // unparseable: treat as abandoned rather than immortal
       }
-      return { pid: h.pid, host: h.host, at: h.at };
+      return {
+        pid: h.pid,
+        host: h.host,
+        at: h.at,
+        ...(typeof h.token === 'string' ? { token: h.token } : {}),
+      };
     } catch {
       return null;
     }
   }
 
+  /**
+   * Release only what we still hold.
+   *
+   * Compare-then-delete, never delete: if our lock was broken while we were
+   * inside the critical section, the path now belongs to somebody else and
+   * removing it would admit a third process alongside them.
+   */
   private async release(): Promise<void> {
+    const mine = this.token;
+    this.token = null;
+    if (!mine) return;
+    const holder = await this.readHolder();
+    // A lock we cannot read is not provably ours, so leave it: the grace window
+    // and staleness rules will recover it if it really is abandoned.
+    if (holder?.token !== mine) return;
     await rm(this.path, { force: true }).catch(() => undefined);
   }
 }

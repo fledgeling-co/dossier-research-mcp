@@ -139,13 +139,28 @@ export interface GrepHit {
  * user the server.
  */
 function assertNoCatastrophicBacktracking(pattern: string): void {
-  const NESTED_QUANTIFIER = /\((?:\?[:=!])?[^()]*[+*}][^()]*\)\s*[+*{]/;
-  const QUANTIFIED_ALTERNATION = /\((?:\?[:=!])?[^()]*[+*][^()]*\|[^()]*\)\s*[+*{]/;
-  if (NESTED_QUANTIFIER.test(pattern) || QUANTIFIED_ALTERNATION.test(pattern)) {
-    throw new Error(
-      'Pattern rejected: nested quantifiers can backtrack exponentially and would block the server. ' +
-        'Rewrite without a quantifier inside a quantified group, or drop `regex` to search literally.',
-    );
+  // Reject a quantified group whose body can match the same text more than one
+  // way. That is the property that makes backtracking exponential, and it is
+  // broader than "a quantifier inside a quantifier".
+  //
+  // The earlier version tested for a quantifier or a quantified alternation
+  // inside the group, and `(a|aa)+$` has neither: no quantifier in the body, no
+  // `+` before the `|`. It sailed through and blocked the event loop for over a
+  // second on 38 characters. `(a?)+$` slipped by for the same reason. A
+  // blacklist of constructions was the wrong shape; the property is.
+  const QUANTIFIED_GROUP = /\((?:\?[:=!<]*)?((?:[^()\\]|\\.)*)\)\s*(?:[+*]|\{\d*,\d*\})/g;
+  for (const match of pattern.matchAll(QUANTIFIED_GROUP)) {
+    const body = match[1] ?? '';
+    // An alternation, or any repetition inside the body, means more than one
+    // way to consume the same input. `(ab)+` is fine; `(a|aa)+` and `(a+)+`
+    // are not.
+    if (/[|+*?]|\{\d*,\d*\}/.test(body.replace(/\\./g, ''))) {
+      throw new Error(
+        'Pattern rejected: a repeated group that can match the same text in more than one way ' +
+          '(an alternation or another quantifier inside it) backtracks exponentially and would block the server. ' +
+          'Rewrite it, or drop `regex` to search literally.',
+      );
+    }
   }
 }
 
@@ -217,7 +232,24 @@ function renderCitation(url: string, label: string): string {
   if (!RENDERABLE_SCHEMES.has(parsed.protocol)) {
     return `\`${label} (${parsed.protocol} citation, not linked)\``;
   }
-  return `[${label}](${url})`;
+  return `[${escapeLabel(label)}](${url})`;
+}
+
+/**
+ * Neutralise markdown metacharacters in a citation's label.
+ *
+ * The label is model output too, and validating the URL says nothing about it.
+ * `<cite url="https://safe.example">x](javascript:alert(1))</cite>` closes the
+ * link early and opens a second one the scheme check never saw, so a validated
+ * citation renders a `javascript:` link. Escaping the brackets is enough to
+ * stop the label ending the construct it sits inside.
+ */
+function escapeLabel(label: string): string {
+  // Removed rather than backslash-escaped. `\]` is correct CommonMark and a
+  // conforming renderer handles it, but the result still reads as `](javascript:`
+  // to anything less careful, and a citation label is a title or a host name:
+  // brackets in it carry nothing worth preserving at that risk.
+  return label.replace(/[[\]]/g, '').replace(/\s+/g, ' ').trim();
 }
 
 export function normaliseCitations(markdown: string): string {

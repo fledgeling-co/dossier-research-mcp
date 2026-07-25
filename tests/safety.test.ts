@@ -4,6 +4,7 @@ import { toSnapshot } from '../src/gemini/types.js';
 import { estimateCost, estimateDuration, formatDuration } from '../src/gemini/cost.js';
 import { isPrivateAddress, safeFetch } from '../src/net/safe-fetch.js';
 import { classify, pollDelayMs, retry, retryAfterMs } from '../src/net/retry.js';
+import { grepReport } from '../src/research/report.js';
 import { scoreCitations } from '../src/research/citations.js';
 import { normaliseCitations } from '../src/research/report.js';
 import { buildPrompt } from '../src/research/prompt.js';
@@ -544,5 +545,45 @@ describe('hardening found by external review', () => {
     );
     expect(out).toContain('middle prose');
     expect(out).toContain('[B](https://b.test/2)');
+  });
+});
+
+describe('SEC-08: a caller regex cannot block the event loop', () => {
+  // The earlier guard was a blacklist of constructions, and `(a|aa)+$` matched
+  // none of them: no quantifier in the group body, no `+` before the `|`. It
+  // blocked Node for over a second on 38 characters. The rule is now the
+  // property that actually causes it, not the shapes it usually takes.
+  it.each(['(a|aa)+$', '(a?)+$', '(a+)+$', '(x|y|xy)*$', '(a|b|ab){2,}'])(
+    'rejects %s',
+    (pattern) => {
+      expect(() => grepReport('# doc\n\ntext', pattern, { regex: true })).toThrow(/backtrack/i);
+    },
+  );
+
+  it.each(['(ab)+', '\\d{2,4}', '(foo)+bar', 'plain text', '^#+ '])('still allows %s', (pattern) => {
+    expect(() => grepReport('# doc\n\ntext', pattern, { regex: true })).not.toThrow();
+  });
+
+  it('finishes promptly on the pattern that used to hang', () => {
+    // Belt and braces: even the rejection path must be fast.
+    const began = Date.now();
+    expect(() => grepReport(`# doc\n\n${'a'.repeat(60)}b`, '(a|aa)+$', { regex: true })).toThrow();
+    expect(Date.now() - began).toBeLessThan(250);
+  });
+});
+
+describe('SEC-10: a citation label cannot inject a second link', () => {
+  it('strips brackets so the label cannot close the link it sits in', () => {
+    // Validating the URL says nothing about the label, which is model output
+    // too. This payload closes the link early and opens a `javascript:` one
+    // the scheme check never saw.
+    const rendered = normaliseCitations('<cite url="https://safe.example">x](javascript:alert(1))</cite>');
+    expect(rendered).not.toMatch(/]\(javascript:/);
+    expect(rendered).toContain('(https://safe.example)');
+  });
+
+  it('leaves an ordinary label alone', () => {
+    const rendered = normaliseCitations('<cite url="https://example.com/a">Example Docs</cite>');
+    expect(rendered).toBe('[Example Docs](https://example.com/a)');
   });
 });

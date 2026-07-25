@@ -98,3 +98,17 @@ export interface ResearchProvider {
    */
   client(): DeepResearchClient;
 }
+
+/**
+ * Drop keys whose value is `undefined`.
+ *
+ * `exactOptionalPropertyTypes` distinguishes "absent" from "present and
+ * undefined", and Zod emits the latter for an optional field that was not
+ * supplied. Without this, a validated options object will not satisfy the
+ * interface it was validated against.
+ */
+export function compact<T extends object>(value: T): { [K in keyof T]?: Exclude<T[K], undefined> } {
+  return Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined)) as {
+    [K in keyof T]?: Exclude<T[K], undefined>;
+  };
+}

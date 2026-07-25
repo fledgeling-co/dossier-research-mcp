@@ -1,9 +1,11 @@
+import { z } from 'zod';
 import type { Config } from '../config.js';
 import type { CreateRunArgs, DeepResearchClient, FollowUpArgs } from '../gemini/client.js';
 import type { CostBand, DurationOptions } from '../gemini/cost.js';
 import { estimateDuration } from '../gemini/cost.js';
 import type { InteractionSnapshot } from '../gemini/types.js';
 import { attemptOnceThenSettle, retry, retryAfterMs } from '../net/retry.js';
+import { compact } from './types.js';
 import type {
   Capabilities,
   CredentialStatus,
@@ -51,14 +53,24 @@ export function encodeOpenAiOptions(prompt: string, opts: OpenAiOptions): string
   return Object.keys(opts).length === 0 ? prompt : `${prompt}${MARKER}${JSON.stringify(opts)}-->`;
 }
 
+/** Bounded, because the marker rides on caller-supplied prompt text (CP §1). */
+const OpenAiOptionsSchema = z
+  .object({
+    domains: z.array(z.string().max(200)).max(100).optional(),
+    // Capped: an injected `maxToolCalls` is a direct lever on the bill.
+    maxToolCalls: z.number().int().min(1).max(500).optional(),
+  })
+  .strict();
+
 export function decodeOpenAiOptions(prompt: string): { prompt: string; opts: OpenAiOptions } {
   const at = prompt.lastIndexOf(MARKER);
   if (at === -1) return { prompt, opts: {} };
   try {
-    return {
-      prompt: prompt.slice(0, at),
-      opts: JSON.parse(prompt.slice(at + MARKER.length).replace(/-->\s*$/, '')) as OpenAiOptions,
-    };
+    const parsed = OpenAiOptionsSchema.safeParse(JSON.parse(prompt.slice(at + MARKER.length).replace(/-->\s*$/, '')));
+    if (!parsed.success) return { prompt, opts: {} };
+    // Strip the explicit `undefined`s Zod emits for absent optionals;
+    // `exactOptionalPropertyTypes` treats those as different from absent.
+    return { prompt: prompt.slice(0, at), opts: compact(parsed.data) };
   } catch {
     return { prompt, opts: {} };
   }

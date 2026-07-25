@@ -180,16 +180,45 @@ export class LocalCorpus {
         // where it points.
         const target: string | null = await realpath(full, 'utf8').catch(() => null);
         if (!target || !isInside(real, target)) continue;
+        // Re-apply every rule to the RESOLVED path, not just the alias.
+        //
+        // `safe-notes.md -> .env` passed the extension check on the link name
+        // while the read went to the target, so a rename was enough to walk
+        // straight past the skip list. Staying inside the root is not
+        // sufficient: the interesting secrets are inside it.
+        if (!permitted(real, target)) continue;
         const info = await stat(target).catch(() => null);
         if (!info) continue;
         if (info.isDirectory()) await visit(target, depth + 1);
-        else if (info.isFile() && READABLE.has(extname(entry.name).toLowerCase())) found.push(target);
+        else if (info.isFile() && READABLE.has(extname(target).toLowerCase())) found.push(target);
       }
     };
 
     await visit(real, 0);
     return { realRoot: real, files: found };
   }
+}
+
+/**
+ * Does every segment of the resolved path clear the same rules the entry name
+ * had to?
+ *
+ * Checking the alias and reading the target is the whole bug: the alias is
+ * attacker-chosen and the target is what gets returned. So the resolved path is
+ * re-checked segment by segment, which also catches a directory link pointing
+ * into `.ssh` or `node_modules` from somewhere innocuous.
+ */
+function permitted(root: string, resolved: string): boolean {
+  // Only the part BELOW the granted root. The root itself is the operator's
+  // deliberate choice and may perfectly well be `~/.notes`; rejecting its own
+  // dot segment would make that grant match nothing at all.
+  for (const segment of relative(root, resolved).split(sep)) {
+    if (!segment) continue;
+    if (SKIP_DIRS.has(segment)) return false;
+    // A dotfile anywhere in the resolved path, not merely as the entry name.
+    if (segment.startsWith('.') && segment !== '.' && segment !== '..') return false;
+  }
+  return true;
 }
 
 /**

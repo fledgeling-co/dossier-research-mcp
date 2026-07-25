@@ -517,3 +517,60 @@ describe('paid lifecycle transitions', () => {
     expect(run.error).toMatch(/charged against your budget/);
   });
 });
+
+describe('the lock knows who holds it', () => {
+  it('does not delete a lock that was taken from it', async () => {
+    // Release used to be "delete the path", which deletes whoever holds it NOW
+    // rather than whoever held it when we acquired. If B breaks A's lock and A
+    // then releases, A deletes B's lock and C walks in beside B: two processes
+    // in the spend gate, from a release that looked perfectly correct.
+    const path = join(root, 'l');
+    const a = new FileLock(path, { timeoutMs: 1_000 });
+    let bHolds = false;
+    await a.run(async () => {
+      // Simulate B breaking the lock and taking it while A works.
+      await rm(path, { force: true });
+      await writeFile(
+        path,
+        JSON.stringify({ pid: process.pid, host: (await import('node:os')).hostname(), at: Date.now(), token: 'B' }),
+      );
+      bHolds = true;
+    });
+    expect(bHolds).toBe(true);
+    // A's release must have left B's lock alone.
+    const after: unknown = JSON.parse(await readFile(path, 'utf8'));
+    expect((after as { token?: string }).token).toBe('B');
+  });
+
+  it('never breaks a live local holder on age alone', async () => {
+    // The critical section reads the ledger and the run directory off disk, so
+    // a slow-but-healthy holder is normal. Stealing its lock puts two processes
+    // inside the gate, which is worse than waiting.
+    const path = join(root, 'l');
+    await writeFile(
+      path,
+      JSON.stringify({
+        pid: process.pid,
+        host: (await import('node:os')).hostname(),
+        at: Date.now() - 10 * 60_000,
+        token: 'live-and-working',
+      }),
+    );
+    await expect(
+      new FileLock(path, { timeoutMs: 200, staleMs: 1_000 }).run(async () => 'stolen'),
+    ).rejects.toBeInstanceOf(LockTimeoutError);
+  });
+
+  it('still breaks an old lock from a host it cannot check', async () => {
+    // Liveness is only knowable locally, so age remains the only recourse for
+    // another machine's lock. Otherwise a crashed peer wedges the store forever.
+    const path = join(root, 'l');
+    await writeFile(
+      path,
+      JSON.stringify({ pid: 1, host: 'some-other-machine', at: Date.now() - 10 * 60_000, token: 'x' }),
+    );
+    await expect(
+      new FileLock(path, { timeoutMs: 1_000, staleMs: 60_000 }).run(async () => 'taken'),
+    ).resolves.toBe('taken');
+  });
+});

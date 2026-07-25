@@ -48,6 +48,12 @@ export function isPrivateAddress(address: string): boolean {
     if (a === 172 && b >= 16 && b <= 31) return true;
     if (a === 192 && b === 168) return true;
     if (a === 100 && b >= 64 && b <= 127) return true; // CGNAT
+    // IANA special-purpose ranges that are not "private" in the usual sense and
+    // are still routable somewhere you did not intend. 198.18/15 in particular
+    // is benchmark space that real networks do use internally.
+    if (a === 198 && (b === 18 || b === 19)) return true; // 198.18.0.0/15 benchmarking
+    if (a === 192 && b === 0) return true; // 192.0.0.0/24 IETF protocol assignments
+    if (a === 192 && b === 88) return true; // 192.88.99.0/24 6to4 relay anycast
     if (a >= 224) return true; // multicast + reserved
     return false;
   }
@@ -60,6 +66,13 @@ export function isPrivateAddress(address: string): boolean {
     if (bytes[0] === 0xff) return true; // ff00::/8 multicast
     if ((bytes[0]! & 0xfe) === 0xfc) return true; // fc00::/7 unique-local
     if (bytes[0] === 0xfe && (bytes[1]! & 0xc0) === 0x80) return true; // fe80::/10 link-local
+    // fec0::/10 site-local. Deprecated by RFC 3879 and still configured on real
+    // equipment, which is the only thing that matters for whether a request to
+    // one reaches something internal.
+    if (bytes[0] === 0xfe && (bytes[1]! & 0xc0) === 0xc0) return true;
+    // 2001:db8::/32 documentation, and 100::/64 discard-only.
+    if (bytes[0] === 0x20 && bytes[1] === 0x01 && bytes[2] === 0x0d && bytes[3] === 0xb8) return true;
+    if (bytes[0] === 0x01 && bytes[1] === 0x00 && bytes.slice(2, 8).every((x) => x === 0)) return true;
 
     // Anything carrying an embedded IPv4 address is only as safe as that
     // address. Checked by byte pattern, never by string prefix: the WHATWG URL

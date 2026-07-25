@@ -1,9 +1,11 @@
+import { z } from 'zod';
 import type { Config } from '../config.js';
 import type { CreateRunArgs, DeepResearchClient, FollowUpArgs } from '../gemini/client.js';
 import type { CostBand, DurationOptions } from '../gemini/cost.js';
 import { estimateDuration } from '../gemini/cost.js';
 import type { InteractionSnapshot } from '../gemini/types.js';
 import { attemptOnceThenSettle, retry, retryAfterMs } from '../net/retry.js';
+import { compact } from './types.js';
 import type {
   Capabilities,
   CredentialStatus,
@@ -71,12 +73,34 @@ export function encodeFilters(prompt: string, filters: PerplexityFilters): strin
   return `${prompt}${FILTER_MARKER}${JSON.stringify(filters)}-->`;
 }
 
+/**
+ * The decoded options are a trust boundary, not our own data.
+ *
+ * The marker rides on the prompt, and a caller can send a pre-engineered brief
+ * that ends in one. Casting the parsed JSON meant a brief ending
+ * `<!--dossier:perplexity {"wide":true}-->` turned a deep purchase into a wide
+ * one *after* the smaller band had been reserved. Parsed and bounded (CP §1),
+ * and anything that fails to validate is dropped rather than partially trusted.
+ */
+const FiltersSchema = z
+  .object({
+    recency: z.enum(['hour', 'day', 'week', 'month', 'year']).optional(),
+    domains: z.array(z.string().max(200)).max(20).optional(),
+    searchMode: z.enum(['web', 'academic', 'sec']).optional(),
+    wide: z.boolean().optional(),
+  })
+  .strict();
+
 export function decodeFilters(prompt: string): { prompt: string; filters: PerplexityFilters } {
   const at = prompt.lastIndexOf(FILTER_MARKER);
   if (at === -1) return { prompt, filters: {} };
   const raw = prompt.slice(at + FILTER_MARKER.length).replace(/-->\s*$/, '');
   try {
-    return { prompt: prompt.slice(0, at), filters: JSON.parse(raw) as PerplexityFilters };
+    const parsed = FiltersSchema.safeParse(JSON.parse(raw));
+    if (!parsed.success) return { prompt, filters: {} };
+    // Strip the explicit `undefined`s Zod emits for absent optionals;
+    // `exactOptionalPropertyTypes` treats those as different from absent.
+    return { prompt: prompt.slice(0, at), filters: compact(parsed.data) };
   } catch {
     return { prompt, filters: {} };
   }

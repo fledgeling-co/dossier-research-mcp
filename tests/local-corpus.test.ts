@@ -99,3 +99,35 @@ describe('searching stays inside the grant', () => {
     expect(await new LocalCorpus([root]).search('   ')).toEqual([]);
   });
 });
+
+describe('the resolved path is re-checked, not just the alias', () => {
+  it('refuses a friendly-looking link to a secret inside the root', async () => {
+    // The alias is attacker-chosen and the target is what gets returned, so
+    // checking the alias and reading the target is the whole bug. Staying
+    // inside the granted root is not sufficient: the secrets are inside it.
+    await writeFile(join(root, '.env'), 'API_KEY=migration-secret\n');
+    await symlink(join(root, '.env'), join(root, 'safe-notes.md'));
+    const matches = await new LocalCorpus([root]).search('migration');
+    expect(matches.every((m) => !m.snippet.includes('migration-secret'))).toBe(true);
+  });
+
+  it('refuses a directory alias that leads into a skipped directory', async () => {
+    await mkdir(join(root, 'node_modules', 'pkg'), { recursive: true });
+    await writeFile(join(root, 'node_modules', 'pkg', 'readme.md'), 'migration internals\n');
+    await symlink(join(root, 'node_modules'), join(root, 'vendor'));
+    const matches = await new LocalCorpus([root]).search('migration');
+    expect(matches.every((m) => !m.snippet.includes('internals'))).toBe(true);
+  });
+
+  it('still reads a corpus the operator granted inside a dot directory', async () => {
+    // The root is the operator's deliberate choice. `~/.notes` is a normal
+    // place to keep notes, and rejecting its own dot segment would make the
+    // grant match nothing.
+    const dotRoot = join(root, '.notes');
+    await mkdir(dotRoot, { recursive: true });
+    await writeFile(join(dotRoot, 'plan.md'), 'the migration lands in Q3\n');
+    const matches = await new LocalCorpus([dotRoot]).search('migration');
+    expect(matches).toHaveLength(1);
+    expect(matches[0]?.file).toBe('plan.md');
+  });
+});

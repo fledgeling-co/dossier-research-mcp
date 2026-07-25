@@ -1,9 +1,11 @@
+import { z } from 'zod';
 import type { Config } from '../config.js';
 import type { CreateRunArgs, DeepResearchClient, FollowUpArgs } from '../gemini/client.js';
 import type { CostBand, DurationOptions } from '../gemini/cost.js';
 import { estimateDuration } from '../gemini/cost.js';
 import type { InteractionSnapshot } from '../gemini/types.js';
 import { attemptOnceThenSettle, retry, retryAfterMs } from '../net/retry.js';
+import { compact } from './types.js';
 import type {
   Capabilities,
   CredentialStatus,
@@ -48,14 +50,27 @@ export function encodeXaiOptions(prompt: string, opts: XaiOptions): string {
   return Object.keys(opts).length === 0 ? prompt : `${prompt}${MARKER}${JSON.stringify(opts)}-->`;
 }
 
+/** Bounded, because the marker rides on caller-supplied prompt text (CP §1). */
+const XaiOptionsSchema = z
+  .object({
+    searchX: z.boolean().optional(),
+    fromDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    toDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    allowHandles: z.array(z.string().max(80)).max(20).optional(),
+    excludeHandles: z.array(z.string().max(80)).max(20).optional(),
+    domains: z.array(z.string().max(200)).max(5).optional(),
+  })
+  .strict();
+
 export function decodeXaiOptions(prompt: string): { prompt: string; opts: XaiOptions } {
   const at = prompt.lastIndexOf(MARKER);
   if (at === -1) return { prompt, opts: {} };
   try {
-    return {
-      prompt: prompt.slice(0, at),
-      opts: JSON.parse(prompt.slice(at + MARKER.length).replace(/-->\s*$/, '')) as XaiOptions,
-    };
+    const parsed = XaiOptionsSchema.safeParse(JSON.parse(prompt.slice(at + MARKER.length).replace(/-->\s*$/, '')));
+    if (!parsed.success) return { prompt, opts: {} };
+    // Strip the explicit `undefined`s Zod emits for absent optionals;
+    // `exactOptionalPropertyTypes` treats those as different from absent.
+    return { prompt: prompt.slice(0, at), opts: compact(parsed.data) };
   } catch {
     return { prompt, opts: {} };
   }
