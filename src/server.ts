@@ -276,7 +276,7 @@ export function createServer(deps: ServerDeps): FastMCP {
         .string()
         .max(128)
         .optional()
-        .describe('The fingerprint from `research_plan`. Required when the server runs with DEEP_RESEARCH_REQUIRE_CONTRACT=true.'),
+        .describe('The fingerprint from `research_plan`. Required when the server runs with DOSSIER_REQUIRE_CONTRACT=true.'),
       label: z.string().max(200).optional().describe('Short human label, shown in listings and the spend ledger.'),
       tags: z.array(z.string().max(60)).max(20).optional(),
       attachments: z
@@ -766,7 +766,7 @@ export function createServer(deps: ServerDeps): FastMCP {
         `- Committed: **$${snapshot.committedUsd.toFixed(2)}** of $${snapshot.budgetUsd.toFixed(2)}`,
         `- Remaining: **$${snapshot.remainingUsd.toFixed(2)}**`,
         `- Runs in window: ${snapshot.runsInWindow} · in flight now: ${snapshot.activeRuns}/${snapshot.maxConcurrent}`,
-        snapshot.budgetUsd === 0 ? '- ⚠ The budget gate is DISABLED (DEEP_RESEARCH_BUDGET_USD=0).' : '',
+        snapshot.budgetUsd === 0 ? '- ⚠ The budget gate is DISABLED (DOSSIER_BUDGET_USD=0).' : '',
         '',
         top.length > 0 ? '**Largest commitments:**' : '',
         ...top.map((e) => `- $${e.estimatedCostUsd.toFixed(2)} · ${e.tier} · \`${e.runId}\`${e.label ? ` — ${e.label}` : ''}`),

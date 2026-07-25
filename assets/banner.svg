@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 420" width="1280" height="420">
+  <defs>
+    <radialGradient id="bg" cx="30%" cy="40%" r="90%">
+      <stop offset="0%" stop-color="#2B2320"/><stop offset="60%" stop-color="#191413"/><stop offset="100%" stop-color="#0B0908"/>
+    </radialGradient>
+    <clipPath id="squircle"><rect x="96" y="66" width="288" height="288" rx="66" ry="66"/></clipPath>
+    <filter id="iconShadow" x="-40%" y="-40%" width="180%" height="180%">
+      <feDropShadow dx="0" dy="10" stdDeviation="16" flood-color="#000" flood-opacity="0.55"/>
+    </filter>
+  </defs>
+  <rect width="1280" height="420" fill="url(#bg)"/>
+  <g filter="url(#iconShadow)"><image href="icon-512.png" x="96" y="66" width="288" height="288" clip-path="url(#squircle)"/></g>
+  <text x="452" y="196" font-family="Iowan Old Style, Palatino, Georgia, serif" font-size="96" font-weight="600" fill="#F3EADA" letter-spacing="-1">Dossier</text>
+  <text x="456" y="252" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="26" fill="#C8321F" letter-spacing="1.5">npx dossier-mcp</text>
+  <text x="456" y="308" font-family="-apple-system, Helvetica Neue, Arial, sans-serif" font-size="27" fill="#A79C8E">Gemini Deep Research as an MCP server —</text>
+  <text x="456" y="344" font-family="-apple-system, Helvetica Neue, Arial, sans-serif" font-size="27" fill="#A79C8E">durable runs, spend control, verified citations.</text>
+</svg>

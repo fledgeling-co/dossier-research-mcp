@@ -275,7 +275,7 @@ Specific failure modes to avoid in your generated prompts:
 
 ## Handing off to the deep-research MCP server
 
-This skill ships with [`deep-research-mcp`](https://github.com/fledgeling-co/deep-research-mcp). When that server is connected, do not stop at printing the prompt — hand it straight over. The server **detects an already-engineered brief and sends it verbatim**, so your scaffold is never re-wrapped or double-scoped.
+This skill ships with [`dossier-mcp`](https://github.com/fledgeling-co/dossier). When that server is connected, do not stop at printing the prompt — hand it straight over. The server **detects an already-engineered brief and sends it verbatim**, so your scaffold is never re-wrapped or double-scoped.
 
 The handoff, in order:
 

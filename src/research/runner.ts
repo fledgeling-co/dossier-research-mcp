@@ -26,7 +26,7 @@ export class BudgetExceededError extends Error {
   ) {
     super(
       `Budget gate: $${spentUsd.toFixed(2)} of $${budgetUsd.toFixed(2)} already committed in the last ${windowHours}h. ` +
-        'Raise DEEP_RESEARCH_BUDGET_USD, wait for the window to roll, or cancel a run.',
+        'Raise DOSSIER_BUDGET_USD, wait for the window to roll, or cancel a run.',
     );
     this.name = 'BudgetExceededError';
   }
@@ -122,7 +122,7 @@ export class Runner {
   async start(args: StartRunArgs): Promise<StartRunResult> {
     if (!this.client) {
       throw new Error(
-        'No Gemini client available. Set GEMINI_API_KEY or VERTEX_PROJECT (and unset DEEP_RESEARCH_HERMETIC).',
+        'No Gemini client available. Set GEMINI_API_KEY or VERTEX_PROJECT (and unset DOSSIER_HERMETIC).',
       );
     }
 

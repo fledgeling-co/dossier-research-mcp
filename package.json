@@ -1,17 +1,17 @@
 {
-  "name": "deep-research-mcp",
+  "name": "dossier-mcp",
   "version": "0.1.0",
-  "description": "MCP server for Google Gemini Deep Research \u2014 durable background runs, spend control, context-safe report reading, citation verification, and private-corpus grounding.",
+  "description": "Dossier \u2014 Google Gemini Deep Research as an MCP server. Durable background runs, spend control, context-safe report reading, citation verification, and private-corpus grounding.",
   "type": "module",
   "license": "MIT",
   "author": "fledgeling-co",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/fledgeling-co/deep-research-mcp.git"
+    "url": "git+https://github.com/fledgeling-co/dossier.git"
   },
-  "homepage": "https://github.com/fledgeling-co/deep-research-mcp#readme",
+  "homepage": "https://github.com/fledgeling-co/dossier#readme",
   "bugs": {
-    "url": "https://github.com/fledgeling-co/deep-research-mcp/issues"
+    "url": "https://github.com/fledgeling-co/dossier/issues"
   },
   "keywords": [
     "mcp",
@@ -21,13 +21,15 @@
     "fastmcp",
     "ai",
     "research",
-    "claude"
+    "claude",
+    "dossier"
   ],
   "engines": {
     "node": ">=20.11"
   },
   "bin": {
-    "deep-research-mcp": "dist/index.js"
+    "dossier": "dist/index.js",
+    "dossier-mcp": "dist/index.js"
   },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -44,6 +46,7 @@
   "files": [
     "dist",
     "skills",
+    "assets/icon.svg",
     "README.md",
     "LICENSE"
   ],

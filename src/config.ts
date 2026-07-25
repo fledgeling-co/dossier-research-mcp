@@ -37,22 +37,22 @@ const EnvSchema = z.object({
   VERTEX_PROJECT: z.string().trim().max(200).optional(),
   VERTEX_LOCATION: z.string().trim().max(100).optional(),
 
-  DEEP_RESEARCH_STORE_DIR: z.string().trim().max(1000).optional(),
+  DOSSIER_STORE_DIR: z.string().trim().max(1000).optional(),
 
-  DEEP_RESEARCH_BUDGET_USD: numeric(25, 0, 1_000_000),
-  DEEP_RESEARCH_BUDGET_WINDOW_HOURS: numeric(24, 1, 24 * 365),
-  DEEP_RESEARCH_MAX_CONCURRENT: numeric(3, 1, 64),
-  DEEP_RESEARCH_REQUIRE_CONTRACT: boolish(false),
-  DEEP_RESEARCH_DEDUPE_TTL_MINUTES: numeric(1440, 0, 60 * 24 * 90),
+  DOSSIER_BUDGET_USD: numeric(25, 0, 1_000_000),
+  DOSSIER_BUDGET_WINDOW_HOURS: numeric(24, 1, 24 * 365),
+  DOSSIER_MAX_CONCURRENT: numeric(3, 1, 64),
+  DOSSIER_REQUIRE_CONTRACT: boolish(false),
+  DOSSIER_DEDUPE_TTL_MINUTES: numeric(1440, 0, 60 * 24 * 90),
 
-  DEEP_RESEARCH_POLL_SECONDS: numeric(20, 5, 600),
-  DEEP_RESEARCH_STALL_MINUTES: numeric(12, 1, 120),
-  DEEP_RESEARCH_UTILITY_MODEL: z.string().trim().max(200).optional(),
+  DOSSIER_POLL_SECONDS: numeric(20, 5, 600),
+  DOSSIER_STALL_MINUTES: numeric(12, 1, 120),
+  DOSSIER_UTILITY_MODEL: z.string().trim().max(200).optional(),
 
-  DEEP_RESEARCH_HTTP_PORT: numeric(8787, 1, 65535),
-  DEEP_RESEARCH_HTTP_TOKENS: z.string().max(4000).optional(),
+  DOSSIER_HTTP_PORT: numeric(8787, 1, 65535),
+  DOSSIER_HTTP_TOKENS: z.string().max(4000).optional(),
 
-  DEEP_RESEARCH_HERMETIC: boolish(false),
+  DOSSIER_HERMETIC: boolish(false),
 });
 
 export type AuthMode = 'api-key' | 'vertex' | 'none';
@@ -105,21 +105,21 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
 
   return {
     auth,
-    storeDir: e.DEEP_RESEARCH_STORE_DIR || join(homedir(), '.deep-research-mcp'),
-    budgetUsd: e.DEEP_RESEARCH_BUDGET_USD,
-    budgetWindowHours: e.DEEP_RESEARCH_BUDGET_WINDOW_HOURS,
-    maxConcurrent: e.DEEP_RESEARCH_MAX_CONCURRENT,
-    requireContract: e.DEEP_RESEARCH_REQUIRE_CONTRACT,
-    dedupeTtlMinutes: e.DEEP_RESEARCH_DEDUPE_TTL_MINUTES,
-    pollSeconds: e.DEEP_RESEARCH_POLL_SECONDS,
-    stallMinutes: e.DEEP_RESEARCH_STALL_MINUTES,
-    utilityModel: e.DEEP_RESEARCH_UTILITY_MODEL || DEFAULT_UTILITY_MODEL,
-    httpPort: e.DEEP_RESEARCH_HTTP_PORT,
-    httpTokens: (e.DEEP_RESEARCH_HTTP_TOKENS || '')
+    storeDir: e.DOSSIER_STORE_DIR || join(homedir(), '.dossier-mcp'),
+    budgetUsd: e.DOSSIER_BUDGET_USD,
+    budgetWindowHours: e.DOSSIER_BUDGET_WINDOW_HOURS,
+    maxConcurrent: e.DOSSIER_MAX_CONCURRENT,
+    requireContract: e.DOSSIER_REQUIRE_CONTRACT,
+    dedupeTtlMinutes: e.DOSSIER_DEDUPE_TTL_MINUTES,
+    pollSeconds: e.DOSSIER_POLL_SECONDS,
+    stallMinutes: e.DOSSIER_STALL_MINUTES,
+    utilityModel: e.DOSSIER_UTILITY_MODEL || DEFAULT_UTILITY_MODEL,
+    httpPort: e.DOSSIER_HTTP_PORT,
+    httpTokens: (e.DOSSIER_HTTP_TOKENS || '')
       .split(',')
       .map((t) => t.trim())
       .filter(Boolean),
-    hermetic: e.DEEP_RESEARCH_HERMETIC,
+    hermetic: e.DOSSIER_HERMETIC,
   };
 }
 

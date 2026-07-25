@@ -1,11 +1,11 @@
-# deep-research-mcp
+# dossier-mcp
 
 An MCP server for **Google Gemini Deep Research**, built so an autonomous agent can drive it without burning your month's budget in a loop, losing a 45-minute job to a dropped connection, or dumping a 60,000-token report into a context window.
 
 Built on [FastMCP](https://github.com/punkpeye/fastmcp). Ships the [`deep-research-prompt-creator`](#the-bundled-skill) skill and wraps **both** Gemini research surfaces — the [Deep Research API and the Managed Agents API](docs/deep-research-api-vs-agent.md).
 
 ```bash
-npx deep-research-mcp        # stdio, ready for any MCP client
+npx dossier-mcp        # stdio, ready for any MCP client
 ```
 
 ---
@@ -33,7 +33,7 @@ So this server is opinionated about all three:
 ### Claude Code
 
 ```bash
-claude mcp add deep-research -e GEMINI_API_KEY=your-key -- npx -y deep-research-mcp
+claude mcp add deep-research -e GEMINI_API_KEY=your-key -- npx -y dossier-mcp
 ```
 
 ### Claude Desktop / any `mcpServers` config
@@ -43,10 +43,10 @@ claude mcp add deep-research -e GEMINI_API_KEY=your-key -- npx -y deep-research-
   "mcpServers": {
     "deep-research": {
       "command": "npx",
-      "args": ["-y", "deep-research-mcp"],
+      "args": ["-y", "dossier-mcp"],
       "env": {
         "GEMINI_API_KEY": "your-key-here",
-        "DEEP_RESEARCH_BUDGET_USD": "25"
+        "DOSSIER_BUDGET_USD": "25"
       }
     }
   }
@@ -56,8 +56,8 @@ claude mcp add deep-research -e GEMINI_API_KEY=your-key -- npx -y deep-research-
 ### From source
 
 ```bash
-git clone https://github.com/fledgeling-co/deep-research-mcp.git
-cd deep-research-mcp
+git clone https://github.com/fledgeling-co/dossier.git
+cd dossier-mcp
 npm install && npm run build
 GEMINI_API_KEY=... node dist/index.js
 ```
@@ -195,10 +195,10 @@ Same parameters as `research_plan`, plus `contractFingerprint`, `label`, `tags[]
 Three gates run before a single dollar moves, in this order — all free:
 
 1. **Dedupe.** An identical request (same normalised prompt, tier, tools, planning mode) inside the TTL returns the existing run. A retry storm collapses onto one job.
-2. **Concurrency.** Refused past `DEEP_RESEARCH_MAX_CONCURRENT`.
-3. **Budget.** Refused if the estimated cost would cross `DEEP_RESEARCH_BUDGET_USD` in the rolling window.
+2. **Concurrency.** Refused past `DOSSIER_MAX_CONCURRENT`.
+3. **Budget.** Refused if the estimated cost would cross `DOSSIER_BUDGET_USD` in the rolling window.
 
-Set `DEEP_RESEARCH_REQUIRE_CONTRACT=true` to make the plan→start handshake mandatory. Recommended for any server an autonomous agent can reach.
+Set `DOSSIER_REQUIRE_CONTRACT=true` to make the plan→start handshake mandatory. Recommended for any server an autonomous agent can reach.
 
 #### `research_approve_plan`
 Approve — optionally amending — the plan a collaborative-planning run proposed. Pruning tangential branches and injecting missing angles here is the single highest-leverage intervention available on a Deep Research run.
@@ -209,7 +209,7 @@ One run, or every run in flight. Reports **liveness separately from status**: a 
 #### `research_tail`
 Replays the durable progress journal from a cursor. `{ runId, sinceSeq }` → events plus the next cursor. A client that dropped at minute 3 of a 45-minute run loses nothing.
 
-> **Timing, measured against the live API.** While a run is in flight, `interactions.get` returns only the echoed `user_input` step — no intermediate progress. The full step list, including the researcher's reasoning summaries, arrives in one batch at completion (a real run produced 25 of them). So mid-run you see lifecycle events (`created`, `plan`, `progress`, `stalled`); reasoning arrives at the end. For reasoning *as it happens* you would need the SSE stream, which this server does not yet consume ([#1](https://github.com/fledgeling-co/deep-research-mcp/issues/1)). Durability is unaffected — the journal is what survives your disconnect.
+> **Timing, measured against the live API.** While a run is in flight, `interactions.get` returns only the echoed `user_input` step — no intermediate progress. The full step list, including the researcher's reasoning summaries, arrives in one batch at completion (a real run produced 25 of them). So mid-run you see lifecycle events (`created`, `plan`, `progress`, `stalled`); reasoning arrives at the end. For reasoning *as it happens* you would need the SSE stream, which this server does not yet consume ([#1](https://github.com/fledgeling-co/dossier/issues/1)). Durability is unaffected — the journal is what survives your disconnect.
 
 #### `research_read`
 | `mode` | Returns |
@@ -316,24 +316,24 @@ The same framework is also available three other ways without installing anythin
 |---|---|---|
 | `GEMINI_API_KEY` | — | Google AI Studio key |
 | `VERTEX_PROJECT` / `VERTEX_LOCATION` | — / `global` | Vertex AI (takes precedence over the API key) |
-| `DEEP_RESEARCH_STORE_DIR` | `~/.deep-research-mcp` | Where runs, journals, reports and the ledger live |
-| `DEEP_RESEARCH_BUDGET_USD` | `25` | Hard ceiling per rolling window. `0` disables the gate |
-| `DEEP_RESEARCH_BUDGET_WINDOW_HOURS` | `24` | Rolling window |
-| `DEEP_RESEARCH_MAX_CONCURRENT` | `3` | Runs in flight at once |
-| `DEEP_RESEARCH_REQUIRE_CONTRACT` | `false` | Make the plan→start handshake mandatory |
-| `DEEP_RESEARCH_DEDUPE_TTL_MINUTES` | `1440` | Window for collapsing identical requests |
-| `DEEP_RESEARCH_POLL_SECONDS` | `20` | Poll interval for in-flight runs |
-| `DEEP_RESEARCH_STALL_MINUTES` | `12` | Silence before a run is marked `stalled` |
-| `DEEP_RESEARCH_UTILITY_MODEL` | `gemini-3.1-pro-preview` | Titles, summaries, follow-ups, claim extraction |
-| `DEEP_RESEARCH_HTTP_PORT` | `8787` | Port for `--transport http` |
-| `DEEP_RESEARCH_HTTP_TOKENS` | — | Comma-separated bearer tokens for the HTTP transport |
+| `DOSSIER_STORE_DIR` | `~/.dossier-mcp` | Where runs, journals, reports and the ledger live |
+| `DOSSIER_BUDGET_USD` | `25` | Hard ceiling per rolling window. `0` disables the gate |
+| `DOSSIER_BUDGET_WINDOW_HOURS` | `24` | Rolling window |
+| `DOSSIER_MAX_CONCURRENT` | `3` | Runs in flight at once |
+| `DOSSIER_REQUIRE_CONTRACT` | `false` | Make the plan→start handshake mandatory |
+| `DOSSIER_DEDUPE_TTL_MINUTES` | `1440` | Window for collapsing identical requests |
+| `DOSSIER_POLL_SECONDS` | `20` | Poll interval for in-flight runs |
+| `DOSSIER_STALL_MINUTES` | `12` | Silence before a run is marked `stalled` |
+| `DOSSIER_UTILITY_MODEL` | `gemini-3.1-pro-preview` | Titles, summaries, follow-ups, claim extraction |
+| `DOSSIER_HTTP_PORT` | `8787` | Port for `--transport http` |
+| `DOSSIER_HTTP_TOKENS` | — | Comma-separated bearer tokens for the HTTP transport |
 
 Every value is Zod-validated once at startup; an invalid one fails fast with a readable message rather than surfacing as a mystery mid-run. An empty string is treated as unset, because a committed `.env.example` key is commonly present-but-empty.
 
 ### HTTP transport
 
 ```bash
-DEEP_RESEARCH_HTTP_TOKENS=$(openssl rand -hex 32) deep-research-mcp --transport http --port 8787
+DOSSIER_HTTP_TOKENS=$(openssl rand -hex 32) dossier-mcp --transport http --port 8787
 ```
 
 Serves streamable HTTP at `/mcp`, SSE at `/sse`, health at `/health`. Tokens are compared in constant time. **Bind to loopback unless tokens are set** — the server warns if you do not.
@@ -368,7 +368,7 @@ Deep Research reads the open web on your behalf, and Google's own documentation 
 ## Library use
 
 ```ts
-import { buildPrompt, selectArchetype } from 'deep-research-mcp/server';
+import { buildPrompt, selectArchetype } from 'dossier-mcp/server';
 
 const { prompt, archetype, preEngineered } = buildPrompt({
   question: 'What are the disclosure obligations for dual-listed issuers?',
@@ -392,7 +392,7 @@ npm run gate       # typecheck && test && build — run before pushing
 npm run inspect    # MCP Inspector
 ```
 
-The test suite is hermetic by construction: `DEEP_RESEARCH_HERMETIC=1` means a live client is never constructed, so a stray key in your environment cannot make the tests spend money. Every test injects a scripted `DeepResearchClient` and points the store at a temp directory.
+The test suite is hermetic by construction: `DOSSIER_HERMETIC=1` means a live client is never constructed, so a stray key in your environment cannot make the tests spend money. Every test injects a scripted `DeepResearchClient` and points the store at a temp directory.
 
 ---
 

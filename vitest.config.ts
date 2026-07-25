@@ -32,6 +32,6 @@ export default defineConfig({
     environment: 'node',
     // Hermetic by default: no network, no live keys. Every test injects its
     // Gemini client and points the store at a temp dir.
-    env: { DEEP_RESEARCH_HERMETIC: '1' },
+    env: { DOSSIER_HERMETIC: '1' },
   },
 });

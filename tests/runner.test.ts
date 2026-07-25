@@ -68,7 +68,7 @@ beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'drmcp-'));
   store = new Store(dir);
   await store.init();
-  config = { ...loadConfig({ DEEP_RESEARCH_HERMETIC: '1' }), storeDir: dir };
+  config = { ...loadConfig({ DOSSIER_HERMETIC: '1' }), storeDir: dir };
 });
 
 afterEach(async () => {

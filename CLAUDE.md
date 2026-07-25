@@ -19,10 +19,11 @@ Two operating specs govern all code in this repo. Read them before generating co
 
 Check here before "fixing" something that looks non-compliant:
 
-- **No Next.js, no Vercel, no Mongo, no Redis.** This is a stdio/HTTP MCP server distributed on npm. Persistence is a plain atomic-write JSON + JSONL store on the local filesystem (`src/store/`) — adding a database would make the server undeployable as `npx deep-research-mcp`.
+- **No Next.js, no Vercel, no Mongo, no Redis.** This is a stdio/HTTP MCP server distributed on npm. Persistence is a plain atomic-write JSON + JSONL store on the local filesystem (`src/store/`) — adding a database would make the server undeployable as `npx dossier-mcp`.
 - **npm, single package, no monorepo** (BP §17) — one deployable.
 - **Vitest over Playwright** (BP §15) — there is no UI. The equivalent of an E2E test here is the stdio MCP handshake smoke check described below.
 - **No hosted CI** (BP §19). The gate is `npm run gate`, run before pushing.
+- **`oxc: false` in `vitest.config.ts`** is load-bearing: Vitest 4 transforms with Oxc, and unplugin-swc only disables esbuild, so without it swc loads and does nothing.
 - **`exactOptionalPropertyTypes: true`** is on, above the CP §1 baseline. Interfaces fed from Zod-parsed input declare `foo?: T | undefined` explicitly.
 
 ## Project overview
@@ -58,6 +59,7 @@ src/
   corpus/files.ts       File Search stores (private-corpus grounding)
   net/safe-fetch.ts     SSRF-safe fetch: DNS validation, per-hop redirect checks, caps
   ai/utility.ts         AI SDK v7 — Output.object for every structured result
+assets/                 icon.svg (master, 1024) + rendered PNGs, banner, social preview
 docs/
   deep-research-api-vs-agent.md   when to use which Gemini surface (linked from the README)
 skills/deep-research-prompt-creator/   the bundled Claude Code skill (shipped in the package)
@@ -71,20 +73,21 @@ tests/                  hermetic vitest — no network, no keys
 ```bash
 npm install
 npm run dev        # tsx src/index.ts (stdio)
-npm run typecheck  # tsc --noEmit — over tests too
-npm test           # vitest run — hermetic
-npm run build      # tsc -p tsconfig.build.json → dist/
-npm run gate       # typecheck && test && build — run before pushing
+npm run typecheck  # tsgo --noEmit — over tests too
+npm run lint       # eslint (flat config, type-aware)
+npm test           # vitest run — hermetic, swc transform
+npm run build      # tsgo -p tsconfig.build.json → dist/
+npm run gate       # typecheck && lint && test && build — run before pushing
 npm run inspect    # build, then MCP Inspector
 ```
 
-**The quality gate is `npm run gate`, run manually before pushing** (BP §19). There is intentionally no hosted CI. Run a single test file with `npx vitest run tests/runner.test.ts`.
+**The quality gate is `npm run gate`, run manually before pushing** (BP §19). Toolchain matches the org's other repos: **tsgo** (`@typescript/native-preview`) compiles and typechecks, **eslint 9** flat + type-aware lints, **vitest** with the **swc** transform tests. `typescript@~6` is present only to satisfy typescript-eslint's peer range — tsgo does the real checking. There is intentionally no hosted CI. Run a single test file with `npx vitest run tests/runner.test.ts`.
 
 ## Verifying a change actually works
 
 A green typecheck is not a working server. `npm test` covers the pure logic; the MCP surface needs a real handshake. Drive it over stdio — initialize, `tools/list`, then call `research_plan` (it is free and needs no credentials) and assert on the response text. A tool whose Zod schema FastMCP rejects at registration will pass typecheck and fail at `tools/list`.
 
-Never write a test that spends money. `DEEP_RESEARCH_HERMETIC=1` (set in `vitest.config.ts`) makes `resolveClient` return `null` unconditionally, so a stray `GEMINI_API_KEY` in the environment cannot reach the network. Every test injects a scripted client and points the store at a `mkdtemp` directory.
+Never write a test that spends money. `DOSSIER_HERMETIC=1` (set in `vitest.config.ts`) makes `resolveClient` return `null` unconditionally, so a stray `GEMINI_API_KEY` in the environment cannot reach the network. Every test injects a scripted client and points the store at a `mkdtemp` directory.
 
 ## Conventions (repo deltas — the specs carry the rest)
 

@@ -6,8 +6,8 @@ import { version } from './version.js';
 /**
  * CLI entry point.
  *
- *   deep-research-mcp                    # stdio (the default; what MCP clients use)
- *   deep-research-mcp --transport http   # streamable HTTP on DEEP_RESEARCH_HTTP_PORT
+ *   dossier-mcp                    # stdio (the default; what MCP clients use)
+ *   dossier-mcp --transport http   # streamable HTTP on DOSSIER_HTTP_PORT
  *
  * Nothing is written to stdout except the MCP protocol itself — on stdio, a
  * stray `console.log` corrupts the stream and the client sees a parse error
@@ -40,7 +40,7 @@ function parseArgs(argv: readonly string[]): Args {
       port = value;
       i += 1;
     } else if (arg === '--version' || arg === '-v') {
-      process.stderr.write(`deep-research-mcp ${version}\n`);
+      process.stderr.write(`dossier-mcp ${version}\n`);
       process.exit(0);
     } else if (arg === '--help' || arg === '-h') {
       process.stderr.write(USAGE);
@@ -50,16 +50,16 @@ function parseArgs(argv: readonly string[]): Args {
   return { transport, ...(port !== undefined ? { port } : {}) };
 }
 
-const USAGE = `deep-research-mcp ${version}
+const USAGE = `dossier-mcp ${version}
 
 MCP server for Google Gemini Deep Research.
 
 Usage:
-  deep-research-mcp [--transport stdio|http] [--port <n>]
+  dossier-mcp [--transport stdio|http] [--port <n>]
 
 Options:
   --transport   stdio (default) or http (streamable HTTP + SSE)
-  --port        HTTP port (default $DEEP_RESEARCH_HTTP_PORT or 8787)
+  --port        HTTP port (default $DOSSIER_HTTP_PORT or 8787)
   -v, --version
   -h, --help
 
@@ -77,7 +77,7 @@ async function main(): Promise<void> {
   const server = createServer(deps);
 
   process.stderr.write(
-    `deep-research-mcp ${version} · auth: ${describeAuth(config)} · store: ${config.storeDir}\n`,
+    `dossier-mcp ${version} · auth: ${describeAuth(config)} · store: ${config.storeDir}\n`,
   );
   if (!deps.client) {
     process.stderr.write(
@@ -101,7 +101,7 @@ async function main(): Promise<void> {
     const port = args.port ?? config.httpPort;
     if (config.httpTokens.length === 0) {
       process.stderr.write(
-        'WARNING: HTTP transport with no DEEP_RESEARCH_HTTP_TOKENS — bind to loopback only.\n',
+        'WARNING: HTTP transport with no DOSSIER_HTTP_TOKENS — bind to loopback only.\n',
       );
     }
     await server.start({ transportType: 'httpStream', httpStream: { port } });

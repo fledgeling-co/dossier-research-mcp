@@ -247,17 +247,17 @@ describe('config', () => {
   });
 
   it('treats an empty string as unset (a present-but-empty .env key)', () => {
-    const config = loadConfig({ GEMINI_API_KEY: '', DEEP_RESEARCH_BUDGET_USD: '' });
+    const config = loadConfig({ GEMINI_API_KEY: '', DOSSIER_BUDGET_USD: '' });
     expect(config.auth.mode).toBe('none');
     expect(config.budgetUsd).toBe(25);
   });
 
   it('rejects an out-of-range numeric rather than silently clamping', () => {
-    expect(() => loadConfig({ DEEP_RESEARCH_BUDGET_USD: '-5' })).toThrow(/Invalid environment/);
+    expect(() => loadConfig({ DOSSIER_BUDGET_USD: '-5' })).toThrow(/Invalid environment/);
   });
 
   it('parses the HTTP token list', () => {
-    expect(loadConfig({ DEEP_RESEARCH_HTTP_TOKENS: 'a, b ,,c' }).httpTokens).toEqual(['a', 'b', 'c']);
+    expect(loadConfig({ DOSSIER_HTTP_TOKENS: 'a, b ,,c' }).httpTokens).toEqual(['a', 'b', 'c']);
   });
 });
 
