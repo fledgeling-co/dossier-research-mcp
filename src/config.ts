@@ -1,5 +1,5 @@
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { z } from 'zod';
 
 /**
@@ -21,20 +21,42 @@ const numeric = (fallback: number, min: number, max: number) =>
     .transform((v) => (v && v.trim() ? Number(v) : fallback))
     .pipe(z.number().finite().min(min).max(max));
 
+const TRUTHY = new Set(['1', 'true', 'yes', 'on']);
+const FALSY = new Set(['0', 'false', 'no', 'off']);
+
+/**
+ * A boolean that refuses to guess.
+ *
+ * The old version treated anything unrecognised as `false`, so a typo silently
+ * flipped a safety flag: `DOSSIER_HERMETIC=treu` disabled hermetic mode and let
+ * the test suite reach the network, and `DOSSIER_REQUIRE_CONTRACT=treu`
+ * disabled the spend handshake. Both fail in the unsafe direction, which is the
+ * one direction a typo must never take. Unrecognised values now fail startup.
+ */
 const boolish = (fallback: boolean) =>
   z
     .string()
     .optional()
-    .transform((v) => {
+    .transform((v, ctx) => {
       const s = (v ?? '').trim().toLowerCase();
       if (!s) return fallback;
-      return s === '1' || s === 'true' || s === 'yes';
+      if (TRUTHY.has(s)) return true;
+      if (FALSY.has(s)) return false;
+      ctx.addIssue({
+        code: 'custom',
+        message: `expected one of ${[...TRUTHY, ...FALSY].join('/')}, got ${JSON.stringify(v)}`,
+      });
+      return z.NEVER;
     });
 
 const EnvSchema = z.object({
   GEMINI_API_KEY: z.string().trim().max(500).optional(),
   GOOGLE_API_KEY: z.string().trim().max(500).optional(),
   VERTEX_PROJECT: z.string().trim().max(200).optional(),
+  PERPLEXITY_API_KEY: z.string().trim().max(500).optional(),
+  OPENAI_API_KEY: z.string().trim().max(500).optional(),
+  XAI_API_KEY: z.string().trim().max(500).optional(),
+  DOSSIER_PROVIDERS: z.string().trim().max(200).optional(),
   VERTEX_LOCATION: z.string().trim().max(100).optional(),
 
   DOSSIER_STORE_DIR: z.string().trim().max(1000).optional(),
@@ -51,8 +73,16 @@ const EnvSchema = z.object({
 
   DOSSIER_HTTP_PORT: numeric(8787, 1, 65535),
   DOSSIER_HTTP_TOKENS: z.string().max(4000).optional(),
+  DOSSIER_HTTP_ALLOW_ANONYMOUS: boolish(false),
 
   DOSSIER_HERMETIC: boolish(false),
+
+  /**
+   * Directories a research run may read locally. Operator-set, never
+   * agent-set: see `localCorpusDirs` on Config for why that boundary matters.
+   */
+  DOSSIER_LOCAL_CORPUS_DIRS: z.string().max(4000).optional(),
+  DOSSIER_LOCAL_CLI: z.enum(['claude', 'codex', 'agy', 'grok', 'cursor', 'gemini']).optional(),
 });
 
 export type AuthMode = 'api-key' | 'vertex' | 'none';
@@ -62,6 +92,12 @@ export interface Config {
     | { readonly mode: 'api-key'; readonly apiKey: string }
     | { readonly mode: 'vertex'; readonly project: string; readonly location: string }
     | { readonly mode: 'none' };
+  /** Present-and-shaped credentials for the non-Gemini providers. */
+  readonly perplexityApiKey: string;
+  readonly openaiApiKey: string;
+  readonly xaiApiKey: string;
+  /** Explicit provider allow-list; empty means "everything detected". */
+  readonly enabledProviders: readonly string[];
   readonly storeDir: string;
   readonly budgetUsd: number;
   readonly budgetWindowHours: number;
@@ -73,6 +109,22 @@ export interface Config {
   readonly utilityModel: string;
   readonly httpPort: number;
   readonly httpTokens: readonly string[];
+  /** Deliberate opt-in to an unauthenticated HTTP listener. */
+  readonly httpAllowAnonymous: boolean;
+  /**
+   * Absolute directories the local corpus may read, granted by the operator.
+   *
+   * There is deliberately **no tool that adds one**. A tool that reads
+   * arbitrary local files and returns snippets is an exfiltration primitive:
+   * an agent following instructions it found in a fetched web page could
+   * register `/` and search it for credentials. Making the grant an
+   * environment variable puts it where the human is and keeps it out of reach
+   * of anything the model reads. Empty by default; the feature is off until
+   * somebody sets it.
+   */
+  readonly localCorpusDirs: readonly string[];
+  /** Which coding CLI backs the `local` provider. Empty means auto-detect. */
+  readonly localCli: string;
   readonly hermetic: boolean;
 }
 
@@ -105,6 +157,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
 
   return {
     auth,
+    perplexityApiKey: e.PERPLEXITY_API_KEY || '',
+    openaiApiKey: e.OPENAI_API_KEY || '',
+    xaiApiKey: e.XAI_API_KEY || '',
+    enabledProviders: (e.DOSSIER_PROVIDERS || '')
+      .split(',')
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean),
     storeDir: e.DOSSIER_STORE_DIR || join(homedir(), '.dossier-research-mcp'),
     budgetUsd: e.DOSSIER_BUDGET_USD,
     budgetWindowHours: e.DOSSIER_BUDGET_WINDOW_HOURS,
@@ -119,6 +178,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       .split(',')
       .map((t) => t.trim())
       .filter(Boolean),
+    httpAllowAnonymous: e.DOSSIER_HTTP_ALLOW_ANONYMOUS,
+    localCorpusDirs: (e.DOSSIER_LOCAL_CORPUS_DIRS || '')
+      .split(/[:,]/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .map((s) => resolve(s.startsWith('~') ? join(homedir(), s.slice(1)) : s)),
+    localCli: e.DOSSIER_LOCAL_CLI ?? '',
     hermetic: e.DOSSIER_HERMETIC,
   };
 }

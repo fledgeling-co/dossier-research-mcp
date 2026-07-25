@@ -122,6 +122,33 @@ export interface GrepHit {
  * `regex: true` opts into a pattern, which is length-capped and compiled inside
  * a try so a malformed expression is a user error, not a crash.
  */
+/**
+ * Reject the regex shapes that can hang the process.
+ *
+ * `grepReport` runs a caller-supplied pattern against every line of a report
+ * that can run to tens of thousands of lines. JavaScript's engine backtracks,
+ * so `(a+)+$` against a long non-matching line is exponential, and there is one
+ * thread: a single grep call can stop the whole MCP server answering. A length
+ * cap does not help, because the dangerous patterns are short.
+ *
+ * This is a conservative structural check, not a decision procedure (that is
+ * undecidable in general). It rejects nested quantifiers and quantified
+ * alternations containing a quantifier, which covers the classic constructions.
+ * False positives are acceptable here: literal search is the default, and a
+ * rejected pattern costs a user one retry while an accepted one can cost every
+ * user the server.
+ */
+function assertNoCatastrophicBacktracking(pattern: string): void {
+  const NESTED_QUANTIFIER = /\((?:\?[:=!])?[^()]*[+*}][^()]*\)\s*[+*{]/;
+  const QUANTIFIED_ALTERNATION = /\((?:\?[:=!])?[^()]*[+*][^()]*\|[^()]*\)\s*[+*{]/;
+  if (NESTED_QUANTIFIER.test(pattern) || QUANTIFIED_ALTERNATION.test(pattern)) {
+    throw new Error(
+      'Pattern rejected: nested quantifiers can backtrack exponentially and would block the server. ' +
+        'Rewrite without a quantifier inside a quantified group, or drop `regex` to search literally.',
+    );
+  }
+}
+
 export function grepReport(
   markdown: string,
   pattern: string,
@@ -131,6 +158,7 @@ export function grepReport(
   let re: RegExp;
   if (opts.regex) {
     if (pattern.length > 500) throw new Error('Pattern too long (max 500 characters).');
+    assertNoCatastrophicBacktracking(pattern);
     try {
       re = new RegExp(pattern, 'i');
     } catch (e: unknown) {
@@ -167,13 +195,49 @@ export function grepReport(
  * links, so the report renders in any markdown viewer. Both the wrapping and
  * the self-closing forms are handled.
  */
+/**
+ * Schemes a citation may be rendered as a clickable link in.
+ *
+ * A citation is model output that was itself reading the open web, so the URL
+ * is attacker-influenced. Rendering `javascript:` or `data:` as a markdown link
+ * hands a client a clickable payload, and `file:` an exfiltration probe. They
+ * also disappear from verification, because `safeFetch` refuses the scheme, so
+ * the very citations most worth flagging were the ones that quietly vanished.
+ * Anything unsupported is now rendered as inert code, visible but not clickable.
+ */
+const RENDERABLE_SCHEMES = new Set(['http:', 'https:']);
+
+function renderCitation(url: string, label: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return `\`${label} (unusable citation URL)\``;
+  }
+  if (!RENDERABLE_SCHEMES.has(parsed.protocol)) {
+    return `\`${label} (${parsed.protocol} citation, not linked)\``;
+  }
+  return `[${label}](${url})`;
+}
+
 export function normaliseCitations(markdown: string): string {
-  return markdown
-    .replace(/<cite\s+url="([^"]*)"[^>]*>([\s\S]*?)<\/cite>/gi, (_m, url: string, text: string) => {
-      const label = text.trim() || hostLabel(url);
-      return `[${label}](${url})`;
-    })
-    .replace(/<cite\s+url="([^"]*)"[^>]*\/?>/gi, (_m, url: string) => `[${hostLabel(url)}](${url})`);
+  return (
+    markdown
+      // Self-closing first. Run the paired pattern first and a `<cite ... />`
+      // followed later by a real `<cite>text</cite>` gets swallowed whole: the
+      // paired regex spans from the self-closing tag to the next `</cite>`,
+      // taking the intervening prose and a second citation with it.
+      .replace(/<cite\s+url="([^"]*)"[^>]*\/>/gi, (_m, url: string) =>
+        renderCitation(url, hostLabel(url)),
+      )
+      .replace(/<cite\s+url="([^"]*)"[^>]*>([\s\S]*?)<\/cite>/gi, (_m, url: string, text: string) =>
+        renderCitation(url, text.trim() || hostLabel(url)),
+      )
+      // Any unpaired opening tag left over.
+      .replace(/<cite\s+url="([^"]*)"[^>]*>/gi, (_m, url: string) =>
+        renderCitation(url, hostLabel(url)),
+      )
+  );
 }
 
 function hostLabel(url: string): string {

@@ -1,6 +1,7 @@
 import type { DeepResearchClient } from '../gemini/client.js';
 import { EMPTY_PROGRESS, foldEvent, type StreamProgress } from '../gemini/events.js';
 import type { Store } from '../store/store.js';
+import { TERMINAL_STATES } from '../store/types.js';
 import type { RunRecord } from '../store/types.js';
 
 /**
@@ -86,6 +87,11 @@ export class StreamSupervisor {
       lastPersist = now;
       const current = await store.getRun(run.id);
       if (!current) return;
+      // A whole-record write is last-write-wins, so an in-flight stream tick
+      // could re-save a run that was cancelled or completed while the tick was
+      // in progress, resurrecting it into the active set and the concurrency
+      // count. Terminal is terminal.
+      if (TERMINAL_STATES.includes(current.state)) return;
       await store.saveRun({
         ...current,
         reasoningSteps: progress.reasoningSteps,

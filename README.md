@@ -61,6 +61,96 @@ Claude will show you the cost before spending anything, start the job, and tell 
 > [!TIP]
 > Say **"plan it first"** and you get to read and edit the research plan before any money is spent. It is the most useful thing you can do to a run: pruning the irrelevant branches and adding the angle it missed changes the output more than anything else available.
 
+## What asking it something actually looks like
+
+Four real shapes of question, what each one triggers, and what comes back. You type plain English; Claude does the rest.
+
+<details open>
+<summary><b>1. A technical comparison</b> · ~$3–7 · 14–60 min</summary>
+
+> *"Research which open-source vector databases support binary quantization, and what memory their docs claim at 10 million vectors."*
+
+| | |
+|---|---|
+| **Picks** | `technical` archetype, `max` tier |
+| **Reads** | Project docs, GitHub issues, benchmark posts, release notes |
+| **Data it hunts for** | Version-specific figures, config flags, memory numbers **as the vendor states them**, and where two vendors measure differently |
+| **You get** | A contents page, a comparison table, per-claim confidence, and an explicit list of what it could not establish |
+
+The last row is the useful part. On this question a real run came back saying two projects publish memory figures under incompatible benchmark conditions, which is more honest than a tidy table would have been.
+</details>
+
+<details>
+<summary><b>2. Regulatory mapping, with the plan reviewed first</b> · ~$3–7 · plus your thinking time</summary>
+
+> *"What are the disclosure obligations for AI-assisted financial advice in Australia? Plan it first."*
+
+Saying **"plan it first"** turns on collaborative planning. Nothing is spent until you approve.
+
+| | |
+|---|---|
+| **Picks** | `regulatory` archetype, asks for jurisdiction if you left it out |
+| **You see first** | The research plan, editable. Prune the branches that don't matter, add the angle it missed |
+| **Reads** | Primary legislation, regulator guidance, consultation papers |
+| **Data it hunts for** | The instrument, the section, the commencement date, and whether guidance is binding or advisory |
+
+Editing that plan is the single highest-leverage thing available to you, and it's free.
+</details>
+
+<details>
+<summary><b>3. Your own documents against the public web</b> · ~$1–3 · 6–28 min</summary>
+
+> *"Compare our internal pricing assumptions against what competitors publish. Use my `pricing-notes` corpus."*
+
+| | |
+|---|---|
+| **Reads** | Your corpus **and** the open web, in one run |
+| **Data it hunts for** | Published prices, packaging, discount structures, and specifically **where your assumptions and the public record disagree** |
+| **You get** | A contradictions section, plus a stated hierarchy: your documents are authoritative when they conflict |
+
+That disagreement is normally the whole reason to run it.
+</details>
+
+<details>
+<summary><b>4. A cheap factual sweep</b> · ~$1–3 · 4–20 min</summary>
+
+> *"What changed in the Node.js permission model between v20 and v22?"*
+
+| | |
+|---|---|
+| **Picks** | `technical`, `fast` tier. No plan review; the question is already precise |
+| **Reads** | Changelogs, release notes, the API docs, relevant PRs |
+| **Data it hunts for** | Flag names, version boundaries, behavioural changes, deprecations |
+
+For a question this well-scoped, `fast` is the right answer and Dossier won't upsell you to `max`.
+</details>
+
+### The flow, whichever question you asked
+
+```mermaid
+graph LR
+    A["You ask<br/>in plain English"] --> B["<b>research_plan</b><br/>free · cost, duration,<br/>sources it will use"]
+    B --> C{"Plan review<br/>on?"}
+    C -->|yes| D["You edit<br/>and approve"]
+    C -->|no| E["<b>research_start</b><br/>money committed here"]
+    D --> E
+    E --> F["Background<br/>4-60 min"]
+    F --> G["<b>research_read</b><br/>outline first"]
+    G --> H["Pull the sections<br/>you want"]
+    G --> I["<b>verify_citations</b><br/>dereference every URL"]
+    G --> J["<b>research_followup</b><br/>question it, no second run"]
+```
+
+> [!TIP]
+> **Before it spends anything, it tells you how long it'll take and why.** The estimate reflects what the run will actually do, not just the tier: attaching a corpus, naming URLs, or wiring in an external MCP server each widen the band, and the reasoning is shown so you can decide whether to trim the run or go and make a coffee.
+>
+> ```
+> - Estimated duration: 14-60 minutes, running in the background.
+> - Sources it will consult: Google Search (the open web) · 1 private corpus store
+> - What drives that estimate: up to ~160 searches (max tier); searching your
+>   private corpus alongside the web; capped at the API's 60-minute task limit
+> ```
+
 ## What you can do with it
 
 | | |
@@ -90,13 +180,18 @@ Normal is the default and is right most of the time. Dossier never quietly upgra
 | | |
 |---|---|
 | **[Setup](docs/setup.md)** | Getting a key, free vs paid, spend caps, installing, every environment variable |
-| **[Tool reference](docs/tools.md)** | All twenty tools, six resources, three prompts |
+| **[Providers](docs/providers/README.md)** | Perplexity, OpenAI, xAI, subscriptions, browser sessions, and which to use when |
+| **[Tool reference](docs/tools.md)** | All thirty-four tools, six resources, four prompts |
 | **[How it works](docs/how-it-works.md)** | What it decides for you and what it doesn't, how a brief is built, a real session end to end |
 | **[Deep Research vs custom agents](docs/deep-research-api-vs-agent.md)** | Which Google surface fits which job, and the naming that trips everyone up |
 | **[Security](docs/security.md)** | Prompt injection, SSRF, what leaves your machine |
 | **[Development](docs/development.md)** | Toolchain, the two test suites, using it as a library |
 | **[Test plan](docs/test-plan.md)** | The acceptance-criteria matrix, and the gaps named honestly |
 | **[Releasing](docs/releasing.md)** | The tag-triggered publish flow |
+| **[Multi-provider plan](docs/plan/multi-provider-research.md)** | Where this goes next: routing, combination, evidence governance |
+| **[Source notes](docs/reference/source-notes.md)** | Every provider fact, benchmark and URL the plan rests on, dated |
+
+**Also worth reading:** [The failure mode of AI research moved](blog/the-state-of-deep-research.md), on what fourteen months of deep-research reviews actually found, and why link-checking defends against last year's problem.
 
 ## Honest limitations
 

@@ -46,29 +46,58 @@ src/
     agents.ts           Managed Agents API (the other surface)
     types.ts            Zod wire schemas + toSnapshot(). Trust boundary
     cost.ts             per-tier cost/duration estimate bands
+  providers/
+    types.ts            ResearchProvider, Capabilities, CredentialStatus. The seam
+    gemini.ts perplexity.ts openai.ts xai.ts   one adapter each
+    local.ts            a coding CLI you already pay for, as a backend
+    registry.ts         detection + capability-first routing
+    options.ts          one neutral request shape, four dialects; enforced vs requested
   research/
     archetypes.ts       the 5 archetype override tables + keyword selection
     prompt.ts           the prompt architect: scaffold builder + pre-engineered passthrough
     contract.ts         fingerprint / dedupe key; the two-step spend handshake
     report.ts           outline / section / grep / clamp. Pure string work
     citations.ts        citation verification + scorecard
+    shapes.ts           wide (entity x field), time windows, the completion gate
+    decompose.ts        one search task per source class, in that index's dialect
+    local-loop.ts       the free loop's registry, freeze and draft-time check
+    corroborate.ts      independent-domain counting; N-way cross-backend diff
+    evidence.ts         source classes, advisory floors, citation registry, search trace
     runner.ts           run lifecycle, poller, stall watchdog, budget + concurrency gates
   store/
     store.ts            atomic-write JSON store, JSONL journal, JSONL ledger
+    file-lock.ts        cross-process admission lock (write-then-link; see below)
     types.ts            persisted Zod schemas; read back from disk = a trust boundary
-  corpus/files.ts       File Search stores (private-corpus grounding)
-  net/safe-fetch.ts     SSRF-safe fetch: DNS validation, per-hop redirect checks, caps
+  corpus/
+    files.ts            File Search stores (private-corpus grounding, uploaded)
+    local.ts            the corpus that never leaves the machine
+  local/cli.ts          coding-CLI detection: resolve, identify, check sign-in
+  net/
+    safe-fetch.ts       SSRF-safe fetch: DNS validation, per-hop redirect checks, caps
+    retry.ts            classify / backoff with full jitter / Retry-After
   ai/utility.ts         AI SDK v7; Output.object for every structured result
 assets/                 icon.svg (master, 1024) + rendered PNGs, banner, social preview
 docs/                   the documentation set; README is the approachable entry point
   setup.md              getting a key, billing, spend caps, install, every env var
-  tools.md              full contract for all 20 tools, 6 resources, 3 prompts
+  tools.md              full contract for all 34 tools, 6 resources, 4 prompts
   how-it-works.md       tier/archetype selection, the utility model, a real session
   security.md           injection, SSRF, data egress
   development.md        toolchain and the two test suites
   test-plan.md          the AC-traceability matrix
   releasing.md          the tag-triggered publish flow
   deep-research-api-vs-agent.md   which Gemini surface fits which job
+  providers/            per-provider guides (Gemini, Perplexity, OpenAI, xAI,
+                        subscriptions, browser sessions) + a routing index.
+                        setup.md keeps the Gemini key/billing walkthrough;
+                        providers/gemini.md covers capability and routing
+  plan/                 forward-looking design docs; multi-provider-research.md
+                        is the current one. Plans are dated and never silently
+                        edited to match what shipped
+  reference/            source-notes.md: every external fact the plan rests on,
+                        with URLs and the date gathered. Re-verify before reuse;
+                        prices and quotas move monthly. Add to it rather than
+                        re-fetching, and mark inferred facts as inferred
+blog/                   long-form articles. Not product docs; Luke's byline
 skills/deep-research-prompt-creator/   the bundled Claude Code skill (shipped in the package)
 tests/                  hermetic vitest; no network, no keys
 ```
@@ -84,7 +113,9 @@ npm run typecheck  # tsgo --noEmit; over tests too
 npm run lint       # eslint (flat config, type-aware)
 npm test           # vitest run; hermetic, swc transform
 npm run build      # tsgo -p tsconfig.build.json → dist/
-npm run gate       # typecheck && lint && test && build; run before pushing
+npm run gate       # typecheck, lint, source hygiene, doc links, tests, build
+npm run lint:source  # no control characters in source (see below)
+npm run lint:docs    # every internal markdown link and anchor resolves
 npm run inspect    # build, then MCP Inspector
 npm version patch  # gate, bump, sync src/version.ts, tag, push. The workflow publishes
 ```
@@ -117,6 +148,17 @@ Never write a test that spends money. `DOSSIER_HERMETIC=1` (set in `vitest.confi
 - **Tool descriptions are the agent's only documentation.** A tool that spends money says so in its description and carries `readOnlyHint: false`; a tool that sends data to a third party says that too. Write them for a caller that will read nothing else.
 - **Nothing may follow the final `<core_directive>` in a built prompt.** It is the anti-drift re-anchor and only works because it is last. Appending the corpus-grounding block after it shipped once and made the instruction invisible to the model; a run with the corpus indexed and the tool attached returned a 12,660-token report citing none of it. `tests/prompt.test.ts` locks the ordering.
 - **stdout is the MCP protocol.** Diagnostics go to stderr; a stray `console.log` corrupts the stream on stdio.
+- **Fail closed on anything that gates spend.** Skip-not-fatal is right for a listing and wrong for admission control: an unparseable ledger line or run record used to *vanish*, so corrupting the store raised the ceiling. Unreadable state is now counted at worst case. Same rule for env booleans, which fail startup rather than defaulting to `false`.
+- **No control characters in source.** `contract.ts` shipped v0.2.1 with a NUL byte in a string literal. It compiled, linted and passed every test, while making git treat the file as binary and grep skip it silently. `npm run lint:source` blocks it.
+- **A tool that invokes a model is not `readOnlyHint: true`.** Every model call bills, however small, and every one reserves against the ledger.
+- **A lock file is written under a temp name and `link`ed into place.** `open(path, 'wx')` is atomic, but the holder record is a *second* syscall, so between the two the file exists and is empty; a contender reading it there breaks a live lock and two processes enter the spend gate. It failed roughly one run in three under contention, which is exactly how it survived to be found late. An unreadable lock is also given a grace window before it is broken.
+- **Say whether a constraint was enforced or merely requested.** A date window is a real filter on Perplexity and xAI and a sentence in a prompt on Gemini and OpenAI. `providers/options.ts` returns both lists and every tool that shapes a request prints them. A recency bucket that merely *contains* the window counts as requested, not enforced.
+- **Nothing that reads local files may be pointed anywhere by an agent.** `DOSSIER_LOCAL_CORPUS_DIRS` is operator-set and there is deliberately no tool that adds a directory. An agent that has just read a hostile page is precisely the caller that must not be able to search `~/.ssh`.
+- **A binary's name on `PATH` is not its identity.** Two vendors ship `agent`, two ship `grok`, and Cursor's reports its version as a bare date and hash that names nothing. An unidentified binary is reported `ambiguous` and never run: handing a brief to a different vendor's tool is a different bill.
+- **Every subscription-coverage claim is dated and sourced, or it is not made.** Gemini CLI's consumer tier vanished between two releases of its own README, which still advertises it. `unconfirmed` is an acceptable answer; a guess is not.
+- **A $0 backend must not win a cost tie-break.** The `local` CLI provider is excluded from automatic selection unless an operator names it in `DOSSIER_PROVIDERS`. It spends a subscription quota Dossier cannot meter and runs a third-party binary on the machine; both are choices someone should make rather than discover.
+- **The host searches; the server enforces.** Dossier has no web search and cannot borrow one, so the local loop runs in the client. What runs server-side is the part that can only be guaranteed there: one deduplicated registry, frozen before drafting, and a draft refused if it cites anything outside it. A prompt can ask a model not to invent a supporting reference; a server holding the registry can check.
+- **Agreement is not corroboration.** Cross-provider support is counted in independent registrable domains after canonicalisation, never in providers and never in raw URLs. A user's own document is valid primary evidence about their own position and never independent corroboration of an external fact.
 
 ## Releasing
 
@@ -142,7 +184,9 @@ Every doc is written in Luke's voice and must pass the voice lint before it ship
 python3 <create-luke-content>/scripts/voice_lint.py --format marketing README.md
 ```
 
-Hard fails are em dashes and AI clichés. Internal links are checked by hand; a doc split is the moment they break.
+Hard fails are em dashes and AI clichés.
+
+Internal links are checked by `npm run lint:docs` (`scripts/check-doc-links.mjs`), which walks every markdown link and heading anchor in `docs/`, `blog/`, `README.md` and this file. A doc split is the moment links break, and nothing else in the toolchain notices. Run it after any doc restructure.
 
 ## Keeping this file honest
 

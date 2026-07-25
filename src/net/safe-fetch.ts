@@ -1,5 +1,6 @@
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
+import { Agent, fetch as undiciFetch, type Dispatcher, type Response as UndiciResponse } from 'undici';
 
 /**
  * SSRF-safe outbound fetch (CP §4 A10, §6.12).
@@ -51,29 +52,90 @@ export function isPrivateAddress(address: string): boolean {
     return false;
   }
   if (version === 6) {
-    const lower = address.toLowerCase();
-    if (lower === '::' || lower === '::1') return true;
-    if (lower.startsWith('fe80')) return true; // link-local
-    if (lower.startsWith('fc') || lower.startsWith('fd')) return true; // unique-local
-    // IPv4-mapped (::ffff:a.b.c.d) — validate the embedded v4 address.
-    const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(lower);
-    if (mapped?.[1]) return isPrivateAddress(mapped[1]);
+    const bytes = expandIpv6(address);
+    if (!bytes) return true; // unparseable but isIP said v6: fail closed
+
+    if (bytes.every((b) => b === 0)) return true; // ::
+    if (bytes.slice(0, 15).every((b) => b === 0) && bytes[15] === 1) return true; // ::1
+    if (bytes[0] === 0xff) return true; // ff00::/8 multicast
+    if ((bytes[0]! & 0xfe) === 0xfc) return true; // fc00::/7 unique-local
+    if (bytes[0] === 0xfe && (bytes[1]! & 0xc0) === 0x80) return true; // fe80::/10 link-local
+
+    // Anything carrying an embedded IPv4 address is only as safe as that
+    // address. Checked by byte pattern, never by string prefix: the WHATWG URL
+    // parser canonicalises `[::ffff:127.0.0.1]` to `::ffff:7f00:1`, so a regex
+    // expecting dotted-quad text matches nothing and the address sails through.
+    // That was a real bypass to 127.0.0.1 and to 169.254.169.254.
+    const v4 = (i: number) => `${bytes[i]}.${bytes[i + 1]}.${bytes[i + 2]}.${bytes[i + 3]}`;
+    const zeroThrough = (n: number) => bytes.slice(0, n).every((b) => b === 0);
+    // ::ffff:0:0/96 IPv4-mapped, and ::/96 IPv4-compatible (deprecated).
+    if (zeroThrough(10) && bytes[10] === 0xff && bytes[11] === 0xff) return isPrivateAddress(v4(12));
+    if (zeroThrough(12)) return isPrivateAddress(v4(12));
+    // 64:ff9b::/96 NAT64.
+    if (bytes[0] === 0x00 && bytes[1] === 0x64 && bytes[2] === 0xff && bytes[3] === 0x9b && zeroThrough(1))
+      return isPrivateAddress(v4(12));
+    // 2002::/16 6to4 carries the v4 address in bytes 2-5.
+    if (bytes[0] === 0x20 && bytes[1] === 0x02) return isPrivateAddress(v4(2));
+
     return false;
   }
   return true; // not an IP literal we recognise: fail closed
 }
 
-/** Validate scheme + resolve DNS, rejecting anything that lands on a private IP. */
-async function assertPublicUrl(url: URL): Promise<void> {
+/** Expand any valid IPv6 textual form to its 16 bytes. Null if unparseable. */
+function expandIpv6(address: string): number[] | null {
+  let text = address.toLowerCase().replace(/%.*$/, ''); // drop any zone id
+  // A trailing dotted-quad (::ffff:1.2.3.4) becomes two hextets.
+  const dotted = /(\d+\.\d+\.\d+\.\d+)$/.exec(text);
+  if (dotted?.[1]) {
+    const quad = dotted[1].split('.').map(Number);
+    if (quad.length !== 4 || quad.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) return null;
+    const hi = ((quad[0]! << 8) | quad[1]!).toString(16);
+    const lo = ((quad[2]! << 8) | quad[3]!).toString(16);
+    text = `${text.slice(0, dotted.index)}${hi}:${lo}`;
+  }
+
+  const [head, tail, ...rest] = text.split('::');
+  if (rest.length > 0) return null; // more than one '::' is invalid
+  const parse = (part: string | undefined) =>
+    part ? part.split(':').filter((h) => h !== '') : [];
+  const left = parse(head);
+  const right = parse(tail);
+  const gap = tail === undefined ? 0 : 8 - left.length - right.length;
+  if (gap < 0) return null;
+  const hextets = [...left, ...Array<string>(gap).fill('0'), ...right];
+  if (hextets.length !== 8) return null;
+
+  const bytes: number[] = [];
+  for (const hextet of hextets) {
+    if (!/^[0-9a-f]{1,4}$/.test(hextet)) return null;
+    const value = parseInt(hextet, 16);
+    bytes.push((value >> 8) & 0xff, value & 0xff);
+  }
+  return bytes;
+}
+
+/** An address that passed validation, kept so the socket can be pinned to it. */
+interface ValidatedAddress {
+  readonly address: string;
+  readonly family: 4 | 6;
+}
+
+/**
+ * Validate scheme + resolve DNS, rejecting anything that lands on a private IP.
+ * Returns the approved addresses so the caller can pin the connection to them.
+ */
+async function assertPublicUrl(url: URL): Promise<ValidatedAddress[]> {
   if (!ALLOWED_PROTOCOLS.has(url.protocol)) {
     throw new BlockedUrlError('scheme', `Scheme not allowed: ${url.protocol}`);
   }
   const host = url.hostname.replace(/^\[|\]$/g, '');
-  if (isIP(host)) {
+  const version = isIP(host);
+  if (version) {
     if (isPrivateAddress(host)) throw new BlockedUrlError('private', `Private address blocked: ${host}`);
-    return;
+    return [{ address: host, family: version === 6 ? 6 : 4 }];
   }
-  let addresses: { address: string }[];
+  let addresses: { address: string; family: number }[];
   try {
     addresses = await lookup(host, { all: true });
   } catch {
@@ -85,6 +147,37 @@ async function assertPublicUrl(url: URL): Promise<void> {
       throw new BlockedUrlError('private', `Host ${host} resolves to a private address`);
     }
   }
+  return addresses.map(({ address, family }) => ({ address, family: family === 6 ? 6 : 4 }));
+}
+
+/**
+ * Bind the connection to the addresses we actually validated.
+ *
+ * Checking DNS and then calling `fetch` resolves the name twice, and an
+ * attacker controlling the zone can answer differently each time: a public
+ * address for the check, `127.0.0.1` or `169.254.169.254` for the connection.
+ * That is DNS rebinding, and validate-then-fetch cannot defend against it no
+ * matter how good the address check is.
+ *
+ * Overriding undici's `lookup` closes the window: the socket can only reach an
+ * address that already passed `isPrivateAddress`. Passing the hostname through
+ * unchanged keeps the Host header and the TLS SNI correct, so certificate
+ * validation still works against the real name.
+ */
+function pinnedDispatcher(approved: readonly ValidatedAddress[]): Dispatcher {
+  return new Agent({
+    connect: {
+      lookup: (_hostname, options, callback) => {
+        const results = approved.map((a) => ({ address: a.address, family: a.family }));
+        if (options.all) {
+          (callback as (e: Error | null, a: typeof results) => void)(null, results);
+          return;
+        }
+        const first = results[0]!;
+        (callback as (e: Error | null, a: string, f: number) => void)(null, first.address, first.family);
+      },
+    },
+  });
 }
 
 export interface SafeFetchResult {
@@ -116,9 +209,15 @@ export async function safeFetch(
   }
 
   for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
-    await assertPublicUrl(current);
+    const approved = await assertPublicUrl(current);
+    const dispatcher = pinnedDispatcher(approved);
 
-    const response = await fetch(current, {
+    let response: UndiciResponse;
+    try {
+      // undici's own fetch, not the global: the global's `dispatcher` option is
+      // typed against a different copy of undici's types and will not compile.
+      response = await undiciFetch(current, {
+      dispatcher,
       method: opts.method ?? 'GET',
       redirect: 'manual',
       signal: AbortSignal.timeout(timeoutMs),
@@ -128,7 +227,11 @@ export async function safeFetch(
         'user-agent': 'dossier-research-mcp/0.1 (+https://github.com/fledgeling-co/dossier-research-mcp)',
         accept: 'text/html,application/xhtml+xml,application/pdf;q=0.9,*/*;q=0.8',
       },
-    });
+      });
+    } finally {
+      // One agent per hop; close it so a redirect chain cannot leak sockets.
+      void dispatcher.close().catch(() => undefined);
+    }
 
     const location = response.headers.get('location');
     if (response.status >= 300 && response.status < 400 && location) {

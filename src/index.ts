@@ -45,6 +45,11 @@ function parseArgs(argv: readonly string[]): Args {
     } else if (arg === '--help' || arg === '-h') {
       process.stderr.write(USAGE);
       process.exit(0);
+    } else {
+      // Unknown flags used to be ignored, so `--http` (a plausible guess for
+      // `--transport http`) silently started a stdio server and the operator
+      // got no hint that the thing they asked for did not happen.
+      throw new Error(`Unknown argument "${arg ?? ''}". Run with --help for usage.`);
     }
   }
   return { transport, ...(port !== undefined ? { port } : {}) };
@@ -102,9 +107,25 @@ async function main(): Promise<void> {
 
   if (args.transport === 'http') {
     const port = args.port ?? config.httpPort;
+    // An unauthenticated HTTP server that can spend $100/day is not a warning,
+    // it is a misconfiguration. A stderr line is easy to miss and impossible to
+    // act on after the fact; refusing to start is not. The escape hatch exists
+    // because a container behind its own auth is a legitimate deployment, but
+    // it has to be chosen deliberately.
     if (config.httpTokens.length === 0) {
+      if (!config.httpAllowAnonymous) {
+        process.stderr.write(
+          'REFUSING TO START: HTTP transport with no DOSSIER_HTTP_TOKENS set.\n' +
+            'Every tool would be reachable without authentication, including the ones that spend money.\n' +
+            'Set DOSSIER_HTTP_TOKENS=<token>[,<token>] , or DOSSIER_HTTP_ALLOW_ANONYMOUS=1 if this port\n' +
+            'is already protected by something else (a reverse proxy, a private network, a sidecar).\n',
+        );
+        process.exitCode = 78; // EX_CONFIG
+        return;
+      }
       process.stderr.write(
-        'WARNING: HTTP transport with no DOSSIER_HTTP_TOKENS — bind to loopback only.\n',
+        'WARNING: HTTP transport running ANONYMOUSLY by explicit opt-in. Anyone who can reach ' +
+          `port ${String(port)} can spend up to $${config.budgetUsd.toFixed(2)} per ${String(config.budgetWindowHours)}h.\n`,
       );
     }
     await server.start({ transportType: 'httpStream', httpStream: { port } });
