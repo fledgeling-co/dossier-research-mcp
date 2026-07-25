@@ -297,7 +297,13 @@ Status reports **liveness separately from state**. A run with no forward progres
 `research_tail` replays the durable journal from a cursor. Pass `{ runId, sinceSeq }`, get events plus the next cursor.
 
 > [!NOTE]
-> **Timing, measured against the live API.** While a run is in flight, `interactions.get` returns only the echoed `user_input` step. The full step list, reasoning summaries included, arrives in one batch at completion; a real run produced 25 of them. So mid-run you see lifecycle events, and reasoning lands at the end. Live reasoning would need the SSE stream, which this server doesn't consume yet ([#1](https://github.com/fledgeling-co/dossier-research-mcp/issues/1)).
+> **Timing, measured against the live API. This is the honest version, and it is not the one I expected.**
+>
+> Polling shows nothing mid-run: `interactions.get` returns only the echoed `user_input` step until the run finishes, then delivers everything at once.
+>
+> So the server also consumes the SSE stream, which does connect and does deliver reasoning summaries. But on a 7.1-minute `fast` run it delivered **nothing until completion**: zero reasoning steps recorded while the run was in flight, then the whole thing at the end. On the evidence, a Deep Research background run buffers its stream rather than emitting incrementally.
+>
+> What that means for you: `research_tail` gives you clean, coalesced reasoning entries and a report you can read, but **treat mid-run progress as unavailable** rather than expecting a live feed. The plumbing is in place if the API starts emitting incrementally; it is not doing so today. Tracked in [#1](https://github.com/fledgeling-co/dossier-research-mcp/issues/1).
 
 ### `research_read`
 

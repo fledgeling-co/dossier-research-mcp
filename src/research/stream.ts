@@ -32,6 +32,13 @@ export interface SupervisorDeps {
   readonly sleep?: (ms: number) => Promise<void>;
 }
 
+/** A non-Error thrown value stringifies to "[object Object]"; JSON says more. */
+function describeFailure(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  if (typeof e === 'string') return e;
+  return JSON.stringify(e ?? {}).slice(0, 300);
+}
+
 const defaultSleep = (ms: number): Promise<void> =>
   new Promise((resolve) => {
     const t = setTimeout(resolve, ms);
@@ -116,22 +123,43 @@ export class StreamSupervisor {
         }
 
         let sawAnything = false;
+        let ownFailure: unknown = null;
         try {
           for await (const event of stream) {
             sawAnything = true;
             const folded = foldEvent(progress, event);
             progress = folded.progress;
-            if (folded.journal) {
-              await store.appendJournal(run.id, folded.journal.kind, folded.journal.message);
+            // Our own writes are wrapped separately: a store failure here was
+            // previously caught by the stream's catch and misread as a drop,
+            // which is how a persistence bug would disguise itself as a flaky
+            // connection and reconnect forever.
+            try {
+              if (folded.journal) {
+                await store.appendJournal(run.id, folded.journal.kind, folded.journal.message);
+              }
+              await persist(Boolean(folded.journal));
+            } catch (e: unknown) {
+              ownFailure = e;
+              break;
             }
-            await persist(Boolean(folded.journal));
             if (progress.terminal) {
-              await persist(true);
+              await persist(true).catch(() => undefined);
               return;
             }
           }
         } catch {
           // A mid-stream error is a drop, not a failed run. Reconnect.
+        }
+
+        if (ownFailure) {
+          await store
+            .appendJournal(
+              run.id,
+              'note',
+              `Live progress stopped: ${describeFailure(ownFailure)}`,
+            )
+            .catch(() => undefined);
+          break;
         }
 
         await persist(true);

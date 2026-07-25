@@ -263,7 +263,11 @@ export class Runner {
       progressed = true;
     }
 
-    if (snapshot.thoughts.length > 0) {
+    // Thought journalling belongs to whichever producer is actually running.
+    // When the stream is attached it owns reasoning, and the poller writing
+    // the same content again produced duplicate, out-of-order entries.
+    const streamOwnsThoughts = this.supervisor?.isAttached(run.id) === true || run.reasoningSteps > 0;
+    if (!streamOwnsThoughts && snapshot.thoughts.length > 0) {
       const latest = snapshot.thoughts.at(-1) ?? '';
       const journal = await this.store.readJournal(run.id);
       const lastThought = journal.filter((e) => e.kind === 'thought').at(-1)?.message;
