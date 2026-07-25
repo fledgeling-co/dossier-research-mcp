@@ -60,8 +60,15 @@ src/
   net/safe-fetch.ts     SSRF-safe fetch: DNS validation, per-hop redirect checks, caps
   ai/utility.ts         AI SDK v7; Output.object for every structured result
 assets/                 icon.svg (master, 1024) + rendered PNGs, banner, social preview
-docs/
-  deep-research-api-vs-agent.md   when to use which Gemini surface (linked from the README)
+docs/                   the documentation set; README is the approachable entry point
+  setup.md              getting a key, billing, spend caps, install, every env var
+  tools.md              full contract for all 20 tools, 6 resources, 3 prompts
+  how-it-works.md       tier/archetype selection, the utility model, a real session
+  security.md           injection, SSRF, data egress
+  development.md        toolchain and the two test suites
+  test-plan.md          the AC-traceability matrix
+  releasing.md          the tag-triggered publish flow
+  deep-research-api-vs-agent.md   which Gemini surface fits which job
 skills/deep-research-prompt-creator/   the bundled Claude Code skill (shipped in the package)
 tests/                  hermetic vitest; no network, no keys
 ```
@@ -122,6 +129,20 @@ cuts a GitHub release.
 
 `workflow_dispatch` runs the same job in dry-run mode (gate and pack, no
 publish) when you want to check the pipeline without spending a version number.
+
+## Documentation
+
+`README.md` is written for someone who does not yet know what MCP is: what the thing does, what it costs, how to start, and links out. Everything technical lives in `docs/` and is linked from the README's index table.
+
+**When you add a feature, update the doc that owns it, not the README**, unless the change alters what the product is or what it costs. The README earns its length by staying short; a tool's full contract belongs in `docs/tools.md`.
+
+Every doc is written in Luke's voice and must pass the voice lint before it ships:
+
+```bash
+python3 <create-luke-content>/scripts/voice_lint.py --format marketing README.md
+```
+
+Hard fails are em dashes and AI clichés. Internal links are checked by hand; a doc split is the moment they break.
 
 ## Keeping this file honest
 
