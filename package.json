@@ -1,0 +1,76 @@
+{
+  "name": "deep-research-mcp",
+  "version": "0.1.0",
+  "description": "MCP server for Google Gemini Deep Research — durable background runs, spend control, context-safe report reading, citation verification, and private-corpus grounding.",
+  "type": "module",
+  "license": "MIT",
+  "author": "fledgeling-co",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fledgeling-co/deep-research-mcp.git"
+  },
+  "homepage": "https://github.com/fledgeling-co/deep-research-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/fledgeling-co/deep-research-mcp/issues"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "gemini",
+    "deep-research",
+    "fastmcp",
+    "ai",
+    "research",
+    "claude"
+  ],
+  "engines": {
+    "node": ">=20.11"
+  },
+  "bin": {
+    "deep-research-mcp": "dist/index.js"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "import": "./dist/server.js"
+    }
+  },
+  "files": [
+    "dist",
+    "skills",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "inspect": "npm run build && npx fastmcp inspect dist/index.js",
+    "gate": "npm run typecheck && npm run test && npm run build",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@ai-sdk/google": "^4.0.24",
+    "@google/genai": "^2.13.0",
+    "ai": "^7.0.37",
+    "fastmcp": "^4.9.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "tsx": "^4.23.1",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
+  },
+  "overrides": {
+    "@hono/node-server": "^2.0.5"
+  }
+}

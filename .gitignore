@@ -1,0 +1,13 @@
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Env — everything except the tracked example (CP §6.8)
+.env
+.env.*
+!.env.example
+
+# Local run store (reports, journals, ledger)
+.deep-research/
+.DS_Store
