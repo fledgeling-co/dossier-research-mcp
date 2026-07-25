@@ -105,6 +105,11 @@ async function seedCompletedRun(markdown = '## Executive Summary\n\n- A leads.\n
     reportChars: markdown.length,
     sourceCount: 0,
     imageCount: 0,
+    searches: 0,
+    urlsFetched: 0,
+    corpusQueries: 0,
+    codeRuns: 0,
+    streamAbandoned: false,
     toolsUsed: ['google_search'],
     corpusStores: [],
   };
@@ -228,6 +233,11 @@ describe('approve_plan and cancel guards', () => {
       reportChars: 0,
       sourceCount: 0,
       imageCount: 0,
+    searches: 0,
+    urlsFetched: 0,
+    corpusQueries: 0,
+    codeRuns: 0,
+    streamAbandoned: false,
       toolsUsed: [],
       corpusStores: [],
     });

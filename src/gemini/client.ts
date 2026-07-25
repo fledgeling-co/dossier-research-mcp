@@ -49,7 +49,20 @@ export interface FollowUpArgs {
   readonly model: string;
 }
 
+export interface StreamOptions {
+  /** Resume from this event id after a drop, rather than replaying the run. */
+  readonly lastEventId?: string;
+}
+
 export interface DeepResearchClient {
+  /**
+   * Open the SSE stream for a run already in flight.
+   *
+   * Separate from `createRun` on purpose: the runner starts a run once and may
+   * then attach, drop and re-attach the stream many times over the next hour,
+   * so attaching has to be independent of starting.
+   */
+  streamRun?(interactionId: string, options?: StreamOptions): Promise<AsyncIterable<unknown>>;
   /** Kick a background run. Returns as soon as the interaction id exists. */
   createRun(args: CreateRunArgs): Promise<InteractionSnapshot>;
   /** Poll a run. */
@@ -195,6 +208,18 @@ export function createLiveClient(config: Config): DeepResearchClient {
         throw new GeminiRequestError('interactions.get', e);
       }
       return toSnapshot(interactionId, raw);
+    },
+
+    async streamRun(interactionId, options) {
+      try {
+        const raw = await interactions.get(interactionId, {
+          stream: true,
+          ...(options?.lastEventId ? { last_event_id: options.lastEventId } : {}),
+        });
+        return raw as AsyncIterable<unknown>;
+      } catch (e: unknown) {
+        throw new GeminiRequestError('interactions.get (stream)', e);
+      }
     },
 
     async cancelRun(interactionId) {

@@ -73,6 +73,16 @@ export const RunRecordSchema = z.object({
   citations: z.array(CitationVerdictSchema).max(2000).optional(),
   citationsCheckedAt: z.string().optional(),
 
+  /** Live progress from the SSE stream. Zero when only polling was used. */
+  searches: z.number().int().nonnegative().default(0),
+  urlsFetched: z.number().int().nonnegative().default(0),
+  corpusQueries: z.number().int().nonnegative().default(0),
+  codeRuns: z.number().int().nonnegative().default(0),
+  /** SSE resume token, so a dropped stream picks up where it left off. */
+  lastEventId: z.string().max(300).optional(),
+  /** True once the stream has been abandoned and polling took over. */
+  streamAbandoned: z.boolean().default(false),
+
   toolsUsed: z.array(z.string().max(80)).max(20).default([]),
   corpusStores: z.array(z.string().max(300)).max(20).default([]),
 

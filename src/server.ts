@@ -424,6 +424,20 @@ export function createServer(deps: ServerDeps): FastMCP {
           `- Last forward progress: ${idleMinutes} minute(s) ago`,
           `- Committed cost: ~$${run.estimatedCostUsd.toFixed(2)}`,
         ];
+        if (run.searches + run.urlsFetched + run.corpusQueries > 0) {
+          const bits = [`${run.searches} searches`];
+          if (run.urlsFetched > 0) bits.push(`${run.urlsFetched} sources read`);
+          // Called out separately because it is the only direct evidence that
+          // an attached corpus is actually being searched.
+          if (run.corpusQueries > 0) bits.push(`${run.corpusQueries} corpus queries`);
+          if (run.codeRuns > 0) bits.push(`${run.codeRuns} code runs`);
+          lines.push(`- Live progress: ${bits.join(' · ')}`);
+        }
+        if (run.streamAbandoned) {
+          lines.push(
+            '- Live progress stream dropped and could not be re-established; the run continues on polling, so these counters have stopped moving.',
+          );
+        }
         if (run.label) lines.push(`- Label: ${run.label}`);
         if (run.title) lines.push(`- Title: ${run.title}`);
         if (run.summary) lines.push('', run.summary);

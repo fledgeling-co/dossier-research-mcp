@@ -7,6 +7,7 @@ import { TERMINAL_STATES, type RunRecord, type RunState } from '../store/types.j
 import type { Archetype } from './archetypes.js';
 import { fingerprint } from './contract.js';
 import { extractPlan } from './plan.js';
+import { StreamSupervisor } from './stream.js';
 import { extractCitedUrls, normaliseCitations } from './report.js';
 
 /**
@@ -80,13 +81,30 @@ export class Runner {
   private timer: NodeJS.Timeout | null = null;
   /** Guards against overlapping ticks when a poll outlives its interval. */
   private ticking = false;
+  private readonly supervisor: StreamSupervisor | null;
 
   constructor(
     private readonly store: Store,
     private readonly config: Config,
     private readonly client: DeepResearchClient | null,
     private readonly onFinalise?: (run: RunRecord, markdown: string) => Promise<void>,
-  ) {}
+  ) {
+    // Streaming is additive: without a client that supports it, everything
+    // below still works on polling alone.
+    this.supervisor = client?.streamRun ? new StreamSupervisor({ store, client }) : null;
+  }
+
+  /**
+   * Attach the live progress stream to a run, if the client supports it.
+   * Deliberately fire-and-forget: the poller, not the stream, decides when a
+   * run is finished, so a stream that never attaches costs progress detail and
+   * nothing else.
+   */
+  private attachStream(run: RunRecord): void {
+    if (!this.supervisor || run.streamAbandoned || !run.interactionId) return;
+    if (run.state === 'planning' && !run.planApproved) return;
+    void this.supervisor.attach(run).catch(() => undefined);
+  }
 
   /** Current spend position within the rolling window. */
   async budget(): Promise<BudgetSnapshot> {
@@ -170,6 +188,11 @@ export class Runner {
       reportChars: 0,
       sourceCount: 0,
       imageCount: 0,
+      searches: 0,
+      urlsFetched: 0,
+      corpusQueries: 0,
+      codeRuns: 0,
+      streamAbandoned: false,
       toolsUsed: args.tools.map((t) => t.type),
       corpusStores: args.tools.flatMap((t) =>
         t.type === 'file_search' ? [...t.fileSearchStoreNames] : [],
@@ -219,6 +242,7 @@ export class Runner {
 
     // The create call may already carry the collaborative plan.
     const advanced = await this.applySnapshot(started, snapshot);
+    this.attachStream(advanced);
     return { run: advanced, deduped: false };
   }
 
@@ -413,6 +437,7 @@ export class Runner {
       lastProgressAt: new Date().toISOString(),
     };
     await this.store.saveRun(approved);
+    this.attachStream(approved);
     await this.store.appendJournal(
       runId,
       'progress',
@@ -451,6 +476,9 @@ export class Runner {
         // Parked awaiting human approval — polling it costs nothing but the
         // run cannot advance until `research_approve_plan` releases it.
         if (run.state === 'planning' && !run.planApproved && run.plan) continue;
+        // Re-attach anything the supervisor is not currently following, which
+        // covers a server restart mid-run as well as an abandoned stream.
+        if (this.supervisor && !this.supervisor.isAttached(run.id)) this.attachStream(run);
         await this.refresh(run.id).catch(() => undefined);
         polled += 1;
       }
