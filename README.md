@@ -1,13 +1,13 @@
 <div align="center">
 
-<img src="assets/banner.png" alt="Dossier: Gemini Deep Research as an MCP server" width="820">
+<img src="assets/banner.png" alt="Dossier: deep research as an MCP server" width="820">
 
 <br>
 
 [![npm](https://img.shields.io/npm/v/dossier-research-mcp?color=C8321F&labelColor=1B1513)](https://www.npmjs.com/package/dossier-research-mcp)
 [![node](https://img.shields.io/badge/node-%E2%89%A520.11-1B1513?labelColor=1B1513&color=C8321F)](https://nodejs.org)
 [![MCP](https://img.shields.io/badge/MCP-2025--06--18-1B1513?labelColor=1B1513&color=C8321F)](https://modelcontextprotocol.io)
-[![tests](https://img.shields.io/badge/tests-242%20hermetic-1B1513?labelColor=1B1513&color=C8321F)](docs/test-plan.md)
+[![tests](https://img.shields.io/badge/tests-479%20hermetic-1B1513?labelColor=1B1513&color=C8321F)](docs/test-plan.md)
 [![license](https://img.shields.io/badge/license-MIT-1B1513?labelColor=1B1513&color=C8321F)](LICENSE)
 
 **Give Claude the ability to do proper research.**<br>
@@ -23,14 +23,18 @@ npx dossier-research-mcp
 
 ## What this actually is
 
-Google has a thing called **Deep Research**: you give it a question, it goes away for anywhere between four and sixty minutes, runs somewhere between eighty and a hundred and sixty web searches, reads what it finds, and comes back with a written report that cites its sources.
+Several companies now sell **deep research**: you give it a question, it goes away for anywhere between four and sixty minutes, runs a hundred or so web searches, reads what it finds, and comes back with a written report that cites its sources.
 
-Dossier lets Claude use it. You ask Claude a research question, Claude sets the job running, and you both get on with something else until it lands.
+Dossier lets Claude use them. You ask a research question, Claude sets the job running, and you both get on with something else until it lands.
+
+Four backends, and it picks one on capability rather than price: **Gemini** is the only one that lets you edit the plan before it spends, **Perplexity** is the only one whose date and domain filters are actually enforced, **xAI** is the only one that reaches X, and **OpenAI** takes the largest domain filter. Give it more than one key and `research_compare` runs the same brief on two and shows you where they disagree, which is the one thing a single-provider tool can never do.
+
+**And two tiers that cost nothing.** If you already pay for Claude Code, Codex or Grok, Dossier can run the research through the CLI you already have. If you pay for Google AI Pro or ChatGPT, you can run the report in the web app yourself and `research_import` brings it in as a normal run.
 
 **A worked example.** You ask *"which open-source vector databases support binary quantization, and what memory do their own docs claim at 10 million vectors?"* Twenty minutes later you have a nineteen-section report with thirty cited sources, a comparison table, an explicit list of what it could not find out, and a confidence rating on every claim. That is a real run; the output is in [How it works](docs/how-it-works.md#a-real-session).
 
 > [!IMPORTANT]
-> **This costs real money, every single time.** Roughly **$1–3** for a normal run and **$3–7** for a thorough one, charged whether or not you read the result. That is the whole reason this server exists in the shape it does.
+> **The API backends cost real money, every single time.** Roughly **$1-3** for a normal run and **$3-7** for a thorough one, charged whether or not you read the result. That is the whole reason this server exists in the shape it does. The CLI and import paths cost nothing extra, and are never chosen for you.
 
 ## Why it needed building
 
@@ -44,7 +48,7 @@ Handing an AI assistant a tool that spends $7 a call and takes an hour is not st
 
 ## Getting started
 
-You need a Google Gemini API key. It takes about five minutes, and [Setup](docs/setup.md) walks through it from nothing, including how to put a spending cap on your Google account before your first run.
+You need one API key to start, and a Google Gemini key is the one to get first: it is the only backend with an editable plan, and it powers the claim-checking and follow-up tools. It takes about five minutes, and [Setup](docs/setup.md) walks through it from nothing, including how to put a spending cap on your Google account before your first run. Adding `PERPLEXITY_API_KEY`, `OPENAI_API_KEY` or `XAI_API_KEY` later is all it takes to enable those; run `research_doctor` to see what is on, what is off, and what each one would need.
 
 ```bash
 # 1. Get a key at https://aistudio.google.com/apikey
