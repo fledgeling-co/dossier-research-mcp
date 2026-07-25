@@ -130,5 +130,13 @@ export const LedgerEntrySchema = z.object({
   tier: z.enum(RESEARCH_TIERS),
   estimatedCostUsd: z.number().nonnegative(),
   label: z.string().max(200).optional(),
+  /**
+   * Which backend the money went to.
+   *
+   * Defaulted rather than required so every line written before per-provider
+   * accounting existed still parses; a ledger that fails to load is a ledger
+   * that reads as zero spend, which is the one failure this file cannot have.
+   */
+  provider: z.enum(['gemini', 'perplexity', 'openai', 'xai', 'local']).default('gemini'),
 });
 export type LedgerEntry = z.infer<typeof LedgerEntrySchema>;

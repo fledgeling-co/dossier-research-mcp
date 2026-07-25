@@ -63,6 +63,13 @@ const EnvSchema = z.object({
 
   DOSSIER_BUDGET_USD: numeric(100, 0, 1_000_000),
   DOSSIER_BUDGET_WINDOW_HOURS: numeric(24, 1, 24 * 365),
+  // Documented per-provider sub-ceilings. Zod stripped these, so a guardrail
+  // the docs promised silently did nothing and any backend could consume the
+  // whole global ceiling.
+  DOSSIER_BUDGET_USD_GEMINI: numeric(0, 0, 1_000_000),
+  DOSSIER_BUDGET_USD_PERPLEXITY: numeric(0, 0, 1_000_000),
+  DOSSIER_BUDGET_USD_OPENAI: numeric(0, 0, 1_000_000),
+  DOSSIER_BUDGET_USD_XAI: numeric(0, 0, 1_000_000),
   DOSSIER_MAX_CONCURRENT: numeric(10, 1, 64),
   DOSSIER_REQUIRE_CONTRACT: boolish(false),
   DOSSIER_DEDUPE_TTL_MINUTES: numeric(1440, 0, 60 * 24 * 90),
@@ -101,6 +108,8 @@ export interface Config {
   readonly storeDir: string;
   readonly budgetUsd: number;
   readonly budgetWindowHours: number;
+  /** Optional per-provider sub-ceilings. Zero means "only the global one". */
+  readonly providerBudgetsUsd: Readonly<Record<string, number>>;
   readonly maxConcurrent: number;
   readonly requireContract: boolean;
   readonly dedupeTtlMinutes: number;
@@ -167,6 +176,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     storeDir: e.DOSSIER_STORE_DIR || join(homedir(), '.dossier-research-mcp'),
     budgetUsd: e.DOSSIER_BUDGET_USD,
     budgetWindowHours: e.DOSSIER_BUDGET_WINDOW_HOURS,
+    providerBudgetsUsd: {
+      gemini: e.DOSSIER_BUDGET_USD_GEMINI,
+      perplexity: e.DOSSIER_BUDGET_USD_PERPLEXITY,
+      openai: e.DOSSIER_BUDGET_USD_OPENAI,
+      xai: e.DOSSIER_BUDGET_USD_XAI,
+    },
     maxConcurrent: e.DOSSIER_MAX_CONCURRENT,
     requireContract: e.DOSSIER_REQUIRE_CONTRACT,
     dedupeTtlMinutes: e.DOSSIER_DEDUPE_TTL_MINUTES,

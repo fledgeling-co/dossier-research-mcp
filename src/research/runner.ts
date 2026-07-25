@@ -23,6 +23,13 @@ import { extractCitedUrls, normaliseCitations } from './report.js';
  * journal keeps accumulating and `research_tail` replays it by cursor.
  */
 
+/** The report's own first heading, which is a better title than a bought one. */
+function firstHeading(markdown: string): string | undefined {
+  const match = /^#{1,3}\s+(.+)$/m.exec(markdown);
+  const text = match?.[1]?.trim().slice(0, 300);
+  return text && text.length > 0 ? text : undefined;
+}
+
 export class BudgetExceededError extends Error {
   readonly code = 'budget_exceeded' as const;
   constructor(
@@ -271,6 +278,13 @@ export class Runner {
       }
 
       if (this.config.budgetUsd > 0) {
+        const perProvider = this.config.providerBudgetsUsd[provider] ?? 0;
+        if (perProvider > 0) {
+          const spentHere = await this.committedFor(provider);
+          if (spentHere + band.highUsd > perProvider) {
+            throw new BudgetExceededError(spentHere, perProvider, this.config.budgetWindowHours);
+          }
+        }
         const snapshot = await this.budget();
         // Reserve the WORST case, not the midpoint. A max run is $3-7;
         // reserving $5 for a run that costs $7 overshoots systematically, and
@@ -334,6 +348,7 @@ export class Runner {
         runId: id,
         tier: args.tier,
         estimatedCostUsd: band.highUsd,
+        provider,
         ...(args.label ? { label: args.label } : {}),
       });
       return { record } as const;
@@ -470,16 +485,16 @@ export class Runner {
       `Imported from ${args.source} — ${String(markdown.length)} chars, ${String(record.sourceCount)} cited sources. Nothing was charged.`,
     );
 
-    // Title it like any other run, if a utility model is available. Best
-    // effort: an import that arrives untitled is still an import.
-    if (this.onFinalise) {
-      try {
-        await this.onFinalise(record, markdown);
-      } catch {
-        await this.store.appendJournal(id, 'note', 'Title/summary generation failed; the imported report is unaffected.');
-      }
-    }
-    return (await this.store.getRun(id)) ?? record;
+    // Deliberately NOT titled by the model.
+    //
+    // `onFinalise` reserves and calls the summariser, which bills. Doing that
+    // here while the tool's own response says "Charged: nothing" made the one
+    // claim this path exists to make into a false one. A deterministic title
+    // off the report's first heading costs nothing and is usually better than a
+    // generated one anyway, because it is what the document actually says.
+    const titled: RunRecord = { ...record, ...(firstHeading(markdown) ? { title: firstHeading(markdown) } : {}) };
+    if (titled.title !== record.title) await this.store.saveRun(titled);
+    return (await this.store.getRun(id)) ?? titled;
   }
 
   /**
@@ -559,14 +574,14 @@ export class Runner {
       'completed',
       `Local-loop report accepted — ${String(report.length)} chars, ${String(completed.sourceCount)} cited sources, all from the frozen registry.`,
     );
-    if (this.onFinalise) {
-      try {
-        await this.onFinalise(completed, report);
-      } catch {
-        await this.store.appendJournal(runId, 'note', 'Title/summary generation failed; the report is unaffected.');
-      }
-    }
-    return (await this.store.getRun(runId)) ?? completed;
+    // Same rule as `importRun`: a path that advertises itself as free does not
+    // quietly buy a title.
+    const titled: RunRecord = {
+      ...completed,
+      ...(firstHeading(report) ? { title: firstHeading(report) } : {}),
+    };
+    if (titled.title !== completed.title) await this.store.saveRun(titled);
+    return (await this.store.getRun(runId)) ?? titled;
   }
 
   /**
@@ -731,25 +746,51 @@ export class Runner {
    * mutex and same worst-case reservation as everything else; only the band
    * differs.
    */
-  async reserveUtilitySpend(label: string): Promise<void> {
-    await this.reserveSpend(label, UTILITY_CALL_BAND.highUsd, 'util');
+  async reserveUtilitySpend(label: string, provider: ProviderId = 'gemini'): Promise<void> {
+    await this.reserveSpend(label, UTILITY_CALL_BAND.highUsd, 'util', provider);
   }
 
-  private async reserveSpend(label: string, amountUsd: number, prefix: string): Promise<void> {
-    if (this.config.budgetUsd <= 0) return;
+  private async reserveSpend(
+    label: string,
+    amountUsd: number,
+    prefix: string,
+    provider: ProviderId = 'gemini',
+  ): Promise<void> {
     await this.withAdmissionLock(async () => {
-      const snapshot = await this.budget();
-      if (snapshot.committedUsd + amountUsd > snapshot.budgetUsd) {
-        throw new BudgetExceededError(snapshot.committedUsd, snapshot.budgetUsd, snapshot.windowHours);
+      // The ceiling check is skipped when the gate is disabled; the ledger
+      // entry is not. `DOSSIER_BUDGET_USD=0` used to return before appending,
+      // so disabling the *limit* also erased the *history* for utility and
+      // agent calls while research starts kept recording theirs. Spend
+      // reporting that is silently partial is worse than none.
+      if (this.config.budgetUsd > 0) {
+        const snapshot = await this.budget();
+        if (snapshot.committedUsd + amountUsd > snapshot.budgetUsd) {
+          throw new BudgetExceededError(snapshot.committedUsd, snapshot.budgetUsd, snapshot.windowHours);
+        }
+        const perProvider = this.config.providerBudgetsUsd[provider] ?? 0;
+        if (perProvider > 0) {
+          const spentHere = await this.committedFor(provider);
+          if (spentHere + amountUsd > perProvider) {
+            throw new BudgetExceededError(spentHere, perProvider, snapshot.windowHours);
+          }
+        }
       }
       await this.store.appendLedger({
         at: new Date().toISOString(),
         runId: `${prefix}_${Date.now().toString(36)}_${Math.trunc(performance.now() * 1000) % 1000}`,
         tier: 'fast',
         estimatedCostUsd: amountUsd,
+        provider,
         label,
       });
     });
+  }
+
+  /** Committed dollars against one backend inside the rolling window. */
+  private async committedFor(provider: ProviderId): Promise<number> {
+    const since = new Date(Date.now() - this.config.budgetWindowHours * 3_600_000).toISOString();
+    const { entries } = await this.store.readLedgerStrict(since);
+    return entries.filter((e) => e.provider === provider).reduce((sum, e) => sum + e.estimatedCostUsd, 0);
   }
 
   /** Poll one run against the API and persist whatever changed. */

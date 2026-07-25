@@ -251,6 +251,7 @@ describe('the spend gate fails closed on damaged state', () => {
       runId: 'a',
       tier: 'fast',
       estimatedCostUsd: 2,
+      provider: 'gemini',
     });
     // Corrupt the file the way a partial write or a hand-edit would.
     const ledger = join(root, 'ledger.jsonl');
@@ -295,6 +296,7 @@ describe('the store is private on disk', () => {
       runId: 'r1',
       tier: 'fast',
       estimatedCostUsd: 1,
+      provider: 'gemini',
     });
     const mode = (p: string): string => (statSync(p).mode & 0o777).toString(8);
     expect(mode(join(root, 'reports', 'r1.md'))).toBe('600');
@@ -572,5 +574,54 @@ describe('the lock knows who holds it', () => {
     await expect(
       new FileLock(path, { timeoutMs: 1_000, staleMs: 60_000 }).run(async () => 'taken'),
     ).resolves.toBe('taken');
+  });
+});
+
+describe('per-provider sub-ceilings', () => {
+  const config = (over: Record<string, string>) => ({
+    ...loadConfig({ DOSSIER_STORE_DIR: root, ...over }),
+    storeDir: root,
+  });
+
+  it('stops one backend consuming the whole global ceiling', async () => {
+    // The docs advertised `DOSSIER_BUDGET_USD_OPENAI` as a guardrail and Zod
+    // stripped it, so it did nothing at all: any backend could spend the lot.
+    const store = new Store(root);
+    await store.init();
+    const runner = new Runner(store, config({ DOSSIER_BUDGET_USD: '100', DOSSIER_BUDGET_USD_OPENAI: '3' }), () =>
+      scripted(),
+    );
+    const start = (provider: 'openai' | 'gemini') =>
+      runner.start({
+        question: `q-${provider}-${String(Math.random())}`,
+        prompt: `p-${provider}-${String(Date.now())}-${String(Math.random())}`,
+        archetype: 'technical',
+        tier: 'fast',
+        tools: [],
+        collaborativePlanning: false,
+        thinkingSummaries: false,
+        visualization: false,
+        preEngineered: false,
+        provider,
+      });
+
+    await expect(start('openai')).resolves.toMatchObject({ deduped: false });
+    // The OpenAI sub-ceiling is spent; the global one is nowhere near.
+    await expect(start('openai')).rejects.toThrow(/Budget gate/);
+    // And another backend is unaffected, which is the point of a sub-ceiling.
+    await expect(start('gemini')).resolves.toMatchObject({ deduped: false });
+  });
+
+  it('records utility spend even when the ceiling is disabled', async () => {
+    // `DOSSIER_BUDGET_USD=0` used to return before appending, so disabling the
+    // limit also erased the history for utility calls while research starts
+    // kept recording theirs. Partial spend reporting is worse than none.
+    const store = new Store(root);
+    await store.init();
+    const runner = new Runner(store, config({ DOSSIER_BUDGET_USD: '0' }), () => scripted());
+    await runner.reserveUtilitySpend('title:dr_x');
+    const entries = await store.readLedger();
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.label).toBe('title:dr_x');
   });
 });
