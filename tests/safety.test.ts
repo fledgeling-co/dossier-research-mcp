@@ -4,7 +4,7 @@ import { toSnapshot } from '../src/gemini/types.js';
 import { isPrivateAddress, safeFetch } from '../src/net/safe-fetch.js';
 import { scoreCitations } from '../src/research/citations.js';
 import { fingerprint, fingerprintMatches } from '../src/research/contract.js';
-import { assertStoreName } from '../src/corpus/files.js';
+import { assertStoreName, inferMimeType } from '../src/corpus/files.js';
 
 describe('SSRF guards', () => {
   it('blocks loopback, private, link-local and CGNAT ranges', () => {
@@ -201,5 +201,21 @@ describe('config', () => {
 
   it('parses the HTTP token list', () => {
     expect(loadConfig({ DEEP_RESEARCH_HTTP_TOKENS: 'a, b ,,c' }).httpTokens).toEqual(['a', 'b', 'c']);
+  });
+});
+
+describe('corpus mime inference', () => {
+  it('maps the documentation types the SDK cannot infer', () => {
+    expect(inferMimeType('/docs/README.md')).toBe('text/markdown');
+    expect(inferMimeType('/docs/spec.MARKDOWN')).toBe('text/markdown');
+    expect(inferMimeType('/x/report.pdf')).toBe('application/pdf');
+    expect(inferMimeType('/x/data.csv')).toBe('text/csv');
+  });
+
+  it('falls back to text/plain rather than letting the SDK throw', () => {
+    // The live SDK throws "Can not determine mimeType" on an unknown extension,
+    // which failed every .md upload before this fallback existed.
+    expect(inferMimeType('/x/NOTES')).toBe('text/plain');
+    expect(inferMimeType('/x/file.weird')).toBe('text/plain');
   });
 });

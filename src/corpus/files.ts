@@ -54,6 +54,36 @@ export function assertStoreName(name: string): string {
 
 const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
 
+/** The API caps `pageSize` at 20; asking for more is a 400, not a clamp. */
+const STORE_PAGE_SIZE = 20;
+
+/**
+ * The SDK infers mimeType from the file extension and throws outright when it
+ * cannot — which it does for `.md`, the single most likely thing anyone wants
+ * to put in a research corpus. Infer the common documentation types ourselves
+ * and fall back to `text/plain`, so a corpus upload does not fail on a README.
+ */
+const MIME_BY_EXTENSION: Record<string, string> = {
+  '.md': 'text/markdown',
+  '.markdown': 'text/markdown',
+  '.txt': 'text/plain',
+  '.pdf': 'application/pdf',
+  '.html': 'text/html',
+  '.htm': 'text/html',
+  '.csv': 'text/csv',
+  '.json': 'application/json',
+  '.xml': 'text/xml',
+  '.rtf': 'application/rtf',
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.doc': 'application/msword',
+};
+
+export function inferMimeType(path: string): string {
+  const dot = path.lastIndexOf('.');
+  if (dot < 0) return 'text/plain';
+  return MIME_BY_EXTENSION[path.slice(dot).toLowerCase()] ?? 'text/plain';
+}
+
 export function createCorpusClient(config: Config): CorpusClient {
   if (config.auth.mode === 'none') throw new MissingCredentialsError();
   if (config.auth.mode === 'vertex') {
@@ -80,7 +110,7 @@ export function createCorpusClient(config: Config): CorpusClient {
 
     async listStores() {
       try {
-        const pager = await stores.list({ config: { pageSize: 50 } });
+        const pager = await stores.list({ config: { pageSize: STORE_PAGE_SIZE } });
         const out: CorpusStore[] = [];
         for await (const store of pager) {
           out.push({
@@ -129,7 +159,7 @@ export function createCorpusClient(config: Config): CorpusClient {
           file: path,
           config: {
             displayName,
-            ...(args.mimeType ? { mimeType: args.mimeType } : {}),
+            mimeType: args.mimeType ?? inferMimeType(path),
           },
         });
       } catch (e: unknown) {
