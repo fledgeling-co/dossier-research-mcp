@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { loadConfig } from '../src/config.js';
 import { ProviderRegistry } from '../src/providers/registry.js';
-import { decodeFilters, encodeFilters } from '../src/providers/perplexity.js';
+import { decodeFilters, encodeFilters, perplexityProvider } from '../src/providers/perplexity.js';
+import { extractCitedUrls } from '../src/research/report.js';
 import { decodeXaiOptions, encodeXaiOptions } from '../src/providers/xai.js';
 import { decodeOpenAiOptions, encodeOpenAiOptions } from '../src/providers/openai.js';
 import { describeShaping, shapeRequest } from '../src/providers/options.js';
@@ -215,3 +216,65 @@ describe('request shaping tells the truth about what is enforced', () => {
     expect(lines.join('\n')).toMatch(/prompt only/);
   });
 });
+
+describe('the Perplexity response shape, as the live API actually returns it', () => {
+  /** Trimmed from a real completed async Sonar job, 25 July 2026. */
+  const liveShape = {
+    id: '9565d5cf-e7ad-481e-9152-31ab5e428053',
+    // Upper case, against the lower-case values the docs list.
+    status: 'COMPLETED',
+    response: {
+      choices: [{ message: { role: 'assistant', content: '# A report\n\nProse with no links in it at all.' } }],
+      citations: ['https://github.com/qdrant/qdrant/releases', 'https://qdrant.tech/documentation/'],
+      search_results: [
+        { title: 'Releases · qdrant/qdrant', url: 'https://github.com/qdrant/qdrant/releases', date: '2026-07-17' },
+        { title: 'Qdrant docs', url: 'https://qdrant.tech/documentation/', date: null },
+      ],
+      usage: { cost: { total_cost: 0.29103 } },
+    },
+  };
+
+  it('recognises an upper-case terminal status', async () => {
+    // The bug this locks down: a case-sensitive comparison meant a finished run
+    // was never seen as finished, so it polled until the stall watchdog gave up
+    // and the report somebody had already paid for was never stored.
+    const client = perplexityProvider(
+      loadConfig({ DOSSIER_STORE_DIR: '/tmp/x', PERPLEXITY_API_KEY: 'k' }),
+    ).client();
+    const snapshot = await parseWith(client, liveShape);
+    expect(snapshot.status).toBe('completed');
+  });
+
+  it('brings the out-of-band citations into the report text', async () => {
+    // Perplexity puts every source in a sibling array and none in the markdown.
+    // Everything downstream reads the markdown, so a cited report looked
+    // uncited: zero sources recorded, nothing to verify, an empty profile.
+    const client = perplexityProvider(
+      loadConfig({ DOSSIER_STORE_DIR: '/tmp/x', PERPLEXITY_API_KEY: 'k' }),
+    ).client();
+    const snapshot = await parseWith(client, liveShape);
+    expect(snapshot.markdown).toContain('## Sources');
+    expect(extractCitedUrls(snapshot.markdown)).toEqual([
+      'https://github.com/qdrant/qdrant/releases',
+      'https://qdrant.tech/documentation/',
+    ]);
+    // The title and date ride along, because a bare URL list is harder to read.
+    expect(snapshot.markdown).toContain('[Releases · qdrant/qdrant]');
+    expect(snapshot.markdown).toContain('(2026-07-17)');
+  });
+});
+
+/** Drive `getRun`'s parse against a fixed payload, without a network. */
+async function parseWith(
+  client: { getRun: (id: string) => Promise<{ status: string; markdown: string }> },
+  payload: unknown,
+): Promise<{ status: string; markdown: string }> {
+  const original = globalThis.fetch;
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify(payload), { status: 200, headers: { 'content-type': 'application/json' } });
+  try {
+    return await client.getRun('9565d5cf-e7ad-481e-9152-31ab5e428053');
+  } finally {
+    globalThis.fetch = original;
+  }
+}

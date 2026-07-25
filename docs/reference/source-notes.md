@@ -47,6 +47,13 @@ Their own worked example: 33 prompt tokens, 11,395 completion, 19,028 citation, 
 
 **Response fields:** `citations` (plain URL strings) plus `search_results` (`title`, `url`, `date`, `last_updated`, `snippet`). Assistant content opens with a `<think>` block before the report body. Usage carries a `cost` object breaking out input/output/citation/reasoning/search and `total_cost`, **in USD, per request**. Worth recording as *actual* against our *estimate*.
 
+**Measured against a live async Sonar job, 25 July 2026** (`sonar-deep-research`, `reasoning_effort: medium`, a two-sentence question):
+
+- **Status comes back UPPER CASE.** The completed job reported `"status": "COMPLETED"`, not the lower-case values documented. A case-sensitive terminal check never fires, so the run polls forever and the paid-for report is never stored.
+- **Citations are out of band.** A 45,512-character report contained **zero** URLs; all 16 sources were in `response.citations` (bare URLs) and `response.search_results` (title, url, date, snippet).
+- **Cost: $0.29103 total**, broken down as searches $0.15 (30 queries), output tokens $0.082 (10,268), reasoning $0.054 (18,113 reasoning tokens), citation tokens $0.0045, input $0.00006. Note that **searches dominated, not reasoning**, which is the opposite of Perplexity's own worked example. Wall clock was over 15 minutes.
+- Shape: `{id, model, created_at, started_at, completed_at, response, failed_at, error_message, status}` with the chat-completions payload nested under `response`. No `<think>` prefix on the content.
+
 **Agent API background mode:** `background: true` → returns id immediately. Poll `GET /v1/agent/{id}`. Non-terminal `queued`, `in_progress`; terminal `completed`, `failed`, `cancelled`, `incomplete`. Streaming resume via `sequence_number` cursor and `?stream=true&starting_after=N`; outside the reconnect window it 400s. Cancel is `POST /v1/agent/{id}/cancel`, asynchronous, returns `cancelling`. **Retention and timeouts are undocumented.**
 
 **Wide research** (`preset: "wide-research"`): builds large evidence-backed collections, maps to their WANDR benchmark ("Wide ANd Deep Research"). Requires `background: true` in practice. Results are written to a sandbox file surfacing as `share_file` in `output`; download via `/v1/agent/{id}/files` then `/files/{file_id}/content`. Prompt quality guidance: numeric target, explicit qualification rules, mandatory source per record, named output file with enumerated fields. **Parallelisation details and cost are not documented.**

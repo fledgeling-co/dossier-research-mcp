@@ -242,10 +242,17 @@ export function perplexityProvider(config: Config): ResearchProvider {
       // Narrow before stringifying: `raw['status']` is `unknown`, and a
       // non-string would otherwise become the literal '[object Object]' and
       // never match any terminal state, leaving the run polling forever.
+      //
+      // Lower-cased for the same reason, and this one was not hypothetical: the
+      // async Sonar endpoint returns **`COMPLETED`** in upper case, against the
+      // lower-case values the docs list. A case-sensitive comparison meant a
+      // finished run was never recognised as finished, so it polled until the
+      // stall watchdog gave up and the paid-for report was never stored. Found
+      // by running a real job, and invisible to every hermetic test.
       const rawStatus = raw['status'];
-      const status = typeof rawStatus === 'string' ? rawStatus : 'in_progress';
+      const status = (typeof rawStatus === 'string' ? rawStatus : 'in_progress').toLowerCase();
       const terminal = ['completed', 'failed', 'cancelled', 'incomplete'].includes(status);
-      const markdown = extractMarkdown(raw);
+      const markdown = appendSources(extractMarkdown(raw), raw);
       const cost = extractCost(raw);
       if (cost !== undefined) state.actualCostUsd = cost;
       runs.set(interactionId, {
@@ -330,6 +337,46 @@ export function perplexityProvider(config: Config): ResearchProvider {
       return client;
     },
   };
+}
+
+/**
+ * Perplexity returns its sources OUT OF BAND, in `citations` and
+ * `search_results`, and puts none of them in the report text.
+ *
+ * A real 45,000-character report came back with **zero** URLs in its markdown
+ * and sixteen in a sibling array. Everything downstream reads the markdown:
+ * `extractCitedUrls` found nothing, so the run recorded zero sources,
+ * `research_verify_citations` had nothing to dereference and
+ * `research_evidence` profiled an empty registry. A cited report looked
+ * uncited, which is the worst direction for that error to point.
+ *
+ * So the sources are appended as a Sources section in the format the rest of
+ * the codebase already reads. `search_results` is preferred because it carries
+ * titles and dates; the bare `citations` array is the fallback.
+ */
+function appendSources(markdown: string, raw: Record<string, unknown>): string {
+  const response = (raw['response'] ?? raw) as Record<string, unknown>;
+  const results = response['search_results'];
+  const bare = response['citations'];
+
+  const lines: string[] = [];
+  if (Array.isArray(results)) {
+    for (const item of results as { title?: unknown; url?: unknown; date?: unknown }[]) {
+      if (typeof item.url !== 'string') continue;
+      const title = typeof item.title === 'string' && item.title.trim() ? item.title.trim() : item.url;
+      const date = typeof item.date === 'string' && item.date ? ` (${item.date})` : '';
+      lines.push(`- [${title.replace(/[[\]]/g, '')}](${item.url})${date}`);
+    }
+  }
+  if (lines.length === 0 && Array.isArray(bare)) {
+    for (const url of bare as unknown[]) {
+      if (typeof url === 'string') lines.push(`- ${url}`);
+    }
+  }
+  if (lines.length === 0) return markdown;
+  // Only add the section when the report did not already carry its sources.
+  if (/^##+\s*sources\b/im.test(markdown)) return markdown;
+  return `${markdown.trimEnd()}\n\n## Sources\n\n${lines.join('\n')}\n`;
 }
 
 /** Pull report text out of either endpoint's response shape. */
