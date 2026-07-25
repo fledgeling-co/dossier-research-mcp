@@ -62,9 +62,15 @@ export default tseslint.config(
     // MUST come last: flat config is last-wins, so placing this before
     // `recommendedTypeChecked` would let that re-enable type checking here.
     // These files sit outside tsconfig's `include`, so the type-aware service
-    // cannot resolve them — lint them untyped rather than widening tsconfig to
+    // cannot resolve them; lint them untyped rather than widening tsconfig to
     // cover build tooling.
-    files: ['*.config.mjs', '*.config.ts'],
+    files: ['*.config.mjs', '*.config.ts', 'scripts/**/*.mjs'],
     extends: [tseslint.configs.disableTypeChecked],
+    languageOptions: {
+      // Untyped linting loses the Node lib types, so `no-undef` starts firing
+      // on globals these build scripts legitimately use. Declared inline rather
+      // than adding the `globals` package for four names.
+      globals: { console: 'readonly', process: 'readonly', URL: 'readonly', Buffer: 'readonly' },
+    },
   },
 );
