@@ -208,7 +208,7 @@ export function openAiProvider(config: Config): ResearchProvider {
       return {
         interactionId,
         status: !done ? 'in_progress' : status === 'completed' ? 'completed' : 'failed',
-        markdown: extractText(raw),
+        markdown: appendAnnotationSources(extractText(raw), raw),
         thoughts: [],
         images: [],
         ...(status === 'failed' || status === 'incomplete'
@@ -271,4 +271,36 @@ function extractText(raw: Record<string, unknown>): string {
     for (const c of item.content) if (c.type === 'output_text' && c.text) parts.push(c.text);
   }
   return parts.join('');
+}
+
+/**
+ * Responses-API citations live in annotations, not in the text.
+ *
+ * A completed run returns `output[].content[].annotations` as `url_citation`
+ * entries, and the extractor kept only `text`. Everything downstream reads the
+ * markdown, so a correctly cited report was stored with zero sources:
+ * `research_verify_citations` had nothing to dereference and
+ * `research_evidence` profiled an empty registry. Same failure Perplexity had
+ * for a different reason, so the same fix: render them into the report.
+ */
+export function appendAnnotationSources(markdown: string, raw: Record<string, unknown>): string {
+  const out = raw['output'];
+  if (!Array.isArray(out)) return markdown;
+  const seen = new Map<string, string>();
+  for (const item of out as { content?: { annotations?: unknown }[] }[]) {
+    for (const content of item.content ?? []) {
+      const annotations = content.annotations;
+      if (!Array.isArray(annotations)) continue;
+      for (const a of annotations as { type?: unknown; url?: unknown; title?: unknown }[]) {
+        if (a.type !== 'url_citation' || typeof a.url !== 'string') continue;
+        // A numeric marker title ("1") is a footnote label, not a source name.
+        const title = typeof a.title === 'string' && !/^\d+$/.test(a.title.trim()) ? a.title.trim() : '';
+        if (!seen.has(a.url)) seen.set(a.url, title);
+      }
+    }
+  }
+  if (seen.size === 0) return markdown;
+  if (/^##+\s*sources\b/im.test(markdown)) return markdown;
+  const lines = [...seen].map(([url, title]) => `- [${(title || url).replace(/[[\]]/g, '')}](${url})`);
+  return `${markdown.trimEnd()}\n\n## Sources\n\n${lines.join('\n')}\n`;
 }

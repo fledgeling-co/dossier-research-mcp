@@ -96,16 +96,25 @@ export function shapeRequest(
 
   switch (provider) {
     case 'perplexity': {
-      const recency = window ? windowToRecency(window) : undefined;
+      // Wide research goes to the Agent API, whose body carries the preset and
+      // the prompt and none of the Sonar search filters. Reporting them as
+      // enforced there described a request that was never sent.
+      const wideRun = shaping.shape === 'wide';
+      const recency = window && !wideRun ? windowToRecency(window) : undefined;
       if (window && window !== 'all') {
         // The bucket is applied either way; it is only *enforcement* when it
         // matches the window exactly. A 90-day window filtered at one year is
         // a pre-filter plus a request, and reporting it as enforced would
         // overstate what the backend actually guarantees.
         if (recency) enforced.push(`recency filter: ${recency}`);
-        if (windowEnforcement('recency-bucket', window) === 'requested') {
+        if (!recency || windowEnforcement('recency-bucket', window) === 'requested') {
           requested.push(`only use sources published within the last ${window}`);
         }
+      }
+      if (wideRun && acceptedDomains.length > 0) {
+        // Same reason: the wide preset's body has no domain filter field.
+        enforced.length = 0;
+        requested.push(`prefer these sources: ${acceptedDomains.join(', ')}`);
       }
       const withProse = withConstraints(prompt, requested);
       return {
@@ -122,9 +131,16 @@ export function shapeRequest(
     }
 
     case 'xai': {
-      const fromDate = window ? windowToFromDate(window) : undefined;
-      if (fromDate) enforced.push(`date window (${window ?? ''} as a from-date of ${fromDate})`);
-      else if (window && window !== 'all') requested.push(`only use sources published within the last ${window}`);
+      // `from_date` attaches to `x_search`, not to web search. A window on a
+      // web-only run is therefore a sentence in the prompt like anywhere else,
+      // and calling it enforced was true only for the X half of the request.
+      const fromDate = window && shaping.searchX ? windowToFromDate(window) : undefined;
+      if (fromDate) enforced.push(`date window on X search (${window ?? ''} as a from-date of ${fromDate})`);
+      if (window && window !== 'all' && !shaping.searchX) {
+        requested.push(`only use sources published within the last ${window}`);
+      } else if (window && window !== 'all') {
+        requested.push(`only use WEB sources published within the last ${window} (the date filter covers X only)`);
+      }
       const withProse = withConstraints(prompt, requested);
       return {
         prompt: encodeXaiOptions(withProse, {

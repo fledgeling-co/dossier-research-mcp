@@ -96,7 +96,13 @@ export function xaiCost(input: DurationOptions): CostBand {
 export function xaiProvider(config: Config): ResearchProvider {
   const capabilities: Capabilities = {
     shapes: ['deep', 'recent'],
-    background: true,
+    // Not background, whatever the request says. `/v1/responses` accepts
+    // `deferred: true` with a 200 and then returns a COMPLETED result in the
+    // same call: verified live on 25 July 2026. The work happens inside the
+    // HTTP request, so a run longer than the client timeout is lost rather
+    // than parked, and advertising durability here would be a promise the
+    // transport cannot keep.
+    background: false,
     planReview: false,
     followUp: true,
     dateFilter: 'range',
@@ -109,7 +115,7 @@ export function xaiProvider(config: Config): ResearchProvider {
     maxWallClockMinutes: 20,
     limitations: [
       'No editable plan before spending.',
-      'Deferred completions are retrievable for 24 hours, which is not the same as a true background job.',
+      'The run happens INSIDE the create call: `deferred` is accepted and ignored, so a long investigation can outlive the HTTP timeout. Suits fast, broad questions rather than hour-long ones.',
       'Domain filtering caps at 5, against Perplexity 20 and OpenAI 100.',
       'Fast and broad rather than careful: roughly 10x faster than a deep-research API and 3x the pages, which suits finding things more than concluding them.',
       'allowHandles and excludeHandles are mutually exclusive; setting both is an error, not a merge.',
@@ -159,7 +165,10 @@ export function xaiProvider(config: Config): ResearchProvider {
       const res = await fetch(`${API}${path}`, {
         ...init,
         headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json', ...(init.headers ?? {}) },
-        signal: AbortSignal.timeout(60_000),
+        // Longer than the usual POST deadline because this request performs
+        // the whole run. Sixty seconds cut off a real investigation mid-flight
+        // and reported it as an unknown-outcome charge, which it then was.
+        signal: AbortSignal.timeout(15 * 60_000),
       });
       if (!res.ok) {
         const body = await res.text().catch(() => '');
@@ -202,6 +211,20 @@ export function xaiProvider(config: Config): ResearchProvider {
         }),
       });
       const id = typeof raw['id'] === 'string' ? raw['id'] : typeof raw['request_id'] === 'string' ? raw['request_id'] : '';
+      // The response is usually the finished run, so return it as such rather
+      // than reporting `in_progress` and polling for something already done.
+      // Claiming a run is in flight when its result is in hand costs a poll
+      // cycle and, worse, describes the system incorrectly.
+      const status = (typeof raw['status'] === 'string' ? raw['status'] : '').toLowerCase();
+      if (status === 'completed') {
+        return {
+          interactionId: id,
+          status: 'completed',
+          markdown: appendAnnotationSources(extractText(raw), raw),
+          thoughts: [],
+          images: [],
+        };
+      }
       return { interactionId: id, status: 'in_progress', markdown: '', thoughts: [], images: [] };
     },
 
@@ -216,7 +239,7 @@ export function xaiProvider(config: Config): ResearchProvider {
       return {
         interactionId,
         status: !done ? 'in_progress' : status === 'completed' ? 'completed' : 'failed',
-        markdown: extractText(raw),
+        markdown: appendAnnotationSources(extractText(raw), raw),
         thoughts: [],
         images: [],
         ...(status === 'failed' ? { error: 'the xAI run failed' } : {}),
@@ -282,4 +305,36 @@ function extractText(raw: Record<string, unknown>): string {
     for (const c of item.content) if (c.text) parts.push(c.text);
   }
   return parts.join('');
+}
+
+/**
+ * Responses-API citations live in annotations, not in the text.
+ *
+ * A completed run returns `output[].content[].annotations` as `url_citation`
+ * entries, and the extractor kept only `text`. Everything downstream reads the
+ * markdown, so a correctly cited report was stored with zero sources:
+ * `research_verify_citations` had nothing to dereference and
+ * `research_evidence` profiled an empty registry. Same failure Perplexity had
+ * for a different reason, so the same fix: render them into the report.
+ */
+export function appendAnnotationSources(markdown: string, raw: Record<string, unknown>): string {
+  const out = raw['output'];
+  if (!Array.isArray(out)) return markdown;
+  const seen = new Map<string, string>();
+  for (const item of out as { content?: { annotations?: unknown }[] }[]) {
+    for (const content of item.content ?? []) {
+      const annotations = content.annotations;
+      if (!Array.isArray(annotations)) continue;
+      for (const a of annotations as { type?: unknown; url?: unknown; title?: unknown }[]) {
+        if (a.type !== 'url_citation' || typeof a.url !== 'string') continue;
+        // A numeric marker title ("1") is a footnote label, not a source name.
+        const title = typeof a.title === 'string' && !/^\d+$/.test(a.title.trim()) ? a.title.trim() : '';
+        if (!seen.has(a.url)) seen.set(a.url, title);
+      }
+    }
+  }
+  if (seen.size === 0) return markdown;
+  if (/^##+\s*sources\b/im.test(markdown)) return markdown;
+  const lines = [...seen].map(([url, title]) => `- [${(title || url).replace(/[[\]]/g, '')}](${url})`);
+  return `${markdown.trimEnd()}\n\n## Sources\n\n${lines.join('\n')}\n`;
 }

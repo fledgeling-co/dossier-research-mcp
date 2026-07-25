@@ -659,6 +659,18 @@ export class Runner {
           'completed',
           `Report ready — ${markdown.length} chars, ${next.sourceCount} cited sources.`,
         );
+        // An authoritative figure beside our estimate, when the provider gives
+        // one. It is the only way to tell whether the reserved bands are
+        // calibrated rather than merely conservative.
+        if (snapshot.actualCostUsd !== undefined) {
+          await this.store.appendJournal(
+            run.id,
+            'note',
+            `The provider reports this run cost $${snapshot.actualCostUsd.toFixed(4)}; ` +
+              `$${next.estimatedCostUsd.toFixed(2)} was reserved against your ceiling. ` +
+              'The ledger keeps the reservation, because that is what the gate counted.',
+          );
+        }
         if (this.onFinalise) {
           // Title/summary generation is best-effort: a utility-model hiccup must
           // not lose a report that already cost dollars to produce.

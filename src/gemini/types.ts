@@ -85,6 +85,16 @@ export interface InteractionSnapshot {
   /** Base64 images (charts) the run produced. */
   readonly images: readonly { readonly data: string; readonly mimeType: string }[];
   readonly error?: string;
+  /**
+   * What the provider says the run actually cost, when it says.
+   *
+   * Everything else here is an estimate reserved before the fact, so an
+   * authoritative figure is worth surfacing: it is the only way to tell whether
+   * the bands are calibrated. Perplexity reports one per request; a live run
+   * came back at $0.29 against a $2.00 reservation, which is the safe direction
+   * and worth knowing rather than assuming.
+   */
+  readonly actualCostUsd?: number;
 }
 
 /** Flatten a validated Interaction into the snapshot the runner persists. */

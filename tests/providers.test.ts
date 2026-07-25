@@ -207,7 +207,10 @@ describe('request shaping tells the truth about what is enforced', () => {
 
   it('encodes each backend’s own dialect', () => {
     expect(decodeFilters(shapeRequest('perplexity', brief, { shape: 'wide' }).prompt).filters.wide).toBe(true);
-    expect(decodeXaiOptions(shapeRequest('xai', brief, { window: '7d' }).prompt).opts.fromDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    // The from-date rides on `x_search`, so it is only sent when X is searched.
+    expect(
+      decodeXaiOptions(shapeRequest('xai', brief, { window: '7d', searchX: true }).prompt).opts.fromDate,
+    ).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(decodeOpenAiOptions(shapeRequest('openai', brief, { maxToolCalls: 40 }).prompt).opts.maxToolCalls).toBe(40);
   });
 
@@ -452,3 +455,87 @@ describe('decoded provider options are a trust boundary', () => {
     expect(good.opts.fromDate).toBe('2026-01-01');
   });
 })
+
+describe('enforcement is claimed only where the request carries it', () => {
+  const brief = '<core_directive>Answer this decisively: what?</core_directive>';
+
+  it('does not claim a date filter xAI applies only to X', () => {
+    // `from_date` attaches to `x_search`, not to web search, so a window on a
+    // web-only run is prose like anywhere else. Calling it enforced was true
+    // for half the request and misleading for the half most runs use.
+    const webOnly = shapeRequest('xai', brief, { window: '30d' });
+    expect(webOnly.enforced.join(' ')).not.toMatch(/date window/);
+    expect(webOnly.requested.join(' ')).toMatch(/within the last 30d/);
+
+    const withX = shapeRequest('xai', brief, { window: '30d', searchX: true });
+    expect(withX.enforced.join(' ')).toMatch(/date window on X search/);
+    // And it still says the web half is unfiltered, rather than implying both.
+    expect(withX.requested.join(' ')).toMatch(/covers X only/);
+  });
+
+  it('does not claim Sonar filters on a Perplexity wide run', () => {
+    // Wide goes to the Agent API, whose body carries the preset and the prompt
+    // and none of the Sonar search filters.
+    const wide = shapeRequest('perplexity', brief, { window: '30d', domains: ['a.com'], shape: 'wide' });
+    expect(wide.enforced).toEqual([]);
+    expect(wide.requested.join(' ')).toMatch(/within the last 30d/);
+    expect(wide.requested.join(' ')).toMatch(/a\.com/);
+
+    // The deep path still enforces what it really sends.
+    const deep = shapeRequest('perplexity', brief, { window: '30d', domains: ['a.com'] });
+    expect(deep.enforced.join(' ')).toMatch(/recency filter: month/);
+    expect(deep.enforced.join(' ')).toMatch(/domain filter/);
+  });
+});
+
+describe('a Perplexity handle survives a restart', () => {
+  const config = loadConfig({ DOSSIER_STORE_DIR: '/tmp/x', PERPLEXITY_API_KEY: 'k' });
+
+  it('routes a wide handle to the Agent endpoint from a fresh process', async () => {
+    // The endpoint kind lived in a process-local Map, so a restart forgot it:
+    // a wide run's id was then polled against the Sonar endpoint, which knows
+    // nothing about it, and could not be cancelled. Runs here outlive the
+    // process by design, so the handle has to carry what polling needs.
+    const created = perplexityProvider(config).client();
+    const started = await withFetch(
+      async () =>
+        created.createRun({
+          prompt: encodeFilters('build a matrix', { wide: true }),
+          tier: 'fast',
+          collaborativePlanning: false,
+          thinkingSummaries: false,
+          visualization: false,
+          tools: [],
+        }),
+      () => new Response(JSON.stringify({ id: 'agent-123' }), { status: 200, headers: { 'content-type': 'application/json' } }),
+    );
+    expect(started.interactionId).toBe('wide:agent-123');
+
+    // A brand-new provider instance, exactly as a restarted server would build.
+    const restarted = perplexityProvider(config).client();
+    const paths: string[] = [];
+    await withFetch(
+      async () => restarted.getRun(started.interactionId),
+      (url) => {
+        paths.push(String(url));
+        return new Response(JSON.stringify({ status: 'COMPLETED', output: [{ type: 'message', content: [{ text: 'done' }] }] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      },
+    );
+    expect(paths[0]).toContain('/v1/agent/agent-123');
+    expect(paths[0]).not.toContain('/async/chat/completions');
+  });
+});
+
+/** Run `fn` with `fetch` replaced by `respond`, which sees the URL. */
+async function withFetch<T>(fn: () => Promise<T>, respond: (url: unknown) => Response): Promise<T> {
+  const original = globalThis.fetch;
+  globalThis.fetch = async (url: unknown) => respond(url);
+  try {
+    return await fn();
+  } finally {
+    globalThis.fetch = original;
+  }
+}

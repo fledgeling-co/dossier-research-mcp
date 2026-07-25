@@ -140,13 +140,25 @@ export function perplexityCost(input: DurationOptions): CostBand {
   };
 }
 
-interface PerplexityRunState {
-  readonly kind: 'deep' | 'wide';
-  markdown: string;
-  status: 'in_progress' | 'completed' | 'failed';
-  error?: string;
-  /** Real cost the API reported, for reconciling against our estimate. */
-  actualCostUsd?: number;
+/**
+ * Which endpoint a run belongs to, carried in the handle itself.
+ *
+ * This lived in a process-local `Map`, which meant a server restart forgot it:
+ * a wide run's id was then polled against the Sonar endpoint, which knows
+ * nothing about it, and could not be cancelled. Runs here are durable by
+ * design and outlive the process, so anything needed to poll one has to be in
+ * the record rather than in memory.
+ */
+const WIDE_PREFIX = 'wide:';
+
+function encodeHandle(kind: 'deep' | 'wide', id: string): string {
+  return kind === 'wide' ? `${WIDE_PREFIX}${id}` : id;
+}
+
+function decodeHandle(handle: string): { kind: 'deep' | 'wide'; id: string } {
+  return handle.startsWith(WIDE_PREFIX)
+    ? { kind: 'wide', id: handle.slice(WIDE_PREFIX.length) }
+    : { kind: 'deep', id: handle };
 }
 
 export function perplexityProvider(config: Config): ResearchProvider {
@@ -234,8 +246,6 @@ export function perplexityProvider(config: Config): ResearchProvider {
       return await res.json();
     }, { provider: 'Perplexity' });
 
-  const runs = new Map<string, PerplexityRunState>();
-
   const client: DeepResearchClient = {
     async createRun(args: CreateRunArgs): Promise<InteractionSnapshot> {
       const { prompt, filters } = decodeFilters(args.prompt);
@@ -250,9 +260,13 @@ export function perplexityProvider(config: Config): ResearchProvider {
         const res = (await createOnce('/v1/agent', { method: 'POST', body: JSON.stringify(body) })) as {
           id?: string;
         };
-        const id = res.id ?? '';
-        runs.set(id, { kind: 'wide', markdown: '', status: 'in_progress' });
-        return { interactionId: id, status: 'in_progress', markdown: '', thoughts: [], images: [] };
+        return {
+          interactionId: encodeHandle('wide', res.id ?? ''),
+          status: 'in_progress',
+          markdown: '',
+          thoughts: [],
+          images: [],
+        };
       }
 
       // Deep research via the async Sonar endpoint.
@@ -275,17 +289,21 @@ export function perplexityProvider(config: Config): ResearchProvider {
           },
         }),
       })) as { id?: string; request_id?: string };
-      const id = res.id ?? res.request_id ?? '';
-      runs.set(id, { kind: 'deep', markdown: '', status: 'in_progress' });
-      return { interactionId: id, status: 'in_progress', markdown: '', thoughts: [], images: [] };
+      return {
+        interactionId: encodeHandle('deep', res.id ?? res.request_id ?? ''),
+        status: 'in_progress',
+        markdown: '',
+        thoughts: [],
+        images: [],
+      };
     },
 
     async getRun(interactionId: string): Promise<InteractionSnapshot> {
-      const state = runs.get(interactionId) ?? { kind: 'deep' as const, markdown: '', status: 'in_progress' as const };
+      const { kind, id } = decodeHandle(interactionId);
       const path =
-        state.kind === 'wide'
-          ? `/v1/agent/${encodeURIComponent(interactionId)}`
-          : `/async/chat/completions/${encodeURIComponent(interactionId)}`;
+        kind === 'wide'
+          ? `/v1/agent/${encodeURIComponent(id)}`
+          : `/async/chat/completions/${encodeURIComponent(id)}`;
       const raw = (await request(path, { method: 'GET' })) as Record<string, unknown>;
 
       // Narrow before stringifying: `raw['status']` is `unknown`, and a
@@ -302,18 +320,30 @@ export function perplexityProvider(config: Config): ResearchProvider {
       const status = (typeof rawStatus === 'string' ? rawStatus : 'in_progress').toLowerCase();
       const terminal = ['completed', 'failed', 'cancelled', 'incomplete'].includes(status);
       const markdown = appendSources(extractMarkdown(raw), raw);
-      const cost = extractCost(raw);
-      if (cost !== undefined) state.actualCostUsd = cost;
-      runs.set(interactionId, {
-        ...state,
-        markdown: markdown || state.markdown,
-        status: status === 'completed' ? 'completed' : status === 'in_progress' || status === 'queued' ? 'in_progress' : 'failed',
-      });
+      // A wide run that finished with no inline text has written its matrix to
+      // a sandbox file. Saying so beats handing back an empty report that looks
+      // like the model produced nothing.
+      const fileOnly = kind === 'wide' && terminal && !markdown.trim() && describeResultFile(raw);
+      if (fileOnly) {
+        return {
+          interactionId,
+          status: 'failed',
+          markdown: '',
+          thoughts: [],
+          images: [],
+          error:
+            `The wide run finished and wrote its result to a file (${fileOnly}) rather than returning it inline. ` +
+            'Dossier cannot download that yet, so the matrix is in your Perplexity console rather than here. ' +
+            'This path has never been exercised against a live Agent API run.',
+        };
+      }
 
+      const cost = extractCost(raw);
       return {
         interactionId,
         status: !terminal ? 'in_progress' : status === 'completed' ? 'completed' : 'failed',
-        markdown: markdown || state.markdown,
+        markdown,
+        ...(cost !== undefined ? { actualCostUsd: cost } : {}),
         thoughts: [],
         images: [],
         ...(status === 'failed' || status === 'incomplete'
@@ -323,16 +353,16 @@ export function perplexityProvider(config: Config): ResearchProvider {
     },
 
     async cancelRun(interactionId: string): Promise<void> {
-      const state = runs.get(interactionId);
+      const { kind, id } = decodeHandle(interactionId);
       // Only the Agent API documents cancellation. An async Sonar job has no
       // cancel endpoint, so saying so beats pretending it stopped.
-      if (state?.kind !== 'wide') {
+      if (kind !== 'wide') {
         throw new Error(
           'Perplexity does not expose cancellation for async Sonar jobs. The run will finish and bill; ' +
             'Dossier has stopped tracking it.',
         );
       }
-      await request(`/v1/agent/${encodeURIComponent(interactionId)}/cancel`, { method: 'POST' });
+      await request(`/v1/agent/${encodeURIComponent(id)}/cancel`, { method: 'POST' });
     },
 
     async followUp(args: FollowUpArgs): Promise<string> {
@@ -460,4 +490,18 @@ function extractCost(raw: Record<string, unknown>): number | undefined {
     | undefined;
   const total = usage?.cost?.total_cost;
   return typeof total === 'number' ? total : undefined;
+}
+
+/** Name the result file a wide run wrote, when it wrote one instead of text. */
+function describeResultFile(raw: Record<string, unknown>): string | null {
+  const response = (raw['response'] ?? raw) as Record<string, unknown>;
+  for (const key of ['share_file', 'output_file', 'result_file', 'file']) {
+    const value = response[key] ?? raw[key];
+    if (typeof value === 'string' && value) return value;
+    if (value && typeof value === 'object') {
+      const named = (value as { name?: unknown; id?: unknown }).name ?? (value as { id?: unknown }).id;
+      if (typeof named === 'string' && named) return named;
+    }
+  }
+  return null;
 }
