@@ -11,7 +11,7 @@
 [![license](https://img.shields.io/badge/license-MIT-1B1513?labelColor=1B1513&color=C8321F)](LICENSE)
 
 **Give Claude the ability to do proper research.**<br>
-Not a web search. A forty-minute investigation across a hundred sources, with citations you can check.
+Not a web search. A method it can't skip, citations you can check, and no API key required to start.
 
 ```bash
 npx dossier-research-mcp
@@ -53,7 +53,7 @@ This is the part most people will actually use.
 Note: the CLI backend is never chosen for you. It costs $0, so a price tie-break would pick it every single time, and it spends a subscription quota Dossier can't see. Ask for it by name with `provider: "local"`, or list it in `DOSSIER_PROVIDERS`.
 
 > [!IMPORTANT]
-> **The API backends cost real money, every single time.** Roughly **$1-3** for a normal Gemini run and **$3-7** for a thorough one, charged whether or not you read the result. That's the whole reason this server exists in the shape it does.
+> **The API backends cost real money, every single time.** Roughly **$1-3** for a normal Gemini run and **$3-7** for a thorough one, charged whether or not you read the result. That's the whole reason this server exists in the shape it does. None of it is required: the local loop and the import path need no key and no bill.
 
 ## Why it needed building
 
@@ -69,21 +69,29 @@ Handing an AI assistant a tool that spends $7 a call and takes an hour isn't str
 
 ## Getting started
 
-You need one API key to start, and a Google Gemini key is the one to get first: it's the only backend with an editable plan, and it powers the claim-checking and follow-up tools. It takes about five minutes, and [Setup](docs/setup.md) walks through it from nothing, including how to put a spending cap on your Google account before your first run.
+**No API key needed.** Install it and it works:
 
 ```bash
-# 1. Get a key at https://aistudio.google.com/apikey
-# 2. Tell Claude Code about the server
+claude mcp add dossier -- npx -y dossier-research-mcp
+```
+
+Then ask for research, and Claude does the searching with the web search it already has:
+
+> *Research which open-source vector databases support binary quantization, and what memory their docs claim at 10 million vectors. Use the local loop.*
+
+Dossier plans the search tasks, holds the registry, freezes it before you draft, and refuses a report that cites anything you never gathered. That's the whole method, and it costs nothing.
+
+With no key at all you get: the local loop, `research_import` for a report you ran on a subscription, outline-first reading, citation dereferencing, evidence profiling, the spend ledger, and all four prompts. If you have Claude Code, Codex, Cursor or Grok installed, `provider: "local"` runs the research through that instead, still without an API bill.
+
+### When a key is worth adding
+
+One thing genuinely needs a hosted backend: **a long unattended investigation.** Forty minutes across a hundred sources, running while your laptop is shut, is not something the calling assistant can do for you. A Gemini key is the one to add first, since it's the only backend that lets you edit the plan before it spends, and it's what powers `research_verify_claims` and `research_counter_review`.
+
+```bash
 claude mcp add dossier -e GEMINI_API_KEY=your-key-here -- npx -y dossier-research-mcp
 ```
 
-Then just ask, in plain English:
-
-> *Research which open-source vector databases support binary quantization, and what memory their docs claim at 10 million vectors.*
-
-Claude will show you the cost before spending anything, start the job, and tell you when it lands.
-
-Adding `PERPLEXITY_API_KEY`, `OPENAI_API_KEY` or `XAI_API_KEY` later is all it takes to enable those. Nothing else changes.
+[Setup](docs/setup.md) walks through getting one from nothing, including putting a spending cap on your Google account first. Adding `PERPLEXITY_API_KEY`, `OPENAI_API_KEY` or `XAI_API_KEY` later is all it takes to enable those; run `research_doctor` to see what's on and what each one would need.
 
 > [!TIP]
 > Say **"plan it first"** and you get to read and edit the research plan before any money is spent. It's the most useful thing you can do to a run: pruning the irrelevant branches and adding the angle it missed changes the output more than anything else available.
