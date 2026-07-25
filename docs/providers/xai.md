@@ -1,7 +1,7 @@
 # xAI
 
 > [!IMPORTANT]
-> **Status: implemented on `main`, unverified against the live API.** The provider, its environment variable and the routing described here are in the code and covered by the hermetic test suite. What has *not* happened is a paid run against xAI's actual endpoints, so treat request shapes and response parsing as written-to-the-docs rather than proven. `research_import` and the browser paths remain unbuilt.
+> **Status: implemented and verified against the live API on 25 July 2026.** A real job was created, polled and parsed back through this adapter: the endpoint, the auth header, the request body and the response shape are confirmed, not inferred. What has *not* been exercised is a full-length research run at every tier and filter combination. `research_import` and the browser paths remain unbuilt.
 
 One reason to add xAI, and it's a good one: **it is the only backend that can search X.** If your question involves what people are actually saying right now, in public, at speed, nothing else reaches that corpus.
 

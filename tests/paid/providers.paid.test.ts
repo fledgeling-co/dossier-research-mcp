@@ -117,10 +117,24 @@ for (const id of ['perplexity', 'openai', 'xai'] as const) {
       expect(started?.interactionId, 'no interaction id in the response').toBeTruthy();
       expect(started?.status).toBe('in_progress');
 
-      // Poll once, to prove the retrieval endpoint and its parse work too.
-      const polled = await client?.getRun(started?.interactionId ?? '');
+      // Poll for a few seconds rather than once, to prove the retrieval endpoint
+      // parses AND that the job did not fall over the moment it started.
+      //
+      // Polling exactly once was not enough, and finding that out was the point
+      // of running this for real: OpenAI accepted a job for a model the project
+      // could not access, returned 200 with an id, reported `in_progress` on the
+      // first poll, and only failed a second later. A single poll called that a
+      // pass, which is precisely the outcome this test exists to prevent.
+      let polled = await client?.getRun(started?.interactionId ?? '');
       expect(polled?.interactionId).toBe(started?.interactionId);
-      expect(['in_progress', 'completed', 'failed']).toContain(polled?.status);
+      const settleBy = Date.now() + 15_000;
+      while (Date.now() < settleBy && polled?.status === 'in_progress') {
+        await new Promise((r) => setTimeout(r, 2_000));
+        polled = await client?.getRun(started?.interactionId ?? '');
+      }
+
+      expect(polled?.status, `the job failed on startup: ${polled?.error ?? 'no reason given'}`).not.toBe('failed');
+      expect(['in_progress', 'completed']).toContain(polled?.status);
 
       // Stop it where that is possible. A backend without cancellation throws a
       // message saying so, which is the documented behaviour rather than a

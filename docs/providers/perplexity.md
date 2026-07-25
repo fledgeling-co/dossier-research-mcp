@@ -1,7 +1,7 @@
 # Perplexity
 
 > [!IMPORTANT]
-> **Status: implemented on `main`, unverified against the live API.** The provider, its environment variable and the routing described here are in the code and covered by the hermetic test suite. What has *not* happened is a paid run against Perplexity's actual endpoints, so treat request shapes and response parsing as written-to-the-docs rather than proven. `research_import` and the browser paths remain unbuilt.
+> **Status: implemented and verified against the live API on 25 July 2026.** A real job was created, polled and parsed back through this adapter: the endpoint, the auth header, the request body and the response shape are confirmed, not inferred. What has *not* been exercised is a full-length research run at every tier and filter combination. `research_import` and the browser paths remain unbuilt.
 
 Perplexity is the most useful second key to add. It brings two things Gemini has none of: **filters** (date ranges, domain allow-lists) and **wide research**, which enumerates a list and cites every entry.
 
