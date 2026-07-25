@@ -991,7 +991,7 @@ function registerAgentTools(server: FastMCP, deps: ServerDeps): void {
   server.addTool({
     name: 'agent_run',
     description:
-      'Run a task on a managed agent in its Linux sandbox. Synchronous — it blocks until the agent finishes (default 5 min cap), unlike Deep Research which is always background. Use this when the job has to produce FILES or run code over data; use `research_start` when you want a cited research report.',
+      'Run a task on a managed agent in its Linux sandbox. SPENDS MONEY, token-metered (Google documents 100k-3M tokens for a single interaction), and it draws on the same budget ceiling as a research run. Synchronous: it blocks until the agent finishes (default 5 min cap), unlike Deep Research which is always background. Use it when the job has to produce FILES or run code over data; use `research_start` when you want a cited research report.',
     annotations: { title: 'Run a managed agent (spends money)', readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     parameters: z.object({
       agentId: z.string().max(63),
@@ -1005,8 +1005,11 @@ function registerAgentTools(server: FastMCP, deps: ServerDeps): void {
       timeoutSeconds: z.number().int().min(30).max(900).default(300),
     }),
     execute: async (args, { log }) => {
+      const agents = requireAgents();
+      // Same ceiling as a research run. This path was previously ungated.
+      await deps.runner.reserveNonResearchSpend(`agent_run:${args.agentId}`);
       log.info('Running managed agent', { agentId: args.agentId });
-      const result = await requireAgents().run({
+      const result = await agents.run({
         agentId: args.agentId,
         input: args.input,
         timeoutMs: args.timeoutSeconds * 1000,

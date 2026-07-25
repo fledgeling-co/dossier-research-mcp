@@ -82,13 +82,15 @@ describe('start', () => {
 
     expect(deduped).toBe(false);
     expect(run.state).toBe('running');
-    expect(run.estimatedCostUsd).toBe(2); // fast band $1-3, midpoint
+    // Reserves the worst case, not the midpoint: a ceiling that reserves an
+    // average lets the expensive tail overshoot it.
+    expect(run.estimatedCostUsd).toBe(3); // fast band $1-3, high end
 
     const reloaded = await store.getRun(run.id);
     expect(reloaded?.id).toBe(run.id);
 
     const budget = await runner.budget();
-    expect(budget.committedUsd).toBe(2);
+    expect(budget.committedUsd).toBe(3);
   });
 
   it('de-duplicates an identical request onto the existing run', async () => {
@@ -101,7 +103,7 @@ describe('start', () => {
     expect(second.run.id).toBe(first.run.id);
     // The decisive assertion: only ONE paid interaction was created.
     expect(client.created).toHaveLength(1);
-    expect((await runner.budget()).committedUsd).toBe(2);
+    expect((await runner.budget()).committedUsd).toBe(3);
   });
 
   it('does not de-duplicate across tiers — they are different purchases', async () => {
@@ -237,7 +239,7 @@ describe('lifecycle', () => {
     const { run } = await runner.start(START);
     const cancelled = await runner.cancel(run.id);
     expect(cancelled?.state).toBe('cancelled');
-    expect((await runner.budget()).committedUsd).toBe(2);
+    expect((await runner.budget()).committedUsd).toBe(3);
   });
 });
 
@@ -327,5 +329,82 @@ describe('store schema backward compatibility', () => {
     expect(read?.streamAbandoned).toBe(false);
     // And it is still visible in the index, which is where disappearance shows.
     expect((await store.listRuns()).map((r) => r.id)).toContain('dr_legacy00001');
+  });
+});
+
+describe('spend gate hardening', () => {
+  it('closes the concurrent-start race: parallel calls cannot all pass the gate', async () => {
+    // The original gate was a sequence of awaited disk reads with nothing
+    // serialising them, so N concurrent starts each read headroom before any
+    // wrote its ledger entry and all N proceeded. Agents make parallel tool
+    // calls routinely, so this was a real over-spend hole.
+    const capped = { ...config, maxConcurrent: 2, budgetUsd: 1000 };
+    const client = scriptedClient([snapshot({})]);
+    const runner = new Runner(store, capped, client);
+
+    const attempts = await Promise.allSettled(
+      Array.from({ length: 8 }, (_, i) =>
+        runner.start({ ...START, question: `distinct question ${i}`, prompt: `distinct prompt ${i}` }),
+      ),
+    );
+    const started = attempts.filter((a) => a.status === 'fulfilled').length;
+
+    // Exactly the cap, not the cap plus whatever slipped through.
+    expect(started).toBe(2);
+    expect(client.created).toHaveLength(2);
+    expect((await store.activeRuns()).length).toBe(2);
+  });
+
+  it('closes the budget race too: parallel calls cannot overshoot the ceiling', async () => {
+    // Budget for exactly two fast runs at the reserved (worst-case) $3.
+    const tight = { ...config, maxConcurrent: 64, budgetUsd: 6 };
+    const client = scriptedClient([snapshot({})]);
+    const runner = new Runner(store, tight, client);
+
+    await Promise.allSettled(
+      Array.from({ length: 10 }, (_, i) =>
+        runner.start({ ...START, question: `q${i}`, prompt: `p${i}` }),
+      ),
+    );
+
+    const budget = await runner.budget();
+    expect(budget.committedUsd).toBeLessThanOrEqual(6);
+    expect(client.created.length).toBeLessThanOrEqual(2);
+  });
+
+  it('reserves the worst case, not the midpoint', async () => {
+    const runner = new Runner(store, config, scriptedClient([snapshot({})]));
+    const { run } = await runner.start({ ...START, tier: 'max' });
+    // A max run is $3-7. Reserving the $5 midpoint would let a run that costs
+    // $7 overshoot; a ceiling that overshoots is not a ceiling.
+    expect(run.estimatedCostUsd).toBe(7);
+    expect((await runner.budget()).committedUsd).toBe(7);
+  });
+
+  it('gates a non-research spend against the same ceiling', async () => {
+    const tight = { ...config, budgetUsd: 1 };
+    const runner = new Runner(store, tight, scriptedClient([snapshot({})]));
+    // agent_run was previously ungated entirely: no check, no ledger, no cap.
+    await expect(runner.reserveNonResearchSpend('agent_run:x')).rejects.toThrow(BudgetExceededError);
+  });
+
+  it('counts a non-research spend on the ledger so it is visible', async () => {
+    const runner = new Runner(store, config, scriptedClient([snapshot({})]));
+    await runner.reserveNonResearchSpend('agent_run:analyst');
+    const budget = await runner.budget();
+    expect(budget.committedUsd).toBeGreaterThan(0);
+    expect(budget.runsInWindow).toBe(1);
+  });
+
+  it('a failed reservation does not wedge the queue for later callers', async () => {
+    const tight = { ...config, budgetUsd: 3 };
+    const runner = new Runner(store, tight, scriptedClient([snapshot({})]));
+    await runner.start(START);
+    // Second one is refused...
+    await expect(runner.start({ ...START, question: 'another', prompt: 'another' })).rejects.toThrow(
+      BudgetExceededError,
+    );
+    // ...and the lock still works afterwards, rather than deadlocking.
+    expect((await runner.budget()).committedUsd).toBe(3);
   });
 });

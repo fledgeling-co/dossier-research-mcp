@@ -1,12 +1,13 @@
 import type { Config } from '../config.js';
 import type { DeepResearchClient, ResearchToolSpec } from '../gemini/client.js';
-import { estimateCost } from '../gemini/cost.js';
+import { AGENT_RUN_BAND, estimateCost } from '../gemini/cost.js';
 import type { InteractionSnapshot, ResearchTier } from '../gemini/types.js';
 import { newRunId, Store } from '../store/store.js';
 import { TERMINAL_STATES, type RunRecord, type RunState } from '../store/types.js';
 import type { Archetype } from './archetypes.js';
 import { fingerprint } from './contract.js';
 import { extractPlan } from './plan.js';
+import { Mutex } from './spend.js';
 import { StreamSupervisor } from './stream.js';
 import { extractCitedUrls, normaliseCitations } from './report.js';
 
@@ -82,6 +83,11 @@ export class Runner {
   /** Guards against overlapping ticks when a poll outlives its interval. */
   private ticking = false;
   private readonly supervisor: StreamSupervisor | null;
+  /**
+   * Serialises check-and-reserve. Without it, concurrent starts each read
+   * headroom before any of them writes a ledger entry, and all of them pass.
+   */
+  private readonly spendLock = new Mutex();
 
   constructor(
     private readonly store: Store,
@@ -146,70 +152,89 @@ export class Runner {
     }
 
     const fp = this.fingerprintFor(args);
-
-    const existing = await this.store.findByFingerprint(fp, this.config.dedupeTtlMinutes);
-    if (existing) return { run: existing, deduped: true };
-
-    const active = await this.store.activeRuns();
-    if (active.length >= this.config.maxConcurrent) {
-      throw new ConcurrencyExceededError(active.length, this.config.maxConcurrent);
-    }
-
     const band = estimateCost(args.tier);
-    if (this.config.budgetUsd > 0) {
-      const snapshot = await this.budget();
-      if (snapshot.committedUsd + band.midUsd > snapshot.budgetUsd) {
-        throw new BudgetExceededError(
-          snapshot.committedUsd,
-          snapshot.budgetUsd,
-          snapshot.windowHours,
-        );
+
+    // Everything from here to the ledger write is one critical section. Dedupe
+    // is inside it too: two identical concurrent requests must collapse onto
+    // one run rather than both missing and both paying.
+    const reserved = await this.spendLock.run(async () => {
+      const existing = await this.store.findByFingerprint(fp, this.config.dedupeTtlMinutes);
+      if (existing) return { existing } as const;
+
+      const active = await this.store.activeRuns();
+      if (active.length >= this.config.maxConcurrent) {
+        throw new ConcurrencyExceededError(active.length, this.config.maxConcurrent);
       }
-    }
 
-    const now = new Date().toISOString();
-    const id = newRunId();
-    const record: RunRecord = {
-      id,
-      interactionId: '',
-      state: args.collaborativePlanning ? 'planning' : 'running',
-      tier: args.tier,
-      archetype: args.archetype,
-      question: args.question.slice(0, 20_000),
-      prompt: args.prompt.slice(0, 200_000),
-      promptWasPreEngineered: args.preEngineered,
-      fingerprint: fp,
-      createdAt: now,
-      updatedAt: now,
-      lastProgressAt: now,
-      estimatedCostUsd: band.midUsd,
-      tags: [...(args.tags ?? [])],
-      planApproved: !args.collaborativePlanning,
-      reportChars: 0,
-      sourceCount: 0,
-      imageCount: 0,
-      reasoningSteps: 0,
-      streamedChars: 0,
-      searches: 0,
-      urlsFetched: 0,
-      corpusQueries: 0,
-      codeRuns: 0,
-      streamAbandoned: false,
-      toolsUsed: args.tools.map((t) => t.type),
-      corpusStores: args.tools.flatMap((t) =>
-        t.type === 'file_search' ? [...t.fileSearchStoreNames] : [],
-      ),
-      ...(args.label ? { label: args.label } : {}),
-    };
+      if (this.config.budgetUsd > 0) {
+        const snapshot = await this.budget();
+        // Reserve the WORST case, not the midpoint. A max run is $3-7;
+        // reserving $5 for a run that costs $7 overshoots systematically, and
+        // a ceiling that overshoots is not a ceiling. Reserving high can only
+        // refuse slightly early, which is the safe direction.
+        if (snapshot.committedUsd + band.highUsd > snapshot.budgetUsd) {
+          throw new BudgetExceededError(
+            snapshot.committedUsd,
+            snapshot.budgetUsd,
+            snapshot.windowHours,
+          );
+        }
+      }
 
-    await this.store.saveRun(record);
-    await this.store.appendLedger({
-      at: now,
-      runId: id,
-      tier: args.tier,
-      estimatedCostUsd: band.midUsd,
-      ...(args.label ? { label: args.label } : {}),
+      // Reserve BOTH counters before releasing the lock. The ledger covers the
+      // budget; the run record covers concurrency, because `activeRuns()`
+      // reads records, so a record written after the lock releases is
+      // invisible to the next contender and the cap leaks. Writing only the
+      // ledger here let a cap of 2 admit 3.
+      const id = newRunId();
+      const at = new Date().toISOString();
+      const record: RunRecord = {
+        id,
+        interactionId: '',
+        state: args.collaborativePlanning ? 'planning' : 'running',
+        tier: args.tier,
+        archetype: args.archetype,
+        question: args.question.slice(0, 20_000),
+        prompt: args.prompt.slice(0, 200_000),
+        promptWasPreEngineered: args.preEngineered,
+        fingerprint: fp,
+        createdAt: at,
+        updatedAt: at,
+        lastProgressAt: at,
+        estimatedCostUsd: band.highUsd,
+        tags: [...(args.tags ?? [])],
+        planApproved: !args.collaborativePlanning,
+        reportChars: 0,
+        sourceCount: 0,
+        imageCount: 0,
+        reasoningSteps: 0,
+        streamedChars: 0,
+        searches: 0,
+        urlsFetched: 0,
+        corpusQueries: 0,
+        codeRuns: 0,
+        streamAbandoned: false,
+        toolsUsed: args.tools.map((t) => t.type),
+        corpusStores: args.tools.flatMap((t) =>
+          t.type === 'file_search' ? [...t.fileSearchStoreNames] : [],
+        ),
+        ...(args.label ? { label: args.label } : {}),
+      };
+      await this.store.saveRun(record);
+      await this.store.appendLedger({
+        at,
+        runId: id,
+        tier: args.tier,
+        estimatedCostUsd: band.highUsd,
+        ...(args.label ? { label: args.label } : {}),
+      });
+      return { record } as const;
     });
+
+    if ('existing' in reserved) return { run: reserved.existing, deduped: true };
+
+    const record = reserved.record;
+    const id = record.id;
 
     let snapshot: InteractionSnapshot;
     try {
@@ -361,6 +386,31 @@ export class Runner {
 
     await this.store.saveRun(next);
     return next;
+  }
+
+  /**
+   * Reserve budget for a spend that is not a research run.
+   *
+   * `agent_run` had no ceiling of any kind: no check, no ledger entry, no
+   * concurrency cap, on a path Google documents as up to 3M tokens per call.
+   * It goes through the same critical section as a research run so the two
+   * cannot race each other either.
+   */
+  async reserveNonResearchSpend(label: string): Promise<void> {
+    if (this.config.budgetUsd <= 0) return;
+    await this.spendLock.run(async () => {
+      const snapshot = await this.budget();
+      if (snapshot.committedUsd + AGENT_RUN_BAND.highUsd > snapshot.budgetUsd) {
+        throw new BudgetExceededError(snapshot.committedUsd, snapshot.budgetUsd, snapshot.windowHours);
+      }
+      await this.store.appendLedger({
+        at: new Date().toISOString(),
+        runId: `agent_${Date.now().toString(36)}`,
+        tier: 'fast',
+        estimatedCostUsd: AGENT_RUN_BAND.highUsd,
+        label,
+      });
+    });
   }
 
   /** Poll one run against the API and persist whatever changed. */

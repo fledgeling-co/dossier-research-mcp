@@ -47,6 +47,23 @@ export function estimateDuration(tier: ResearchTier): { lowMinutes: number; high
   return tier === 'max' ? { lowMinutes: 10, highMinutes: 60 } : { lowMinutes: 4, highMinutes: 20 };
 }
 
+/**
+ * A managed-agent run.
+ *
+ * Google prices these on tokens rather than per task, and documents a single
+ * interaction as "typically 100k to 3M tokens". At Flash rates that spans
+ * roughly $0.05 to $1.50, so this reserves the top of the range. It is a
+ * coarser estimate than the Deep Research bands, which is exactly why it
+ * reserves the high end: an ungated path is worse than an over-cautious one,
+ * and `agent_run` previously had no ceiling of any kind.
+ */
+export const AGENT_RUN_BAND: CostBand = {
+  lowUsd: 0.05,
+  highUsd: 1.5,
+  midUsd: 0.5,
+  basis: 'token-metered; Google documents 100k-3M tokens for a single interaction',
+};
+
 export function formatCostBand(band: CostBand): string {
   return `$${band.lowUsd.toFixed(2)}-$${band.highUsd.toFixed(2)}`;
 }

@@ -2,6 +2,8 @@
 
 Google ships two things that both look like "an AI that does research for you", and they aren't variants of each other. Pick the wrong one and it costs you either a lot of money or a lot of quality. Here's the decision, made concrete.
 
+> **First, a naming correction, including of an earlier version of this page.** There is no separate "Deep Research API". Deep Research is an *agent*; the Interactions API is the transport you invoke it through, and **both** things compared below are managed agents on that same transport. The real choice is between Google's pre-built research agent and a custom agent you build on Antigravity.
+
 > **Preview caveat.** Both surfaces are in public preview, so model ids, pricing and field names all move. Everything below was checked against Google's docs at the time of writing; check pricing and agent ids against the live docs before you budget against them.
 
 ---
@@ -11,8 +13,8 @@ Google ships two things that both look like "an AI that does research for you", 
 ```mermaid
 flowchart TD
     Q{"What is the<br/>deliverable?"}
-    Q -->|"a cited report<br/>a human will act on"| DR["<b>Deep Research API</b><br/>research_start"]
-    Q -->|"files, code run over<br/>your data, a reusable persona"| MA["<b>Managed Agents API</b><br/>agent_create → agent_run"]
+    Q -->|"a cited report<br/>a human will act on"| DR["<b>Deep Research agent</b><br/>research_start"]
+    Q -->|"files, code run over<br/>your data, a reusable persona"| MA["<b>Custom Antigravity agent</b><br/>agent_create → agent_run"]
     Q -->|"typed records<br/>at scale"| OWN["<b>Roll your own</b><br/>tool-loop + structured output"]
 
     DR --> DC{"decision-<br/>critical?"}
@@ -43,7 +45,7 @@ Use Deep Research when you want the report. Use a managed agent when you want fi
 
 ## Side by side
 
-| | **Deep Research API** | **Managed Agents API** |
+| | **Deep Research** (pre-built agent) | **Antigravity** (build your own) |
 |---|---|---|
 | What it is | A managed, opinionated research agent | A configurable agent harness with a sandbox |
 | Agent ids | `deep-research-preview-04-2026` (fast)<br>`deep-research-max-preview-04-2026` (max) | `antigravity-preview-05-2026`, plus any custom agent you create |
@@ -76,7 +78,7 @@ That collapses the decision into a much simpler question. **Do you want Google's
 
 ## Choosing
 
-### Use the **Deep Research API** when
+### Use the **Deep Research agent** when
 
 - The deliverable is a **cited report someone will read and act on**: due diligence, competitive landscape, regulatory mapping, literature review, market sizing.
 - **Breadth of search is the value.** 80-160 searches, planned and pursued autonomously, is genuinely hard to reproduce; approximating it badly would cost you well over $3 in engineering time and tokens.
@@ -84,7 +86,7 @@ That collapses the decision into a much simpler question. **Do you want Google's
 - You can **wait 5-60 minutes** and design around a background job.
 - You want the **plan-review pause**. It's the highest-leverage quality step available on a research run, and only this surface has it.
 
-### Use the **Managed Agents API** when
+### Use a **custom Antigravity agent** when
 
 - The job **produces artifacts**, not prose: a spreadsheet, a slide deck, a PDF, a chart, a code change, a populated database.
 - You need **code run over your own data** (analysis, transformation, validation) rather than web synthesis.

@@ -249,7 +249,7 @@ describe('config', () => {
   it('treats an empty string as unset (a present-but-empty .env key)', () => {
     const config = loadConfig({ GEMINI_API_KEY: '', DOSSIER_BUDGET_USD: '' });
     expect(config.auth.mode).toBe('none');
-    expect(config.budgetUsd).toBe(25);
+    expect(config.budgetUsd).toBe(100);
   });
 
   it('rejects an out-of-range numeric rather than silently clamping', () => {

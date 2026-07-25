@@ -39,9 +39,9 @@ const EnvSchema = z.object({
 
   DOSSIER_STORE_DIR: z.string().trim().max(1000).optional(),
 
-  DOSSIER_BUDGET_USD: numeric(25, 0, 1_000_000),
+  DOSSIER_BUDGET_USD: numeric(100, 0, 1_000_000),
   DOSSIER_BUDGET_WINDOW_HOURS: numeric(24, 1, 24 * 365),
-  DOSSIER_MAX_CONCURRENT: numeric(3, 1, 64),
+  DOSSIER_MAX_CONCURRENT: numeric(10, 1, 64),
   DOSSIER_REQUIRE_CONTRACT: boolish(false),
   DOSSIER_DEDUPE_TTL_MINUTES: numeric(1440, 0, 60 * 24 * 90),
 

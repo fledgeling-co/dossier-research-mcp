@@ -155,6 +155,110 @@ With no credentials the server still starts and every read-only tool works. You 
 
 ---
 
+## "The Deep Research agent" vs "the Deep Research API"
+
+Worth clearing up, because the two names get used as if they were alternatives and they are not.
+
+**There is no separate Deep Research API.** Deep Research is an *agent*. The Interactions API is the *transport* you invoke it through. When people say "the Deep Research API" they mean the pair.
+
+```
+POST /v1beta/interactions          <- the Interactions API (transport, GA)
+  { "agent": "deep-research-preview-04-2026",   <- the agent (what does the work)
+    "background": true, "store": true }
+```
+
+Google currently ships **two managed agents** on that transport, and *that* is the real distinction:
+
+| | **Deep Research** | **Antigravity** |
+|---|---|---|
+| What it is | A pre-built research agent you cannot modify | A general harness you build your own agent on |
+| Agent ids | `deep-research-preview-04-2026` (fast)<br>`deep-research-max-preview-04-2026` (max) | `antigravity-preview-05-2026` |
+| Configure it | Per call, via `agent_config` and `tools` | Persist it once with `agents.create`, then reference it by id |
+| Gives you | A planned, executed, cited report | A Linux sandbox that does whatever you told it to |
+| In Dossier | `research_start` | `agent_create` / `agent_run` |
+
+Roughly how they arrived, since the naming has moved:
+
+- **Dec 2025**: `deep-research-pro-preview-12-2025`, the first preview. Still listed, superseded, and **not exposed by this server**.
+- **Apr 2026**: `deep-research-preview-04-2026` and its `-max` sibling. The current pair, and what `tier: fast | max` selects between.
+- **May 2026**: `antigravity-preview-05-2026` plus `agents.create`, which is what made *custom* managed agents possible.
+
+The trap in that timeline: **`agents.create` only accepts Antigravity as a `base_agent`.** So the appealing idea, forking Deep Research and baking in your house source discipline, is not available. A custom agent complements a Deep Research run; it does not specialise one.
+
+📖 **[The full comparison](docs/deep-research-api-vs-agent.md)** covers which to reach for, how to compose them, and the third option of rolling your own loop.
+
+---
+
+## Setting up from scratch
+
+### 1. Get a Gemini API key
+
+Every Gemini API key belongs to a Google Cloud project. If you have never used Cloud, AI Studio makes one for you; if you have, you import an existing one.
+
+1. Go to **[aistudio.google.com/apikey](https://aistudio.google.com/apikey)** and sign in.
+2. Click **Create API key**. A brand-new account gets a default Cloud project made for it once you accept the terms; the key is created against that.
+3. Copy the key. It is shown once.
+
+Already a Cloud user and want a specific project? Open **Dashboard → [Projects](https://aistudio.google.com/projects) → Import projects**, pick it, then create the key from **API Keys**.
+
+If **Create API key** is greyed out you lack permission on that project. You need a role covering `apikeys.keys.create` and `serviceusage.services.enable` (Project Editor covers it), or make a fresh project outside your organisation.
+
+### 2. Decide free or paid
+
+The free tier works and needs no card, but it has rate limits and, per Google, free-tier prompts and responses may be used to improve their products. Paid tier excludes that.
+
+To go paid: on **[API keys](https://aistudio.google.com/api-keys)** or **[Projects](https://aistudio.google.com/projects)**, find the project and click **Set up billing** in the *Billing Tier* column. Expect a $10 minimum prepay.
+
+> [!IMPORTANT]
+> Deep Research is **not on the free tier** in any useful sense. A single run is $1-7 of metered spend, so a free-tier key will rate-limit or refuse rather than run. Budget for paid before you plan around this server.
+
+### 3. Set a spend cap at Google's end
+
+Do this before your first run, not after your first invoice.
+
+| Where | What it does |
+|---|---|
+| **[aistudio.google.com/spend](https://aistudio.google.com/spend)** → *Monthly spend cap* → **Edit spend cap** | Per-project monthly cap. Marked experimental by Google. Needs editor, owner or admin on the project |
+| **[Billing](https://aistudio.google.com/billing)** → *Manage auto-reload* → **Monthly Limit** | Prepay only. Stops auto top-ups for the cycle once reached |
+| Automatic, per billing account | Tier 1 $250 · Tier 2 $2,000 · Tier 3 $20,000-$100,000. Hitting it pauses every project on that billing account until the next cycle |
+
+Watch spend at **[Dashboard → Usage](https://aistudio.google.com/usage)**.
+
+> [!CAUTION]
+> **Google's cap is not hard, and Deep Research is the exact case where it leaks.** Their billing pipeline lags around ten minutes, and their own docs say long-running work "like batch mode and agents may incur overages beyond your project spend cap". A Deep Research run is a long-running agent.
+>
+> This is why Dossier keeps its own ceiling. It reserves the worst-case cost *before* the call is made rather than reconciling after, so it refuses early where Google's cap discovers the overage late. Use both: Google's as the backstop, `DOSSIER_BUDGET_USD` as the thing that actually stops a runaway agent.
+
+### 4. Point the server at it
+
+```bash
+export GEMINI_API_KEY=your-key-here          # zsh: add to ~/.zshrc, then `source ~/.zshrc`
+export DOSSIER_BUDGET_USD=100                # your daily ceiling. This is the default
+claude mcp add dossier -e GEMINI_API_KEY=$GEMINI_API_KEY -- npx -y dossier-research-mcp
+```
+
+Check it took:
+
+```
+research_budget          # should report $0.00 of $100.00 committed
+```
+
+### Using Vertex AI instead
+
+Only if compliance requires it. **Read the [Vertex trade-off](#auth) first**, because you lose corpus grounding, follow-ups, titles, summaries and claim extraction.
+
+```bash
+gcloud auth application-default login
+gcloud config set project my-project
+gcloud services enable aiplatform.googleapis.com
+export VERTEX_PROJECT=my-project
+export VERTEX_LOCATION=global
+```
+
+The account needs `aiplatform.interactions.create` (`roles/aiplatform.user` covers it). Vertex takes precedence if `GEMINI_API_KEY` is also set, and the server prints what you have lost at start-up.
+
+---
+
 ## A real session
 
 This is verbatim output from a live `fast`-tier run, trimmed for length.
@@ -425,6 +529,75 @@ You can get the same framework three other ways without installing anything: the
 
 ---
 
+## How it picks what to run
+
+Two decisions get made for you unless you override them. Both are worth understanding, because one costs money and the other costs quality.
+
+### The tier: `fast` or `max`
+
+**It does not choose.** `tier` defaults to `fast` and nothing infers it, deliberately. An automatic escalation to `max` is a silent decision to spend $3-7 instead of $1-3, and a server that quietly triples your bill because it judged a question "complex" is not one you can leave an agent alone with.
+
+So the choice is yours, and `research_plan` exists to make it an informed one: it shows the band and your remaining budget before anything is spent.
+
+| Use `fast` | Use `max` |
+|---|---|
+| A scoped question with a handful of sub-questions | Breadth genuinely needs ~160 searches rather than ~80 |
+| You will read it today | A decision you will be held to |
+| The default, and right most of the time | Roughly double the cost and up to triple the wall-clock |
+
+The `research-triage` prompt walks the prior question, which is whether it warrants a run at all. Most questions do not: if a single model call or one web search answers it, that is the correct tool.
+
+### The archetype: how the brief gets written
+
+This one **is** automatic, because it changes the prompt rather than the price. Five archetypes, each a self-contained override set applied to the pseudo-XML scaffold. Exactly one is applied; they are never blended.
+
+Selection is keyword scoring over your question, and the counts are what decide it, not a model call. Ties and no-match fall to `competitive`, because its overrides are the broadest and the cost of guessing it wrong is mild (some extra sentiment mining) where guessing `regulatory` wrong puts a legal disclaimer on a technical report.
+
+| Archetype | Triggered by | What it changes |
+|---|---|---|
+| `technical` | api, architecture, latency, benchmark, sdk, throughput, runtime | Prioritises official docs, repos, published benchmarks. Demands exact latency figures, schemas and rate limits verbatim. Requires a comparison table |
+| `competitive` | market, pricing, positioning, gtm, rival, landscape, churn | Prioritises filed financials and organic customer sentiment. Adds pain-point mining and demands two named underserved gaps |
+| `regulatory` | regulation, compliance, disclosure, jurisdiction, statute, enforcement | Prioritises primary legal texts and regulator publications. Tags every finding `<ENACTED>`/`<PENDING>`/`<GUIDANCE>`/`<PROPOSED>`. Appends a not-legal-advice notice |
+| `academic` | peer-reviewed, methodology, p-value, sample size, systematic review | Prioritises journals and proceedings. Demands methodology, sample size and effect sizes per study, not just abstracts |
+| `forecasting` | forecast, outlook, projection, scenario, capex, five-year | Demands underlying drivers over surface trends, and divergent scenarios with named break conditions |
+
+Pass `archetype` explicitly to override. `research_plan` tells you which one it picked and shows the prompt it produced, so you can check before spending.
+
+> [!TIP]
+> If your question spans two archetypes, that is a **decomposition signal, not a reason to widen the prompt**. A run trying to satisfy both competitive and regulatory analysis satisfies neither. Split it into separate runs sharing a role and context but varying the core directive, then synthesise.
+
+---
+
+## The utility model
+
+Deep Research returns prose and offers no structured output, so anything typed has to be extracted afterwards. A second, much cheaper model does that work: titles and summaries when a run lands, `research_claims`, and the fallback path in `research_followup`.
+
+It is a rounding error next to the research itself. A run is $1-7; these calls are fractions of a cent each. **`DOSSIER_UTILITY_MODEL` is about latency, quality and availability, not cost.**
+
+Default: `gemini-3.1-pro-preview`.
+
+| Model | Why you would pick it |
+|---|---|
+| `gemini-3.1-pro-preview` *(default)* | Best extraction quality of the practical options. Claim cards keep the report's own confidence qualifiers instead of drifting, and summaries stay specific rather than generic. Slowest and dearest of these, which does not matter at this volume |
+| `gemini-3.6-flash` | Newest Flash. Noticeably faster; good when you extract claims in bulk or want a title the instant a run completes. Slightly likelier to smooth a hedged claim into a confident one, which matters because these cards get passed to other agents |
+| `gemini-3.5-flash` | The stable Flash, no preview label. Reach for it if you would rather not depend on a preview model for a production path |
+| `gemini-3.1-flash-lite-preview` / `gemini-3.5-flash-lite` | Cheapest and fastest. Fine for titles and summaries; I would not use it for `research_claims`, where the job is to copy confidence levels faithfully rather than paraphrase |
+| `gemini-3-pro-preview` | The prior Pro. Useful only if you have measured something you dislike about 3.1 |
+
+Check what your key can actually reach, since availability varies by project and tier:
+
+```bash
+curl -s "https://generativelanguage.googleapis.com/v1beta/models?pageSize=200" \
+  -H "x-goog-api-key: $GEMINI_API_KEY" | grep -o '"name": "models/[^"]*"'
+```
+
+> [!NOTE]
+> The utility model is **not** the researcher. It never runs the investigation and it cannot change what the report says; it only reads a finished report and extracts from it. Changing it will not make research better or worse, only the titles, summaries and claim cards.
+>
+> It is also Developer-API only. On Vertex there is no utility model, so titles, summaries and `research_claims` are unavailable there.
+
+---
+
 ## Configuration
 
 <details>
@@ -432,25 +605,50 @@ You can get the same framework three other ways without installing anything: the
 
 <br>
 
+Every value is Zod-validated once at start-up, so an invalid one fails fast with a readable message rather than surfacing as a mystery mid-run. An empty string counts as unset, because a committed `.env.example` key is very often present-but-empty.
+
+**Credentials.** Set one of these two. Vertex wins if you set both.
+
 | Variable | Default | What it does |
 |---|---|---|
-| `GEMINI_API_KEY` | | Google AI Studio key |
-| `VERTEX_PROJECT` / `VERTEX_LOCATION` | / `global` | Vertex AI. Takes precedence over the API key |
-| `DOSSIER_STORE_DIR` | `~/.dossier-research-mcp` | Runs, journals, reports, ledger |
-| `DOSSIER_BUDGET_USD` | `25` | Hard ceiling per rolling window. `0` turns the gate off |
-| `DOSSIER_BUDGET_WINDOW_HOURS` | `24` | The rolling window |
-| `DOSSIER_MAX_CONCURRENT` | `3` | Runs in flight at once |
-| `DOSSIER_REQUIRE_CONTRACT` | `false` | Makes plan-then-start mandatory |
-| `DOSSIER_DEDUPE_TTL_MINUTES` | `1440` | Window for collapsing identical requests |
-| `DOSSIER_POLL_SECONDS` | `20` | Poll interval for in-flight runs |
-| `DOSSIER_STALL_MINUTES` | `12` | Silence before a run is marked `stalled` |
-| `DOSSIER_UTILITY_MODEL` | `gemini-3.1-pro-preview` | Titles, summaries, follow-ups, claims |
-| `DOSSIER_HTTP_PORT` | `8787` | Port for `--transport http` |
-| `DOSSIER_HTTP_TOKENS` | | Comma-separated bearer tokens |
+| `GEMINI_API_KEY` | | Google AI Studio key. The full-capability backend |
+| `GOOGLE_API_KEY` | | Accepted as an alias if `GEMINI_API_KEY` is unset |
+| `VERTEX_PROJECT` | | GCP project id. Setting it switches to Vertex and **disables corpus grounding, follow-ups, titles, summaries and claim extraction** |
+| `VERTEX_LOCATION` | `global` | Vertex region. Only read when `VERTEX_PROJECT` is set |
 
-Every value is Zod-validated once at start-up, so an invalid one fails fast with a readable message instead of surfacing as a mystery mid-run.
+**Spend control.** The reason this server exists in the shape it does.
 
-Note: an empty string counts as unset. A committed `.env.example` key is very often present-but-empty, and `??` won't catch that where `||` will.
+| Variable | Default | What it does |
+|---|---|---|
+| `DOSSIER_BUDGET_USD` | `100` | Hard ceiling per rolling window, in USD. A run reserves its **worst-case** cost against this before the call is made, so the gate refuses early rather than discovering an overage. `0` disables it, which the budget tool then says out loud |
+| `DOSSIER_BUDGET_WINDOW_HOURS` | `24` | The rolling window. With the default budget that is $100/day |
+| `DOSSIER_MAX_CONCURRENT` | `10` | Runs in flight at once. Checked inside the same lock as the budget, so parallel calls cannot slip past it |
+| `DOSSIER_REQUIRE_CONTRACT` | `false` | Makes `research_plan` → `research_start` mandatory. **Turn this on for any server an autonomous agent can reach**: without the fingerprint from a plan, a looping agent makes free no-ops instead of $7 mistakes |
+| `DOSSIER_DEDUPE_TTL_MINUTES` | `1440` | How long an identical request collapses onto the existing run instead of paying again. Set `0` to disable, which you almost never want |
+
+**Runtime.**
+
+| Variable | Default | What it does |
+|---|---|---|
+| `DOSSIER_STORE_DIR` | `~/.dossier-research-mcp` | Where runs, journals, reports and the ledger live. Point two servers at one directory and they share history but keep separate spend locks, so prefer one server per store |
+| `DOSSIER_POLL_SECONDS` | `20` | How often in-flight runs are polled. Lower is more responsive and more API calls; polling itself is not billed, but there is no reason to go below ~10 |
+| `DOSSIER_STALL_MINUTES` | `12` | Silence before a run is marked `stalled`. Raise it if you use `max` tier a lot, since a long synthesis phase is quiet by nature |
+| `DOSSIER_UTILITY_MODEL` | `gemini-3.1-pro-preview` | The cheap model behind titles, summaries and claim extraction. See [The utility model](#the-utility-model) |
+
+**HTTP transport.** Only read with `--transport http`.
+
+| Variable | Default | What it does |
+|---|---|---|
+| `DOSSIER_HTTP_PORT` | `8787` | Port to listen on |
+| `DOSSIER_HTTP_TOKENS` | | Comma-separated bearer tokens. Compared in constant time, and the `Bearer` scheme is required. **Bind to loopback if you leave this empty**; the server warns you |
+
+**Testing.**
+
+| Variable | Default | What it does |
+|---|---|---|
+| `DOSSIER_HERMETIC` | `false` | Refuses to construct a live client at all, so no call can reach the network. Set by `vitest.config.ts`; you should not need it by hand |
+| `DOSSIER_PAID_TESTS` | `false` | Opt in to the paid test project. Needs a real key too |
+| `DOSSIER_PAID_MAX` | `false` | Additionally run the `max`-tier paid case, which is $3-7 on its own |
 
 </details>
 
