@@ -21,7 +21,9 @@
 >
 > Not built: Mode B browser automation ([§8b](#8b-browser-sessions)), for a reason the plan did not anticipate: **Dossier has no browser and cannot drive the host's.** Every driver in the §8b table is a capability of the client, so the portable form is method, and the `gemini-web-session` prompt is where it lives. That also leaves the terms-of-service decision with the person whose account is exposed.
 >
-> None of the four non-Gemini API backends has been exercised against its live API; every request shape is written to the vendor docs and covered only by hermetic tests.
+> **Every backend has now made a real call through this code** (25 July 2026): Perplexity ran a full deep-research job, OpenAI and xAI created, polled and parsed real runs, and the local CLI path was driven against both Claude Code and Grok Build. Doing that found four defects no hermetic test could have: Perplexity returns `COMPLETED` in upper case against its own documentation, so a finished run polled forever and its paid-for report was never stored; Perplexity, OpenAI and xAI all return their citations out of band, so cited reports were stored as uncited; and xAI accepts `deferred: true` and ignores it, so its runs are synchronous rather than durable.
+>
+> An adversarial review at max effort then found a critical spend defect: `retry.ts` stated the rule that a paid call is never retried, named the mechanism, and that mechanism was never written, so every provider retried its paid POST four times. Shipped in 0.3.0 with that and 26 other findings closed.
 >
 > One deliberate departure from [§13](#13-tool-surface): the local corpus ships as `corpus_local_list` and `corpus_local_search` with directories granted by the operator through `DOSSIER_LOCAL_CORPUS_DIRS`, and there is **no** tool that registers one. A file reader an agent can point anywhere is an exfiltration primitive, and the agent is the caller most likely to have just read something hostile.
 
