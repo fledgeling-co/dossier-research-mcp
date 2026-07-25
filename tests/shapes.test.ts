@@ -266,3 +266,32 @@ describe('comparing more than two backends', () => {
     expect(shared[0]?.note).toMatch(/3 backends agree/);
   });
 });
+
+describe('a wide cell that asserts a fact without a source', () => {
+  const cited = [
+    '| entity | binary_quantization | memory_at_10m |',
+    '|---|---|---|',
+    '| Qdrant | yes https://qdrant.tech/docs | ~1.2 GB https://qdrant.tech/bench |',
+  ].join('\n');
+  const uncited = [
+    '| entity | binary_quantization | memory_at_10m |',
+    '|---|---|---|',
+    '| Qdrant | yes | ~1.2 GB |',
+  ].join('\n');
+
+  it('keeps the source when the cell carries one', () => {
+    const rows = parseWideTable(spec, cited);
+    expect(rows[0]?.cells['binary_quantization']?.source).toBe('https://qdrant.tech/docs');
+    expect(validateWide(spec, rows, { requireSources: true }).filter((p) => p.includes('no source'))).toEqual([]);
+  });
+
+  it('reports an uncited fact only when asked, so the gate stays about completeness', () => {
+    // A matrix may legitimately cite in its own column rather than in every
+    // cell, so refusing that would be the completion gate deciding a
+    // formatting question.
+    const rows = parseWideTable(spec, uncited);
+    expect(validateWide(spec, rows).filter((p) => p.includes('no source'))).toEqual([]);
+    const strict = validateWide(spec, rows, { requireSources: true });
+    expect(strict.some((p) => p.includes('asserts a fact with no source'))).toBe(true);
+  });
+});

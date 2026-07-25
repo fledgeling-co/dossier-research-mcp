@@ -260,6 +260,13 @@ export const AGENT_RUN_BAND: CostBand = {
  * Rather than pretend to an estimate, cap the exposure. A caller who wants a
  * larger single agent run raises this deliberately, which is the same shape as
  * every other spend control here: refuse early rather than reconcile late.
+ *
+ * **What this is not:** a limit Google enforces. It is the amount reserved
+ * against the local ledger before the call, so it refuses a run that would
+ * cross the ceiling and does nothing to stop an admitted run costing more than
+ * the reservation. Calling it "hard" without that sentence overstated it: no
+ * token, tool or dollar limit reaches the provider, because `agent_run`
+ * executes a user-defined agent whose model and volume are not ours to bound.
  */
 export const AGENT_RUN_HARD_CAP_USD = 5;
 

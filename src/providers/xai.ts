@@ -89,7 +89,7 @@ export function xaiCost(input: DurationOptions): CostBand {
     midUsd: Number(((low + high) / 2).toFixed(2)),
     basis:
       `${big ? 'grok-4.5' : 'grok-4.3'} tokens plus $5/1k server-side tool calls; ` +
-      'the model picks its own search count, so the tool component is the loose half',
+      'a max_tool_calls ceiling is sent, so the search component is bounded rather than open-ended',
   };
 }
 
@@ -209,8 +209,11 @@ export function xaiProvider(config: Config): ResearchProvider {
           model: MODEL[args.tier],
           input: prompt,
           store: true,
-          deferred: true, // retrievable for 24h; xAI's nearest thing to background
+          deferred: true, // accepted and ignored; see the capability note above
           tools: buildTools(opts),
+          // The model picks its own search count, and searches are the loose
+          // half of the bill. A ceiling keeps the reserved band meaningful.
+          max_tool_calls: args.tier === 'max' ? 60 : 25,
         }),
       });
       const id = typeof raw['id'] === 'string' ? raw['id'] : typeof raw['request_id'] === 'string' ? raw['request_id'] : '';

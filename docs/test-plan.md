@@ -98,7 +98,7 @@ Acceptance criteria are taken from the README's tool contracts and the tool desc
 | **STREAM-02** | An abandoned stream is disclosed rather than looking stuck | `state-matrix` | ✓ |
 | **CONC-01** | One budget ceiling holds across **separate OS processes** sharing a store | `concurrency` | ✓ |
 | **CONC-02** | The store lock grants to one holder, breaks stale/dead locks, releases on throw | `concurrency` | ✓ |
-| **CONC-03** | Concurrent plan approvals start exactly one paid continuation | `concurrency` | ✓ |
+| **CONC-03** | Concurrent plan approvals start exactly one paid continuation | `concurrency` | ◑ one process, two callers; the cross-process case is not covered |
 | **CONC-04** | A cancelled run cannot be approved back into a paid run | `concurrency` | ✓ |
 | **CONC-05** | A cancellation the provider refused is reported as unconfirmed, not as success | `concurrency` | ✓ |
 | **CONC-06** | A paid call returning no interaction id fails loudly rather than polling forever | `concurrency` | ✓ |
@@ -110,7 +110,7 @@ Acceptance criteria are taken from the README's tool contracts and the tool desc
 | **PRIV-01** | Reports, prompts and the ledger are 0600; directories 0700 | `concurrency` | ✓ |
 | **SEC-06** | IPv6 forms the URL parser canonicalises (`::ffff:7f00:1`, NAT64, 6to4) are blocked | unit: `safety` | ✓ |
 | **SEC-07** | The whole `fe80::/10` range is link-local, not just the `fe80` prefix | unit: `safety` | ✓ |
-| **SEC-08** | A caller regex with nested quantifiers is rejected before it can block the loop | unit: `safety` | ✓ |
+| **SEC-08** | A caller regex that can backtrack exponentially is rejected before it blocks the loop | unit: `safety` | ✓ |
 | **SEC-09** | Non-http citation schemes render inert rather than as clickable links | unit: `safety` | ✓ |
 | **EST-01** | Duration and cost widen with corpora, MCP servers and attachments | unit: `safety` | ✓ |
 | **EST-02** | Default runs keep the documented $1-3 / $3-7 bands | unit: `safety` | ✓ |
@@ -141,7 +141,7 @@ Acceptance criteria are taken from the README's tool contracts and the tool desc
 | **EVID-10** | A follow-up answers from the frozen citation registry, not the report's prose alone | unit: `tools` | ✓ |
 | **LOCAL-01** | The local corpus is off until an operator grants directories via the environment | unit: `local-corpus` | ✓ |
 | **LOCAL-02** | A symlink out of a granted directory is not followed | unit: `local-corpus` | ✓ |
-| **LOCAL-03** | Dotfiles, credential directories and dependency trees are skipped unread | unit: `local-corpus` | ✓ |
+| **LOCAL-03** | Dotfiles, credential directories and dependency trees are skipped unread, including through an in-root alias | unit: `local-corpus` | ✓ |
 | **LOCAL-04** | The query is a literal, never a caller-supplied regular expression | unit: `local-corpus` | ✓ |
 | **LOCAL-05** | A missing granted directory is reported, not thrown | unit: `local-corpus` | ✓ |
 | **CLI-01** | A binary of the right name reporting the wrong product is refused, not run | unit: `local-cli`, `local-provider` | ✓ |
@@ -156,7 +156,7 @@ Acceptance criteria are taken from the README's tool contracts and the tool desc
 | **CLI-08** | The local backend is never selected automatically, and stays reachable by name | unit: `providers` | ✓ |
 | **IMPORT-01** | An imported report becomes a normal run: reads, greps and profiles identically | `evidence` | ✓ |
 | **IMPORT-02** | Import refuses a url and markdown together, and neither | `evidence` | ✓ |
-| **IMPORT-03** | An import charges nothing against the budget | `evidence` | ✓ |
+| **IMPORT-03** | An import charges nothing against the budget, with or without a utility model | `evidence` | ✓ |
 | **IMPORT-04** | An imported report that cites nothing is flagged as unverifiable | `evidence` | ✓ |
 | **WEB-01** | The subscription prompt hands over a real brief and the import command | `protocol` | ✓ |
 | **WEB-02** | Its automated mode states the robots.txt position and the account exposure | `protocol` | ✓ |
@@ -168,6 +168,25 @@ Acceptance criteria are taken from the README's tool contracts and the tool desc
 | **LOOP-06** | A draft citing anything outside the frozen registry is REFUSED | `loop`, unit: `local-loop` | ✓ |
 | **LOOP-07** | A silent task is named as a coverage gap rather than averaged away | unit: `local-loop` | ✓ |
 | **LOOP-08** | An accepted draft becomes a normal run: reads, greps and profiles identically | `loop` | ✓ |
+| **SPEND-01** | A paid create is attempted exactly once; a timeout or 5xx never retries it | unit: `providers` | ✓ |
+| **SPEND-02** | An unknown create outcome is reported as ambiguous spend, not as a plain failure | unit: `providers` | ✓ |
+| **SPEND-03** | Reads still retry, because they are free and worth recovering | unit: `providers` | ✓ |
+| **SPEND-04** | The purchase fingerprint covers provider, shape, window, matrix spec and attachments | unit: `safety` | ✓ |
+| **SPEND-05** | A per-provider sub-ceiling stops one backend consuming the global budget | `concurrency` | ✓ |
+| **SPEND-06** | Utility spend is recorded even when the ceiling is disabled | `concurrency` | ✓ |
+| **SEC-11** | The admission lock is released only by its owner, and a live holder is never broken on age | `concurrency` | ✓ |
+| **SEC-12** | A citation label cannot open a second markdown link | unit: `safety` | ✓ |
+| **SEC-13** | Decoded provider options are Zod-bounded, so prompt text cannot inject wire options | unit: `providers` | ✓ |
+| **SEC-14** | A bearer token shorter than 24 characters fails startup | unit: `safety` | ✓ |
+| **FAILC-05** | An unreadable run directory aborts admission rather than reading as zero runs | `concurrency` | ✓ |
+| **PROV-01** | A terminal status is recognised whatever its case, on every adapter | unit: `providers` | ✓ |
+| **PROV-02** | Perplexity's out-of-band citations reach the report text | unit: `providers` | ✓ |
+| **PROV-03** | A Perplexity handle carries its endpoint, so a restart still polls the right one | unit: `providers` | ✓ |
+| **PROV-04** | Enforcement is claimed only where the request actually carries the filter | unit: `providers` | ✓ |
+| **CLI-11** | The supervisor bounds runtime and output, and confirms death before recording a cancel | unit: `local-provider` | ✓ |
+| **LOOP-09** | A CommonMark autolink to an ungathered source is refused | unit: `local-loop` | ✓ |
+| **EVID-11** | A model saying "unknown" is not counted as an independent domain | unit: `evidence` | ✓ |
+| **SHAPE-07** | An uncited wide cell is reported, not treated as a missing cell | unit: `shapes` | ✓ |
 
 ### The paid project
 
@@ -205,6 +224,6 @@ Verified to fail against the pre-fix implementation: **3 admitted, $21 committed
 
 ```bash
 npm run test:acceptance     # this suite
-npm test                    # unit + acceptance
+npm run test:all            # unit + acceptance (npm test runs unit only)
 npm run gate                # typecheck, lint, test, build
 ```

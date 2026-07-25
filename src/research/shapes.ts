@@ -105,7 +105,11 @@ export function renderWideTable(spec: WideSpec, rows: readonly WideRow[]): strin
  * omission is the failure this catches: a model that quietly drops the awkward
  * column produces a table that looks complete and is not.
  */
-export function validateWide(spec: WideSpec, rows: readonly WideRow[]): string[] {
+export function validateWide(
+  spec: WideSpec,
+  rows: readonly WideRow[],
+  opts: { readonly requireSources?: boolean } = {},
+): string[] {
   const problems: string[] = [];
   const want = new Set(spec.fields.map((f) => f.name));
   const seen = new Set(rows.map((r) => r.entity));
@@ -114,8 +118,18 @@ export function validateWide(spec: WideSpec, rows: readonly WideRow[]): string[]
   }
   for (const row of rows) {
     for (const field of want) {
-      if (!(field in row.cells) && !row.uncertain.includes(field)) {
+      const cell = row.cells[field];
+      if (!cell && !row.uncertain.includes(field)) {
         problems.push(`${row.entity}: field "${field}" is neither filled nor declared uncertain`);
+        continue;
+      }
+      // The brief requires a source per fact and the gate checked only that
+      // something was written, so a wholly uncited matrix passed. Reported
+      // rather than enforced by default: a matrix may legitimately cite in its
+      // own column rather than in every cell, and refusing that would be the
+      // gate deciding a formatting question.
+      if (opts.requireSources === true && cell && !cell.uncertain && !cell.source) {
+        problems.push(`${row.entity}: field "${field}" asserts a fact with no source`);
       }
     }
   }
@@ -192,7 +206,10 @@ export function parseWideTable(spec: WideSpec, markdown: string): WideRow[] {
         uncertain.push(field.name);
         continue;
       }
-      filled[field.name] = { value, uncertain: marked };
+      // Keep the cell's own source when it carries one, so the completion gate
+      // can tell a cited fact from a confident assertion.
+      const source = /(https?:\/\/[^\s)\]]+)/.exec(raw)?.[1];
+      filled[field.name] = { value, uncertain: marked, ...(source ? { source } : {}) };
     }
     rows.push({ entity, cells: filled, uncertain });
   }

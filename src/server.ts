@@ -551,6 +551,15 @@ export function createServer(deps: ServerDeps): FastMCP {
       }
 
       requireProviderClient(deps, chosen);
+      if (args.collaborativePlanning && deps.providers.get(chosen)?.capabilities.planReview !== true) {
+        // Otherwise the backend's first full report is stored as a "plan", and
+        // approving it buys a second full run with no second reservation. Two
+        // reports, one reservation, and the first one silently relabelled.
+        throw new UserError(
+          `${deps.providers.get(chosen)?.label ?? chosen} has no editable plan before spending, so \`collaborativePlanning\` cannot be honoured there. ` +
+            'Drop it, or use Gemini, which is the only backend that offers one.',
+        );
+      }
       log.info('Starting deep research run', { tier: args.tier, archetype: resolved.archetype, provider: chosen });
 
       const { run, deduped } = await runner.start({
@@ -1263,6 +1272,12 @@ function registerShapeTools(server: FastMCP, deps: ServerDeps): void {
         }
         const rows = parseWideTable(parsed.data, markdown);
         const problems = validateWide(parsed.data, rows);
+        // Reported separately from the completion gate: an uncited cell is a
+        // weaker finding rather than a missing one, and a matrix that cites in
+        // its own column is not wrong.
+        const uncited = validateWide(parsed.data, rows, { requireSources: true }).filter(
+          (p) => p.includes('no source'),
+        );
         return [
           renderWideTable(parsed.data, rows),
           '',
@@ -1279,6 +1294,15 @@ function registerShapeTools(server: FastMCP, deps: ServerDeps): void {
                 .filter(Boolean)
                 .join('\n'),
           '',
+          uncited.length > 0
+            ? [
+                '',
+                '### Cells asserting a fact with no source',
+                '',
+                `${String(uncited.length)} cell(s). Not a gate failure: a matrix may cite in its own column rather than in every cell. It is worth checking before you act on one of these numbers.`,
+                ...uncited.slice(0, 20).map((p) => `- ${p}`),
+              ].join('\n')
+            : '',
           rows.length === 0
             ? '_No table was found in the report. Read it directly with `research_read` — the backend answered in prose, which is exactly the failure mode wide research exists to avoid._'
             : `_Parsed ${String(rows.length)} row(s) from the report’s first markdown table. Read the full report with \`research_read { runId: "${run.id}" }\`._`,

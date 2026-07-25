@@ -201,6 +201,10 @@ Every value is Zod-validated once at start-up, so an invalid one fails fast with
 |---|---|---|
 | `DOSSIER_BUDGET_USD` | `100` | Hard ceiling per rolling window, in USD. A run reserves its **worst-case** cost against this before the call is made, so the gate refuses early rather than discovering an overage. `0` disables it, which the budget tool then says out loud |
 | `DOSSIER_BUDGET_WINDOW_HOURS` | `24` | The rolling window. With the default budget that is $100/day |
+| `DOSSIER_BUDGET_USD_GEMINI` | `0` | Optional sub-ceiling for one backend, inside the global one. `0` means only the global ceiling applies. Evaluated under the same lock, so one backend cannot quietly consume the lot |
+| `DOSSIER_BUDGET_USD_PERPLEXITY` | `0` | As above |
+| `DOSSIER_BUDGET_USD_OPENAI` | `0` | As above |
+| `DOSSIER_BUDGET_USD_XAI` | `0` | As above |
 | `DOSSIER_MAX_CONCURRENT` | `10` | Runs in flight at once. Checked inside the same lock as the budget, so parallel calls cannot slip past it |
 | `DOSSIER_REQUIRE_CONTRACT` | `false` | Makes `research_plan` → `research_start` mandatory. **Turn this on for any server an autonomous agent can reach**: without the fingerprint from a plan, a looping agent makes free no-ops instead of $7 mistakes |
 | `DOSSIER_DEDUPE_TTL_MINUTES` | `1440` | How long an identical request collapses onto the existing run instead of paying again. Set `0` to disable, which you almost never want |
@@ -221,7 +225,7 @@ Every value is Zod-validated once at start-up, so an invalid one fails fast with
 | Variable | Default | What it does |
 |---|---|---|
 | `DOSSIER_HTTP_PORT` | `8787` | Port to listen on |
-| `DOSSIER_HTTP_TOKENS` | | Comma-separated bearer tokens. Compared in constant time, and the `Bearer` scheme is required |
+| `DOSSIER_HTTP_TOKENS` | | Comma-separated bearer tokens. Compared in constant time, and the `Bearer` scheme is required. **Minimum 24 characters**: this guards a surface that spends money, and comparing a short token in constant time does not make it harder to guess. `openssl rand -base64 32` |
 | `DOSSIER_HTTP_ALLOW_ANONYMOUS` | `false` | Required to start an HTTP listener with no tokens. Without it the server exits rather than serving a money-spending tool surface to anything that can reach the port |
 
 **Testing.**

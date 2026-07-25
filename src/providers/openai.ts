@@ -86,7 +86,7 @@ export function openAiCost(input: DurationOptions): CostBand {
     lowUsd: low,
     highUsd: high,
     midUsd: Number(((low + high) / 2).toFixed(2)),
-    basis: `${sol ? 'gpt-5.6-sol' : 'gpt-5.6-terra'} with web search, reasoning-heavy; bounded by max_tool_calls`,
+    basis: `${sol ? 'gpt-5.6-sol' : 'gpt-5.6-terra'} with web search, reasoning-heavy; a max_tool_calls ceiling is always sent, so the tool half of the bill is genuinely bounded`,
   };
 }
 
@@ -191,7 +191,13 @@ export function openAiProvider(config: Config): ResearchProvider {
           store: true,
           reasoning: { effort: RESEARCH_EFFORT[args.tier], ...(args.tier === 'max' ? { mode: 'pro' } : {}) },
           tools: [webSearch],
-          ...(opts.maxToolCalls ? { max_tool_calls: opts.maxToolCalls } : {}),
+          // Always send a ceiling, not only when the caller named one. The
+          // estimate says this run is "bounded by max_tool_calls" and ordinary
+          // starts never set one, so the bound was rhetorical and the reserved
+          // band could be exceeded by a model that felt thorough. The default
+          // is generous enough not to shape the research and finite enough to
+          // make the sentence true.
+          max_tool_calls: opts.maxToolCalls ?? (args.tier === 'max' ? 200 : 80),
         }),
       });
       const id = typeof raw['id'] === 'string' ? raw['id'] : '';
