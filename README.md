@@ -99,59 +99,75 @@ research_verify_citations         → dereference every cited URL
 research_followup / research_claims
 ```
 
-A worked example, verbatim:
+A worked example — real output from a live `fast`-tier run, trimmed for length:
 
 ```jsonc
 // 1. Free. Check what you're about to buy.
 research_plan {
-  "question": "Which vector database has the lowest p99 query latency at 10M vectors?",
-  "tier": "max",
-  "scope": { "decisionContext": "choose a store for a 3-person team" },
-  "collaborativePlanning": true
+  "question": "Which open-source vector databases support scalar and binary quantization, and what memory footprint do their own docs report at 10 million vectors?",
+  "tier": "fast",
+  "scope": { "decisionContext": "pick a self-hosted store for a small team" }
 }
 // → Archetype: technical
-// → Estimated cost: $3.00-$7.00 · duration 10-60 minutes
-// → Budget: $0.00 committed of $25.00 in the last 24h
-// → Contract fingerprint: `016d2a2475ce8698609b289399341f0c`
+// → Estimated cost: $1.00-$3.00 — ~80 searches, ~250k input tokens…
+// → Estimated duration: 4-20 minutes, background.
+// → Budget: $0.00 committed of $10.00 in the last 24h; $10.00 remaining.
+// → Contract fingerprint: `dbc239386807d76bf5573328dd926baf`
 // → ...the full engineered prompt, and the operator notes
 
 // 2. Spends money. Returns in about a second.
 research_start {
-  "question": "Which vector database has the lowest p99 query latency at 10M vectors?",
-  "tier": "max",
-  "scope": { "decisionContext": "choose a store for a 3-person team" },
-  "collaborativePlanning": true,
-  "contractFingerprint": "016d2a2475ce8698609b289399341f0c",
-  "label": "vector-db eval"
+  "question": "Which open-source vector databases support scalar and binary quantization, and what memory footprint do their own docs report at 10 million vectors?",
+  "tier": "fast",
+  "scope": { "decisionContext": "pick a self-hosted store for a small team" },
+  "contractFingerprint": "dbc239386807d76bf5573328dd926baf",
+  "label": "vectordb quantization"
 }
-// → Run started. Handle: `dr_9f2a1c4e8b3d7a05`  (state: planning)
+// → Run started. Handle: `dr_4dea031ff91d84fc`
+// → Committed against your budget: ~$2.00 (band $1.00-$3.00)
+// → Expect it back in 4-20 minutes. Do NOT block on this.
 
-// 3. The highest-leverage thing you can do all day.
-research_approve_plan {
-  "runId": "dr_9f2a1c4e8b3d7a05",
-  "amendment": "Drop the managed-cloud pricing comparison. Add self-hosted memory footprint at 10M vectors, and include quantisation trade-offs."
-}
+// Calling it again with the same arguments does not pay twice:
+// → De-duplicated onto an existing run — nothing new was charged.
 
-// 4. Later — a minute or a day, same answer.
-research_status { "runId": "dr_9f2a1c4e8b3d7a05" }
-// → completed · 47 cited sources
+// 3. Later. This run was polled by a DIFFERENT server process than the one
+//    that started it — the first was killed immediately after step 2.
+research_status { "runId": "dr_4dea031ff91d84fc" }
+// → completed · 30 cited sources
 
-// 5. Outline first. Always.
-research_read { "runId": "dr_9f2a1c4e8b3d7a05" }
-// →   1. Executive Summary        (~420 tok)
-//     2. Detailed Findings        (~180 tok)
-//     3.   p99 latency at scale   (~3100 tok)
-//     4.   Memory footprint       (~2400 tok)
-//     5. Evidence Table           (~1900 tok)
-//     6. Knowledge Gaps           (~310 tok)
+// 4. Outline first. Always: ~8,000 tokens of report, surveyed in ~200.
+research_read { "runId": "dr_4dea031ff91d84fc" }
+// → Report outline — 19 sections, ~8070 estimated tokens total.
+//     1. Open-Source Vector Database Memory Economics…   (~25 tok)
+//     2.   Executive Summary                             (~642 tok)
+//     3.   Detailed Findings                             (~6 tok)
+//     4.     Primary: Which open-source vector databases…(~566 tok)
+//     5.       Qdrant                                    (~583 tok)
+//     6.       Milvus                                    (~458 tok)
+//    …
+//    16.   Evidence Table                                (~539 tok)
+//    17.   Knowledge Gaps                                (~352 tok)
+//    19.   Comparison Table: Vector Database Profiles…   (~306 tok)
 
-research_read { "runId": "dr_9f2a1c4e8b3d7a05", "mode": "section", "section": "p99 latency" }
+research_read { "runId": "dr_4dea031ff91d84fc", "mode": "section", "section": "Executive Summary" }
+// → **(High Confidence)** Qdrant's official capacity planning documentation
+//   provides explicit mathematical formulas indicating that 10 million
+//   1,024-dimensional float32 vectors require 57.2 GB of active RAM. The
+//   application of scalar quantization reduces this footprint by a factor
+//   of 4 (to approximately 14.3 GB)…
 
-// 6. Before anyone acts on it.
-research_verify_citations { "runId": "dr_9f2a1c4e8b3d7a05" }
-// → Citation scorecard: VERIFIED — 44/47 resolved (94%).
-//   live 44 · not_found 1 · blocked 2 · unreachable 0 · invalid 0
+// 5. Before anyone acts on it.
+research_verify_citations { "runId": "dr_4dea031ff91d84fc" }
+// → Citation scorecard: PARTIAL — 25/30 resolved (83%).
+//   live 25 · not_found 0 · blocked 5 · unreachable 0 · invalid 0
+//   - blocked (403) https://medium.com/@…  (paywalled or bot-blocked)
+//   - blocked       https://milvus.io/docs/overview.md
+//     (server redirects this URL to itself — typically a bot deterrent;
+//      the source is probably fine, open it in a browser to confirm)
 ```
+
+With `collaborativePlanning: true`, a `research_approve_plan { runId, amendment }` step sits between 2 and 3 — the plan comes back for you to prune and extend before any searching happens. It is the highest-leverage intervention available on a run.
+
 
 ---
 
@@ -193,7 +209,7 @@ One run, or every run in flight. Reports **liveness separately from status**: a 
 #### `research_tail`
 Replays the durable progress journal from a cursor. `{ runId, sinceSeq }` → events plus the next cursor. A client that dropped at minute 3 of a 45-minute run loses nothing.
 
-> **Granularity, measured against the live API.** While a run is in flight, `interactions.get` returns only the echoed `user_input` step — the full step list is populated at completion. So the journal carries **lifecycle events** (`created`, `plan`, `progress`, `stalled`, `completed`, `failed`), not token-by-token reasoning. Live thought summaries exist only on the SSE stream, which this server does not yet consume ([#1](https://github.com/fledgeling-co/deep-research-mcp/issues/1)). Durability is unaffected: the journal is what survives your disconnect.
+> **Timing, measured against the live API.** While a run is in flight, `interactions.get` returns only the echoed `user_input` step — no intermediate progress. The full step list, including the researcher's reasoning summaries, arrives in one batch at completion (a real run produced 25 of them). So mid-run you see lifecycle events (`created`, `plan`, `progress`, `stalled`); reasoning arrives at the end. For reasoning *as it happens* you would need the SSE stream, which this server does not yet consume ([#1](https://github.com/fledgeling-co/deep-research-mcp/issues/1)). Durability is unaffected — the journal is what survives your disconnect.
 
 #### `research_read`
 | `mode` | Returns |

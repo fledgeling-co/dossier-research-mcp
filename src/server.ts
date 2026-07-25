@@ -449,7 +449,7 @@ export function createServer(deps: ServerDeps): FastMCP {
   server.addTool({
     name: 'research_tail',
     description:
-      'Replay a run’s durable progress journal from a cursor — pass the returned cursor next time to get only what is new. A client that disconnected at minute 3 of a 45-minute run loses nothing. Note the granularity: the polling path this server uses reports lifecycle events (created, plan, progress, stalled, completed, failed), not token-by-token reasoning — the API only populates its step list once the run finishes, so live thought summaries are available on the SSE stream alone.',
+      'Replay a run’s durable progress journal from a cursor — pass the returned cursor next time to get only what is new. A client that disconnected at minute 3 of a 45-minute run loses nothing. Note the timing: while a run is in flight the API reports no intermediate steps, so mid-run you see lifecycle events only (created, plan, progress, stalled); the researcher’s reasoning summaries all land in one batch when it completes. For reasoning as it happens you would need the SSE stream, which this server does not yet consume.',
     annotations: { title: 'Tail research progress', readOnlyHint: true, openWorldHint: true },
     parameters: z.object({
       runId: z.string().max(64),
@@ -647,8 +647,12 @@ export function createServer(deps: ServerDeps): FastMCP {
         );
       }
       const answer = await deps.utility.answer(args.question, markdown);
-      if (!answer) throw new UserError('The follow-up model call failed. Read the report directly with `research_read`.');
-      return answer;
+      if (!answer.ok) {
+        throw new UserError(
+          `The follow-up model call failed: ${answer.error}. Read the report directly with \`research_read\`.`,
+        );
+      }
+      return answer.value;
     },
   });
 
@@ -684,11 +688,15 @@ export function createServer(deps: ServerDeps): FastMCP {
         );
       }
       const extracted = await deps.utility.extractClaims(markdown, args.limit);
-      if (!extracted) throw new UserError('Claim extraction failed. Try `research_read { mode: "section", section: "Evidence Table" }`.');
+      if (!extracted.ok) {
+        throw new UserError(
+          `Claim extraction failed: ${extracted.error}. The report is unaffected — read its Evidence Table instead: \`research_read { mode: "section", section: "Evidence Table" }\`.`,
+        );
+      }
       return {
         runId: run.id,
         ...(run.title ? { title: run.title } : {}),
-        claims: extracted.claims.slice(0, args.limit),
+        claims: extracted.value.claims.slice(0, args.limit),
       };
     },
   });
@@ -1222,10 +1230,15 @@ export async function buildDeps(config: Config = loadConfig()): Promise<ServerDe
   const runner = new Runner(store, config, client, async (run, markdown) => {
     if (!utility) return;
     const summary = await utility.summarise(markdown);
-    if (!summary) return;
     const current = await store.getRun(run.id);
     if (!current) return;
-    await store.saveRun({ ...current, title: summary.title, summary: summary.summary });
+    if (!summary.ok) {
+      // Non-fatal by design, but recorded: the report is already safe on disk,
+      // and the journal is where someone will look when a title is missing.
+      await store.appendJournal(run.id, 'note', `Title/summary generation failed: ${summary.error}`);
+      return;
+    }
+    await store.saveRun({ ...current, title: summary.value.title, summary: summary.value.summary });
   });
 
   return {

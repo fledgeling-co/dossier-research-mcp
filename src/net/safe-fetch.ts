@@ -16,11 +16,22 @@ const MAX_REDIRECTS = 5;
 const MAX_BYTES = 512 * 1024;
 const DEFAULT_TIMEOUT_MS = 10_000;
 
+/**
+ * Why a URL was refused. The distinction is load-bearing downstream: a
+ * malformed URL or a private address is a red flag about the *citation*, while
+ * a redirect loop is a fact about the *server* — many sites bot-deter by
+ * 302-ing an unrecognised User-Agent back to the same URL forever. Collapsing
+ * the two makes real sources look fabricated.
+ */
+export type BlockReason = 'scheme' | 'malformed' | 'private' | 'dns' | 'redirect_loop';
+
 export class BlockedUrlError extends Error {
   readonly code = 'blocked_url' as const;
-  constructor(reason: string) {
-    super(reason);
+  readonly reason: BlockReason;
+  constructor(reason: BlockReason, message: string) {
+    super(message);
     this.name = 'BlockedUrlError';
+    this.reason = reason;
   }
 }
 
@@ -55,23 +66,23 @@ export function isPrivateAddress(address: string): boolean {
 /** Validate scheme + resolve DNS, rejecting anything that lands on a private IP. */
 async function assertPublicUrl(url: URL): Promise<void> {
   if (!ALLOWED_PROTOCOLS.has(url.protocol)) {
-    throw new BlockedUrlError(`Scheme not allowed: ${url.protocol}`);
+    throw new BlockedUrlError('scheme', `Scheme not allowed: ${url.protocol}`);
   }
   const host = url.hostname.replace(/^\[|\]$/g, '');
   if (isIP(host)) {
-    if (isPrivateAddress(host)) throw new BlockedUrlError(`Private address blocked: ${host}`);
+    if (isPrivateAddress(host)) throw new BlockedUrlError('private', `Private address blocked: ${host}`);
     return;
   }
   let addresses: { address: string }[];
   try {
     addresses = await lookup(host, { all: true });
   } catch {
-    throw new BlockedUrlError(`DNS resolution failed for ${host}`);
+    throw new BlockedUrlError('dns', `DNS resolution failed for ${host}`);
   }
-  if (addresses.length === 0) throw new BlockedUrlError(`No addresses for ${host}`);
+  if (addresses.length === 0) throw new BlockedUrlError('dns', `No addresses for ${host}`);
   for (const { address } of addresses) {
     if (isPrivateAddress(address)) {
-      throw new BlockedUrlError(`Host ${host} resolves to a private address`);
+      throw new BlockedUrlError('private', `Host ${host} resolves to a private address`);
     }
   }
 }
@@ -101,7 +112,7 @@ export async function safeFetch(
   try {
     current = new URL(rawUrl);
   } catch {
-    throw new BlockedUrlError('Malformed URL');
+    throw new BlockedUrlError('malformed', 'Malformed URL');
   }
 
   for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
@@ -121,12 +132,25 @@ export async function safeFetch(
 
     const location = response.headers.get('location');
     if (response.status >= 300 && response.status < 400 && location) {
-      if (hop === MAX_REDIRECTS) throw new BlockedUrlError('Too many redirects');
+      let next: URL;
       try {
-        current = new URL(location, current);
+        next = new URL(location, current);
       } catch {
-        throw new BlockedUrlError('Malformed redirect target');
+        throw new BlockedUrlError('malformed', 'Malformed redirect target');
       }
+      // A redirect to the same URL never terminates. Recognise it on the first
+      // hop rather than burning the whole budget: it is the signature of a
+      // bot deterrent, not of a broken link.
+      if (next.toString() === current.toString()) {
+        throw new BlockedUrlError(
+          'redirect_loop',
+          'Server redirects this URL to itself (typically a bot deterrent)',
+        );
+      }
+      if (hop === MAX_REDIRECTS) {
+        throw new BlockedUrlError('redirect_loop', 'Too many redirects');
+      }
+      current = next;
       continue;
     }
 
@@ -158,5 +182,5 @@ export async function safeFetch(
     };
   }
 
-  throw new BlockedUrlError('Too many redirects');
+  throw new BlockedUrlError('redirect_loop', 'Too many redirects');
 }

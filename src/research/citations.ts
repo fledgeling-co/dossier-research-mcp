@@ -57,6 +57,19 @@ async function verifyOne(url: string, timeoutMs: number): Promise<CitationVerdic
     };
   } catch (e: unknown) {
     if (e instanceof BlockedUrlError) {
+      // A redirect loop says something about the SERVER, not the citation —
+      // sites commonly 302 an unrecognised User-Agent back to itself as a bot
+      // deterrent (milvus.io does exactly this). Reporting that as
+      // `invalid_url` alongside malformed and SSRF URLs drags real sources
+      // into the "suspect" badge and implies fabrication that isn't there.
+      if (e.reason === 'redirect_loop') {
+        return {
+          url,
+          verdict: 'blocked',
+          checkedAt,
+          note: `${e.message} — the source is probably fine; open it in a browser to confirm.`,
+        };
+      }
       return { url, verdict: 'invalid_url', checkedAt, note: e.message.slice(0, 300) };
     }
     const message = e instanceof Error ? e.message : String(e);

@@ -47,6 +47,28 @@ describe('SSRF guards', () => {
       /Private address blocked/,
     );
   });
+
+  it('tags the refusal reason so a redirect loop is not confused with a bad URL', async () => {
+    // Distinguishing these is what stops a bot-deterring site (which 302s an
+    // unrecognised UA back to itself) being reported as a fabricated citation.
+    await expect(safeFetch('file:///etc/passwd')).rejects.toMatchObject({ reason: 'scheme' });
+    await expect(safeFetch('http://10.0.0.1/')).rejects.toMatchObject({ reason: 'private' });
+    await expect(safeFetch('nonsense')).rejects.toMatchObject({ reason: 'malformed' });
+  });
+});
+
+describe('citation verdicts for a self-redirecting host', () => {
+  it('reports a redirect loop as blocked, not invalid_url', () => {
+    // `invalid_url` feeds the "suspect" badge, which reads as "these citations
+    // are probably fabricated". A live report tripped this on four real
+    // milvus.io URLs.
+    const card = scoreCitations([
+      ...Array.from({ length: 25 }, (_, i) => ({ url: `u${i}`, verdict: 'live' as const, checkedAt: 'now' })),
+      ...Array.from({ length: 5 }, (_, i) => ({ url: `b${i}`, verdict: 'blocked' as const, checkedAt: 'now' })),
+    ]);
+    expect(card.badge).toBe('partial');
+    expect(card.invalid).toBe(0);
+  });
 });
 
 describe('corpus store names', () => {
@@ -111,15 +133,50 @@ describe('contract fingerprint', () => {
 });
 
 describe('interaction parsing (trust boundary)', () => {
-  it('takes the last text step as the report, not every step concatenated', () => {
+  it('joins every model_output chunk — a report arrives split across steps', () => {
+    // The exact shape a completed live run returns. A real 32k report came
+    // back as two model_output steps; taking only the last one dropped the
+    // title and the entire Executive Summary.
     const snap = toSnapshot('int_1', {
       status: 'completed',
       steps: [
-        { type: 'model_output', content: [{ type: 'text', text: 'interim notes' }] },
-        { type: 'model_output', content: [{ type: 'text', text: '# Final report' }] },
+        { type: 'user_input', content: [{ type: 'text', text: '<role>the prompt</role>' }] },
+        { type: 'thought', content: [{ type: 'text', text: 'planning the search' }] },
+        { type: 'model_output', content: [{ type: 'text', text: '# Title\n\n## Executive Summary\n\n- finding' }] },
+        { type: 'model_output', content: [{ type: 'text', text: '\n\n#### Detail\n\nbody' }] },
       ],
     });
-    expect(snap.markdown).toBe('# Final report');
+    expect(snap.markdown).toBe('# Title\n\n## Executive Summary\n\n- finding\n\n#### Detail\n\nbody');
+    expect(snap.markdown).not.toContain('the prompt');
+    expect(snap.markdown).not.toContain('planning the search');
+    expect(snap.thoughts).toEqual(['planning the search']);
+  });
+
+  it('reads reasoning from summary[], not content[] — a thought step has no content', () => {
+    // Exact live shape: `{ type: 'thought', signature, summary: [{text, type}] }`.
+    const snap = toSnapshot('int_1', {
+      status: 'completed',
+      steps: [
+        { type: 'thought', signature: '', summary: [
+          { type: 'text', text: '***Generating research plan***' },
+          { type: 'text', text: '**Mapping Candidate Frameworks**' },
+        ] },
+        { type: 'model_output', content: [{ type: 'text', text: '# Report' }] },
+      ],
+    });
+    expect(snap.thoughts).toEqual(['***Generating research plan***', '**Mapping Candidate Frameworks**']);
+    expect(snap.markdown).toBe('# Report');
+  });
+
+  it('falls back to other output text if model_output is ever renamed', () => {
+    const snap = toSnapshot('int_1', {
+      status: 'completed',
+      steps: [
+        { type: 'user_input', content: [{ type: 'text', text: 'prompt' }] },
+        { type: 'final_answer', content: [{ type: 'text', text: '# Report' }] },
+      ],
+    });
+    expect(snap.markdown).toBe('# Report');
   });
 
   it('separates thought steps from output', () => {

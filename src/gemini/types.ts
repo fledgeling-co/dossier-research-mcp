@@ -34,9 +34,16 @@ const ContentItemSchema = z.union([
 
 export type ContentItem = z.infer<typeof ContentItemSchema>;
 
+/**
+ * A step carries its payload in one of two shapes, and they are not
+ * interchangeable: `model_output` and `user_input` steps use `content[]`, while
+ * a `thought` step has no `content` at all and puts its reasoning in
+ * `summary[]`. Parsing only `content` silently yields zero thoughts.
+ */
 const StepSchema = z.object({
   type: z.string().optional(),
   content: z.array(ContentItemSchema).optional(),
+  summary: z.array(z.object({ type: z.string().optional(), text: z.string().default('') })).optional(),
 });
 
 export type InteractionStep = z.infer<typeof StepSchema>;
@@ -82,31 +89,50 @@ export function toSnapshot(interactionId: string, raw: unknown): InteractionSnap
     };
   }
   const it = parsed.data;
-  const texts: string[] = [];
+  /** Text from steps typed exactly `model_output` — the documented report. */
+  const modelOutput: string[] = [];
+  /** Text from any other non-echo, non-reasoning step — the fallback. */
+  const otherOutput: string[] = [];
   const thoughts: string[] = [];
   const images: { data: string; mimeType: string }[] = [];
 
   for (const step of it.steps ?? []) {
     const type = step.type ?? '';
     // The API echoes the submitted prompt back as a `user_input` step. Without
-    // this guard the echoed prompt is the last text step for most of a run's
+    // this guard the echoed prompt is the only text step for most of a run's
     // life, so a mid-flight read would hand back the prompt as if it were the
     // report. Observed against the live preview API, not hypothetical.
     if (type === 'user_input') continue;
     const isThought = type.includes('thought') || type.includes('reasoning') || type.includes('thinking');
+    // Reasoning lives in `summary[]`, not `content[]`.
+    for (const part of step.summary ?? []) {
+      if (part.text) thoughts.push(part.text);
+    }
+    const sink = type === 'model_output' ? modelOutput : otherOutput;
     for (const item of step.content ?? []) {
       if (item.type === 'text' && 'text' in item && item.text) {
         if (isThought) thoughts.push(item.text);
-        else texts.push(item.text);
+        else sink.push(item.text);
       } else if (item.type === 'image' && 'data' in item && item.data) {
         images.push({ data: item.data, mimeType: ('mime_type' in item && item.mime_type) || 'image/png' });
       }
     }
   }
 
-  // The report is the LAST model output, not every text step concatenated —
-  // earlier steps are plan/intermediate notes and would duplicate the report.
-  const markdown = texts.length > 0 ? (texts.at(-1) ?? '') : '';
+  // The report is EVERY model_output text step, joined in order.
+  //
+  // Measured against the live API: a completed run's steps are
+  // `user_input` (the echoed prompt) → `thought` (reasoning) → `model_output`
+  // × N, where the report is chunked across those N. A real 32k-character
+  // report arrived as 7,318 + 25,222 chars in two steps — so taking only the
+  // last one silently dropped the title and the whole Executive Summary.
+  //
+  // Prefer the documented `model_output` type, but fall back to any other
+  // non-echo, non-reasoning text when none is present. That way a preview
+  // rename of the step type degrades to "possibly some extra text" rather
+  // than to "the report is empty" — losing report content is the worse
+  // failure of the two, and it is the one that actually happened.
+  const markdown = (modelOutput.length > 0 ? modelOutput : otherOutput).join('');
 
   return {
     interactionId,
