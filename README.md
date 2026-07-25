@@ -7,7 +7,7 @@
 [![npm](https://img.shields.io/npm/v/dossier-research-mcp?color=C8321F&labelColor=1B1513)](https://www.npmjs.com/package/dossier-research-mcp)
 [![node](https://img.shields.io/badge/node-%E2%89%A520.11-1B1513?labelColor=1B1513&color=C8321F)](https://nodejs.org)
 [![MCP](https://img.shields.io/badge/MCP-2025--06--18-1B1513?labelColor=1B1513&color=C8321F)](https://modelcontextprotocol.io)
-[![tests](https://img.shields.io/badge/tests-95%20hermetic-1B1513?labelColor=1B1513&color=C8321F)](#development)
+[![tests](https://img.shields.io/badge/tests-98%20hermetic-1B1513?labelColor=1B1513&color=C8321F)](#development)
 [![license](https://img.shields.io/badge/license-MIT-1B1513?labelColor=1B1513&color=C8321F)](LICENSE)
 
 **Gemini Deep Research, wrapped so an agent can drive it safely.**<br>
@@ -18,9 +18,6 @@ npx dossier-research-mcp
 ```
 
 </div>
-
-> [!NOTE]
-> **Not on npm yet.** `npx dossier-research-mcp` works once it's published; until then install [from source](#install), which is two commands. The npm badge above will 404 in the meantime.
 
 ---
 
@@ -67,27 +64,27 @@ flowchart LR
 ## Install
 
 <details open>
-<summary><b>From source</b> (works today)</summary>
-
-<br>
-
-```bash
-git clone https://github.com/fledgeling-co/dossier-research-mcp.git
-cd dossier && npm install && npm run build
-
-# then point any MCP client at it
-claude mcp add dossier -e GEMINI_API_KEY=your-key -- node "$PWD/dist/index.js"
-```
-
-</details>
-
-<details>
-<summary><b>Claude Code</b> (once published)</summary>
+<summary><b>Claude Code</b></summary>
 
 <br>
 
 ```bash
 claude mcp add dossier -e GEMINI_API_KEY=your-key -- npx -y dossier-research-mcp
+```
+
+</details>
+
+<details>
+<summary><b>From source</b></summary>
+
+<br>
+
+```bash
+git clone https://github.com/fledgeling-co/dossier-research-mcp.git
+cd dossier-research-mcp && npm install && npm run build
+
+# then point any MCP client at it
+claude mcp add dossier -e GEMINI_API_KEY=your-key -- node "$PWD/dist/index.js"
 ```
 
 </details>
