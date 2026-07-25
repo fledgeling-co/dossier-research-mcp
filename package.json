@@ -1,6 +1,6 @@
 {
   "name": "dossier-research-mcp",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Dossier — Google Gemini Deep Research as an MCP server. Durable background runs, spend control, context-safe report reading, citation verification, and private-corpus grounding.",
   "type": "module",
   "license": "MIT",
