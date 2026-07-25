@@ -115,7 +115,10 @@ for (const id of ['perplexity', 'openai', 'xai'] as const) {
       // The assertion that matters: a real id came back. An empty one means
       // the response shape moved and every run would poll forever.
       expect(started?.interactionId, 'no interaction id in the response').toBeTruthy();
-      expect(started?.status).toBe('in_progress');
+      // `completed` is legitimate: xAI's create call performs the whole run and
+      // returns the finished result, so insisting on `in_progress` would assert
+      // a background contract only two of the three backends actually have.
+      expect(['in_progress', 'completed']).toContain(started?.status);
 
       // Poll for a few seconds rather than once, to prove the retrieval endpoint
       // parses AND that the job did not fall over the moment it started.
@@ -136,11 +139,12 @@ for (const id of ['perplexity', 'openai', 'xai'] as const) {
       expect(polled?.status, `the job failed on startup: ${polled?.error ?? 'no reason given'}`).not.toBe('failed');
       expect(['in_progress', 'completed']).toContain(polled?.status);
 
-      // Stop it where that is possible. A backend without cancellation throws a
-      // message saying so, which is the documented behaviour rather than a
-      // failure — and it means the job finishes and bills.
+      // Stop it where that is possible. Two refusals are expected rather than
+      // failures: a backend with no cancellation says so, and a job that has
+      // already finished cannot be cancelled either. Both mean the run is over
+      // and has billed, which is the thing worth knowing.
       await client?.cancelRun(started?.interactionId ?? '').catch((e: unknown) => {
-        expect(String(e)).toMatch(/does not expose cancellation/);
+        expect(String(e)).toMatch(/does not expose cancellation|400|already|completed/i);
       });
     }, 120_000);
   });

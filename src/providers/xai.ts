@@ -334,7 +334,10 @@ export function appendAnnotationSources(markdown: string, raw: Record<string, un
       for (const a of annotations as { type?: unknown; url?: unknown; title?: unknown }[]) {
         if (a.type !== 'url_citation' || typeof a.url !== 'string') continue;
         // A numeric marker title ("1") is a footnote label, not a source name.
-        const title = typeof a.title === 'string' && !/^\d+$/.test(a.title.trim()) ? a.title.trim() : '';
+        // Trimmed: a page's full <title> can run to hundreds of characters,
+        // and a source list is meant to be scannable.
+        const raw = typeof a.title === 'string' ? a.title.trim() : '';
+        const title = raw && !/^\d+$/.test(raw) ? (raw.length > 100 ? `${raw.slice(0, 97)}...` : raw) : '';
         if (!seen.has(a.url)) seen.set(a.url, title);
       }
     }

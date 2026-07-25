@@ -450,7 +450,7 @@ WebSearch/WebFetch are built in with **no per-search fee on a subscription** (th
 
 **Measured against the live API, 25 July 2026.** The organisation's `/v1/models` lists 125 models including `gpt-5.6-sol`, `gpt-5.6-terra` and `gpt-5.6-luna`, so those IDs are correct. `o3-deep-research` is **gone** from the list; **`o4-mini-deep-research` is still listed**, despite the same retirement announcement, so "both retired on 23 July 2026" is not what the API shows.
 
-Model access is enforced **per project**, separately from the organisation. A key on a restricted project returns `403 Project ... does not have access to model X` for every gpt-5 model while `gpt-4o` succeeds, even though the org-wide model list shows all of them. Fix it under Project → Limits rather than in billing.
+Model access is enforced **per project**, separately from the organisation, and the two lists move independently. On one test project every gpt-5 model returned `403 Project ... does not have access to model X` while `gpt-4o` succeeded; after the project limits were changed, `gpt-5.6-sol`, `gpt-5.6-terra` and `gpt-5.6-luna` all returned 200 and `gpt-4o` and `gpt-5.5` began returning 403. The org-wide `/v1/models` listing showed all of them throughout, so it is not a reliable guide to what a key can actually run. Fix it under Project → Limits rather than in billing.
 
 Background mode changes when that failure surfaces: `POST /v1/responses` with `background: true` returns **200 with an id** for a model the project cannot use, reports `queued`/`in_progress` on the first poll, and only flips to `failed` a second or two later. The same request without `background` returns 403 synchronously. A verification that polls once will call the first case a success.
 
