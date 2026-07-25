@@ -48,15 +48,45 @@ import type { Capabilities, CredentialStatus, ProviderEstimate, ResearchProvider
 const SUPERVISOR = `
 const { spawn } = require('node:child_process');
 const fs = require('node:fs');
-const [out, side, bin, ...rest] = process.argv.slice(1);
+const [out, side, deadlineMs, maxBytes, bin, ...rest] = process.argv.slice(1);
 const sink = fs.createWriteStream(out, { flags: 'a' });
 const done = (payload) => { try { fs.writeFileSync(side, JSON.stringify(payload)); } catch {} };
+let written = 0, truncated = false, finished = false;
 try {
   const child = spawn(bin, rest, { stdio: ['ignore', 'pipe', 'pipe'] });
-  child.stdout.pipe(sink);
-  child.stderr.pipe(sink);
-  child.on('error', (e) => done({ exit: -1, error: String(e && e.message), at: Date.now() }));
-  child.on('close', (code, signal) => done({ exit: code === null ? -1 : code, signal: signal || null, at: Date.now() }));
+  // Cap the output. A chatty CLI could otherwise fill the store, and the cap
+  // is announced in the file rather than silently swallowing the tail.
+  const take = (chunk) => {
+    if (truncated) return;
+    written += chunk.length;
+    if (written > Number(maxBytes)) {
+      truncated = true;
+      try { fs.appendFileSync(out, '\\n\\n_[output truncated: the CLI exceeded the size limit]_\\n'); } catch {}
+      try { child.kill('SIGTERM'); } catch {}
+      return;
+    }
+    sink.write(chunk);
+  };
+  child.stdout.on('data', take);
+  child.stderr.on('data', take);
+  // And a deadline. A hung CLI holds a run open forever otherwise, and the
+  // run has no other way to end.
+  const timer = setTimeout(() => {
+    if (finished) return;
+    try { child.kill('SIGTERM'); } catch {}
+    setTimeout(() => { try { child.kill('SIGKILL'); } catch {} }, 10000).unref();
+  }, Number(deadlineMs));
+  child.on('error', (e) => { finished = true; clearTimeout(timer); done({ exit: -1, error: String(e && e.message), at: Date.now() }); });
+  child.on('close', (code, signal) => {
+    finished = true;
+    clearTimeout(timer);
+    done({
+      exit: truncated ? -1 : code === null ? -1 : code,
+      signal: signal || null,
+      at: Date.now(),
+      ...(truncated ? { error: 'the CLI produced more output than the limit allows' } : {}),
+    });
+  });
 } catch (e) {
   done({ exit: -1, error: String(e && e.message), at: Date.now() });
 }
@@ -68,6 +98,9 @@ const SidecarSchema = z.object({
   error: z.string().optional(),
   at: z.number(),
 });
+
+/** A research report is large; a runaway CLI is larger. */
+const MAX_OUTPUT_BYTES = 8 * 1024 * 1024;
 
 /** Preference order when no CLI is named: quality first, then cost, then breadth. */
 const PREFERENCE: readonly string[] = ['claude', 'agy', 'codex', 'cursor', 'grok'];
@@ -154,7 +187,16 @@ export function localProvider(config: Config): ResearchProvider {
 
       const child = spawn(
         process.execPath,
-        ['-e', SUPERVISOR, outPath(id), sidePath(id), bin, ...adapter.headless(args.prompt)],
+        [
+          '-e',
+          SUPERVISOR,
+          outPath(id),
+          sidePath(id),
+          String(capabilities.maxWallClockMinutes * 60_000),
+          String(MAX_OUTPUT_BYTES),
+          bin,
+          ...adapter.headless(args.prompt),
+        ],
         { detached: true, stdio: 'ignore' },
       );
       child.unref();
@@ -236,10 +278,34 @@ export function localProvider(config: Config): ResearchProvider {
           throw new Error('The process was already gone.');
         }
       }
-      writeFileSync(sidePath(interactionId), JSON.stringify({ exit: -1, error: 'cancelled', at: Date.now() }), {
-        mode: 0o600,
-      });
-      return Promise.resolve();
+      // Confirm it actually died before recording a terminal state. Writing the
+      // sidecar straight after SIGTERM declared a run finished while it was
+      // still running and still consuming quota.
+      return (async () => {
+        for (let i = 0; i < 20; i += 1) {
+          await new Promise((r) => setTimeout(r, 100));
+          if (!alive(pid)) break;
+          if (i === 9) {
+            try {
+              process.kill(-pid, 'SIGKILL');
+            } catch {
+              try {
+                process.kill(pid, 'SIGKILL');
+              } catch {
+                /* already gone */
+              }
+            }
+          }
+        }
+        if (alive(pid)) {
+          throw new Error(
+            'The CLI did not stop after SIGTERM and SIGKILL. It is still running and still consuming your quota; stop it by hand before starting another.',
+          );
+        }
+        writeFileSync(sidePath(interactionId), JSON.stringify({ exit: -1, error: 'cancelled', at: Date.now() }), {
+          mode: 0o600,
+        });
+      })();
     },
 
     followUp(): Promise<string> {

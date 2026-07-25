@@ -625,3 +625,27 @@ describe('per-provider sub-ceilings', () => {
     expect(entries[0]?.label).toBe('title:dr_x');
   });
 });
+
+describe('an unreadable run directory closes the gate', () => {
+  it('throws rather than reporting no runs in flight', async () => {
+    // `listRuns` and `unreadableRunCount` turned every readdir error into
+    // zero, and zero is the answer that opens the gate: dedupe sees no existing
+    // work and concurrency sees nothing in flight. Only ENOENT means empty.
+    const store = new Store(root);
+    await store.init();
+    const { chmodSync } = await import('node:fs');
+    const runsDir = join(root, 'runs');
+    chmodSync(runsDir, 0o000);
+    try {
+      await expect(store.listRuns()).rejects.toThrow();
+      await expect(store.unreadableRunCount()).rejects.toThrow();
+    } finally {
+      chmodSync(runsDir, 0o700);
+    }
+  });
+
+  it('still treats a genuinely absent directory as empty', async () => {
+    const store = new Store(join(root, 'never-created'));
+    await expect(store.listRuns()).resolves.toEqual([]);
+  });
+});

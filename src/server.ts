@@ -1978,14 +1978,21 @@ function registerLoopTools(server: FastMCP, deps: ServerDeps): void {
       findings: z.array(FindingSchema).min(1).max(40),
     }),
     execute: async (args) => {
-      const session = await requireSession(args.runId);
-      if (!session.tasks.some((t) => t.id === args.taskId)) {
-        throw new UserError(
-          `No task \`${args.taskId}\` in this session. Its tasks are: ${session.tasks.map((t) => t.id).join(', ')}.`,
-        );
-      }
-      const result = mergeFindings(session, args.taskId, args.findings);
-      await store.saveSession(args.runId, result.session);
+      // Read, merge and write under one lock. Parallel workers are the whole
+      // point of the fan-out, and two of them reporting at once both read the
+      // same session and the second write dropped the first's evidence. A loop
+      // that loses findings silently is worse than one that runs serially.
+      const result = await store.admissionLock().run(async () => {
+        const session = await requireSession(args.runId);
+        if (!session.tasks.some((t) => t.id === args.taskId)) {
+          throw new UserError(
+            `No task \`${args.taskId}\` in this session. Its tasks are: ${session.tasks.map((t) => t.id).join(', ')}.`,
+          );
+        }
+        const merged = mergeFindings(session, args.taskId, args.findings);
+        await store.saveSession(args.runId, merged.session);
+        return merged;
+      });
 
       const outstanding = result.session.tasks.filter((t) => !t.reported);
       if (result.refused.length > 0) {
@@ -2016,9 +2023,14 @@ function registerLoopTools(server: FastMCP, deps: ServerDeps): void {
     annotations: { title: 'Freeze the registry and draft', readOnlyHint: false, openWorldHint: false },
     parameters: z.object({ runId: z.string().max(64) }),
     execute: async (args) => {
-      const session = await requireSession(args.runId);
-      const frozen = freezeRegistry(session);
-      await store.saveSession(args.runId, frozen.session);
+      // Under the same lock as `_note`, so a finding cannot race the freeze and
+      // overwrite `frozenAt` after the registry was declared closed.
+      const frozen = await store.admissionLock().run(async () => {
+        const session = await requireSession(args.runId);
+        const result = freezeRegistry(session);
+        await store.saveSession(args.runId, result.session);
+        return result;
+      });
 
       return [
         `## Registry frozen for \`${args.runId}\``,

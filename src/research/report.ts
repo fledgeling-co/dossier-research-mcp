@@ -297,6 +297,11 @@ export function extractCitedUrls(markdown: string): string[] {
 
   for (const m of markdown.matchAll(/<cite\s+url="([^"]+)"/gi)) push(m[1] ?? '');
   for (const m of markdown.matchAll(/\]\((https?:\/\/[^\s)]+)\)/gi)) push(m[1] ?? '');
+  // CommonMark autolinks. `<https://example.com>` is a perfectly ordinary
+  // citation and was excluded by the bare-URL pattern's `(?<![("<])` guard,
+  // which meant a draft could cite a source the local loop never gathered and
+  // still pass the registry check.
+  for (const m of markdown.matchAll(/<(https?:\/\/[^\s<>]+)>/gi)) push(m[1] ?? '');
   for (const m of markdown.matchAll(/(?<![("<])\bhttps?:\/\/[^\s<>"'|)\]]+/gi)) push(m[0]);
 
   return out;

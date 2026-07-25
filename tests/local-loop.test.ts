@@ -168,3 +168,21 @@ describe('a draft may cite only what was gathered', () => {
     expect(verdict.unused).toEqual([1, 2]);
   });
 });
+
+describe('the draft check sees every citation form', () => {
+  const gathered = (): Session =>
+    freezeRegistry(mergeFindings(session(), 't1', [finding('https://a.com/1')]).session).session;
+
+  it('catches a CommonMark autolink to a source that was never gathered', () => {
+    // `<https://invented.example>` is an ordinary citation and was excluded by
+    // the bare-URL guard, so it slipped past the one check the whole loop
+    // exists to perform.
+    const verdict = validateDraft(gathered(), 'A claim <https://invented.example/paper> supports it.');
+    expect(verdict.ok).toBe(false);
+    expect(verdict.unregistered).toContain('https://invented.example/paper');
+  });
+
+  it('accepts an autolink to a source that WAS gathered', () => {
+    expect(validateDraft(gathered(), 'A claim <https://a.com/1> supports it.').ok).toBe(true);
+  });
+});

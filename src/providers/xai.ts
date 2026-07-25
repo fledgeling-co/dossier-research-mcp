@@ -107,7 +107,9 @@ export function xaiProvider(config: Config): ResearchProvider {
     followUp: true,
     dateFilter: 'range',
     domainFilter: 5,
-    corpus: 'collections',
+    // Same as OpenAI: xAI collections are real and unwired here, and the
+    // create body carries only web and X search.
+    corpus: 'none',
     // The whole reason this provider exists.
     socialSources: ['x'],
     structuredOutput: true,
@@ -117,6 +119,7 @@ export function xaiProvider(config: Config): ResearchProvider {
       'No editable plan before spending.',
       'The run happens INSIDE the create call: `deferred` is accepted and ignored, so a long investigation can outlive the HTTP timeout. Suits fast, broad questions rather than hour-long ones.',
       'Domain filtering caps at 5, against Perplexity 20 and OpenAI 100.',
+      'Private-corpus grounding is NOT wired up here yet, though xAI has collections. Use Gemini for corpus work.',
       'Fast and broad rather than careful: roughly 10x faster than a deep-research API and 3x the pages, which suits finding things more than concluding them.',
       'allowHandles and excludeHandles are mutually exclusive; setting both is an error, not a merge.',
     ],

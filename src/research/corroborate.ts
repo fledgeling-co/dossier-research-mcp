@@ -85,7 +85,16 @@ export function registrableDomain(raw: string): string {
 export function assessSupport(claims: readonly ProviderClaim[]): CorroborationVerdict {
   const providers = [...new Set(claims.map((c) => c.provider))];
   const domains = new Set<string>();
-  for (const c of claims) for (const u of c.urls) domains.add(registrableDomain(canonicaliseUrl(u)));
+  for (const c of claims) {
+    for (const u of c.urls) {
+      // Model output, so "unknown", "N/A" and "source unavailable" all arrive
+      // here looking like sources. Counted as domains, three of those made a
+      // claim `corroborated` on the strength of three admissions that there
+      // was no source. Only a resolvable http(s) URL counts.
+      if (!isHttpUrl(u)) continue;
+      domains.add(registrableDomain(canonicaliseUrl(u)));
+    }
+  }
 
   const independentDomains = domains.size;
   const text = claims[0]?.text ?? '';
@@ -123,6 +132,16 @@ export function assessSupport(claims: readonly ProviderClaim[]): CorroborationVe
         }
       : {}),
   };
+}
+
+/** Is this a real http(s) URL, rather than a model's way of saying "none"? */
+export function isHttpUrl(raw: string): boolean {
+  try {
+    const url = new URL(raw.trim());
+    return (url.protocol === 'http:' || url.protocol === 'https:') && url.hostname.includes('.');
+  } catch {
+    return false;
+  }
 }
 
 /** A crude wire-story detector: near-identical claim text across providers. */

@@ -98,7 +98,11 @@ export function openAiProvider(config: Config): ResearchProvider {
     followUp: true,
     dateFilter: 'none',
     domainFilter: 100,
-    corpus: 'vector-store',
+    // Advertised `vector-store` while the create body carried only web
+    // search, so routing sent corpus work to a backend that ignored it. It is
+    // a real OpenAI capability and an unimplemented one here; saying `none`
+    // until the wiring exists is the difference between a gap and a lie.
+    corpus: 'none',
     socialSources: [],
     structuredOutput: true,
     fileOutput: true,
@@ -107,7 +111,7 @@ export function openAiProvider(config: Config): ResearchProvider {
       'No editable plan before spending. The ChatGPT product has one; the API does not.',
       'Never asks clarifying questions: it expects a fully-formed prompt and will not ask for context.',
       'No date filter; recency goes in the prompt and is not enforced.',
-      'Vector stores are capped at two per request.',
+      'Private-corpus grounding is NOT wired up here yet, though the API supports vector stores. Use Gemini for corpus work.',
     ],
   };
 

@@ -189,10 +189,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     stallMinutes: e.DOSSIER_STALL_MINUTES,
     utilityModel: e.DOSSIER_UTILITY_MODEL || DEFAULT_UTILITY_MODEL,
     httpPort: e.DOSSIER_HTTP_PORT,
-    httpTokens: (e.DOSSIER_HTTP_TOKENS || '')
-      .split(',')
-      .map((t) => t.trim())
-      .filter(Boolean),
+    httpTokens: assertStrongTokens(
+      (e.DOSSIER_HTTP_TOKENS || '')
+        .split(',')
+        .map((t) => t.trim())
+        .filter(Boolean),
+    ),
     httpAllowAnonymous: e.DOSSIER_HTTP_ALLOW_ANONYMOUS,
     localCorpusDirs: (e.DOSSIER_LOCAL_CORPUS_DIRS || '')
       .split(/[:,]/)
@@ -215,6 +217,28 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
  * once means the server can say it at start-up, in `research://capabilities`,
  * and in the tool that would otherwise fail confusingly.
  */
+/**
+ * A bearer token guards a network surface that spends money, so it needs
+ * entropy rather than merely a constant-time comparison.
+ *
+ * `DOSSIER_HTTP_TOKENS=a` was accepted, and comparing one character in constant
+ * time does not make it any harder to guess. Refused at startup rather than
+ * warned about, on the same principle as the boolean parser: a control that
+ * fails open on a typo is not a control.
+ */
+const MIN_TOKEN_LENGTH = 24;
+
+function assertStrongTokens(tokens: readonly string[]): readonly string[] {
+  const weak = tokens.filter((t) => t.length < MIN_TOKEN_LENGTH);
+  if (weak.length > 0) {
+    throw new Error(
+      `Invalid environment configuration — DOSSIER_HTTP_TOKENS contains ${String(weak.length)} token(s) shorter than ${String(MIN_TOKEN_LENGTH)} characters. ` +
+        'This token authenticates a surface that can spend money; generate one with `openssl rand -base64 32`.',
+    );
+  }
+  return tokens;
+}
+
 export function backendLimitations(config: Config): readonly string[] {
   if (config.auth.mode !== 'vertex') return [];
   return [

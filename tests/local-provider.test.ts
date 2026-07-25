@@ -56,7 +56,9 @@ beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'dossier-localbin-'));
   store = await mkdtemp(join(tmpdir(), 'dossier-localstore-'));
   originalPath = process.env['PATH'];
-  process.env['PATH'] = dir;
+  // The fake bin dir first, then the real system paths: resolution still finds
+  // our fake, and the fake's own shell can still find `sleep` and friends.
+  process.env['PATH'] = `${dir}:/bin:/usr/bin`;
   config = { ...loadConfig({ DOSSIER_STORE_DIR: store }), storeDir: store, hermetic: false };
 });
 
@@ -196,4 +198,49 @@ describe('the local CLI backend', () => {
     expect(estimate.cost.highUsd).toBe(0);
     expect(estimate.cost.basis).toMatch(/subscription/);
   });
+});
+
+describe('the supervisor bounds what the CLI can do', () => {
+  it('truncates a runaway CLI and says so, rather than filling the store', async () => {
+    // A chatty CLI could otherwise write until the disk gave out, and a silent
+    // truncation reads as "that was the whole report".
+    // Comfortably past the 8 MB cap: 300k lines of 100 bytes is ~30 MB.
+    const line = 'a'.repeat(99);
+    await fakeCli(`i=0; while [ $i -lt 300000 ]; do echo "${line}"; i=$((i+1)); done`);
+    const client = localProvider({ ...config, storeDir: store }).client();
+    const started = await client.createRun({
+      prompt: 'q',
+      tier: 'fast',
+      collaborativePlanning: false,
+      thinkingSummaries: false,
+      visualization: false,
+      tools: [],
+    });
+    const done = await settled(client, started.interactionId, 30_000);
+    expect(done.markdown.length).toBeLessThan(12 * 1024 * 1024);
+    expect(done.markdown).toContain('output truncated');
+  }, 60_000);
+
+  it('refuses to record a cancellation it could not confirm', async () => {
+    // Writing the sidecar straight after SIGTERM declared a run finished while
+    // it was still running and still consuming quota.
+    await fakeCli('trap "" TERM; sleep 30');
+    const client = localProvider({ ...config, storeDir: store }).client();
+    const started = await client.createRun({
+      prompt: 'q',
+      tier: 'fast',
+      collaborativePlanning: false,
+      thinkingSummaries: false,
+      visualization: false,
+      tools: [],
+    });
+    await new Promise((r) => setTimeout(r, 300));
+    // The contract: cancel returns only once the process is actually gone, and
+    // the terminal state is recorded after that rather than on the strength of
+    // having sent a signal.
+    await client.cancelRun(started.interactionId);
+    const after = await client.getRun(started.interactionId);
+    expect(after.status).toBe('failed');
+    expect(after.error).toMatch(/cancelled/);
+  }, 30_000);
 });

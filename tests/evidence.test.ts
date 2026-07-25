@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { assessSupport } from '../src/research/corroborate.js';
 import {
   buildRegistry,
   classifySource,
@@ -136,5 +137,27 @@ describe('the search trace records what was asked, not a promise to repeat it', 
     expect(rendered).toMatch(/Enforced by the backend: recency filter: year/);
     expect(rendered).toMatch(/prompt only: only use sources published within the last 90d/);
     expect(rendered).toMatch(/not guaranteed to reproduce/);
+  });
+});
+
+describe('a model saying "no source" is not a source', () => {
+  it('refuses to count unknown, N/A and prose as independent domains', () => {
+    // Three admissions that there was no source used to become three distinct
+    // "domains" and graded the claim `corroborated`.
+    const v = assessSupport([
+      { provider: 'a', text: 'Revenue grew 12%', urls: ['unknown'] },
+      { provider: 'b', text: 'Revenue grew 12%', urls: ['N/A'] },
+      { provider: 'c', text: 'Revenue grew 12%', urls: ['source unavailable'] },
+    ]);
+    expect(v.independentDomains).toBe(0);
+    expect(v.support).toBe('unsupported');
+  });
+
+  it('still counts real URLs beside the noise', () => {
+    const v = assessSupport([
+      { provider: 'a', text: 'x', urls: ['unknown', 'https://a.com/1'] },
+      { provider: 'b', text: 'x', urls: ['https://b.org/2'] },
+    ]);
+    expect(v.independentDomains).toBe(2);
   });
 });

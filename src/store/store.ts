@@ -134,13 +134,24 @@ export class Store {
    * aborting the whole listing (skip-not-fatal, CP §1) — one hand-edited file
    * must not make the index unreadable.
    */
-  async listRuns(): Promise<RunRecord[]> {
-    let names: string[];
+  /**
+   * Enumerate the run directory, distinguishing "empty" from "unreadable".
+   *
+   * Both used to collapse to zero, and zero is the answer that opens the gate:
+   * dedupe sees no existing work and concurrency sees no runs in flight. A
+   * directory that has become non-enumerable must abort admission, not widen it.
+   */
+  private async readRunDir(): Promise<string[]> {
     try {
-      names = await readdir(join(this.root, 'runs'));
-    } catch {
-      return [];
+      return await readdir(join(this.root, 'runs'));
+    } catch (e: unknown) {
+      if ((e as { code?: string }).code === 'ENOENT') return [];
+      throw e;
     }
+  }
+
+  async listRuns(): Promise<RunRecord[]> {
+    const names = await this.readRunDir();
     const out: RunRecord[] = [];
     for (const name of names) {
       if (!name.endsWith('.json')) continue;
@@ -160,12 +171,7 @@ export class Store {
    * they are absent.
    */
   async unreadableRunCount(): Promise<number> {
-    let names: string[];
-    try {
-      names = await readdir(join(this.root, 'runs'));
-    } catch {
-      return 0;
-    }
+    const names = await this.readRunDir();
     let bad = 0;
     for (const name of names) {
       if (!name.endsWith('.json')) continue;

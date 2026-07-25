@@ -300,7 +300,16 @@ describe('config', () => {
   });
 
   it('parses the HTTP token list', () => {
-    expect(loadConfig({ DOSSIER_HTTP_TOKENS: 'a, b ,,c' }).httpTokens).toEqual(['a', 'b', 'c']);
+    const a = 'a'.repeat(32);
+    const b = 'b'.repeat(32);
+    expect(loadConfig({ DOSSIER_HTTP_TOKENS: `${a}, ${b} ,,` }).httpTokens).toEqual([a, b]);
+  });
+
+  it('refuses a token too short to be worth comparing in constant time', () => {
+    // `DOSSIER_HTTP_TOKENS=a` guarded a money-spending network surface with one
+    // guess. Comparing one character in constant time does not help.
+    expect(() => loadConfig({ DOSSIER_HTTP_TOKENS: 'a, b ,,c' })).toThrow(/shorter than 24/);
+    expect(() => loadConfig({ DOSSIER_HTTP_TOKENS: 'openssl-would-give-you-something-like-this' })).not.toThrow();
   });
 });
 
