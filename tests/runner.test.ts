@@ -283,3 +283,49 @@ describe('durability', () => {
     expect(runs.map((r) => r.id)).toEqual([run.id]);
   });
 });
+
+describe('store schema backward compatibility', () => {
+  it('reads a record written by an older version, defaulting the new fields', async () => {
+    // The store is on disk and survives upgrades, so every field added to
+    // RunRecordSchema is a migration. A record written before the streaming
+    // fields existed must still parse, or an upgrade silently loses a user's
+    // whole run history: `getRun` returns null on a parse failure and
+    // `listRuns` skips it, so the failure mode is disappearance, not an error.
+    const { writeFile, mkdir } = await import('node:fs/promises');
+    await mkdir(join(dir, 'runs'), { recursive: true });
+    const legacy = {
+      id: 'dr_legacy00001',
+      interactionId: 'int_old',
+      state: 'completed',
+      tier: 'fast',
+      archetype: 'technical',
+      question: 'q',
+      prompt: 'p',
+      promptWasPreEngineered: false,
+      fingerprint: 'fp',
+      createdAt: '2026-07-25T00:00:00.000Z',
+      updatedAt: '2026-07-25T00:00:00.000Z',
+      lastProgressAt: '2026-07-25T00:00:00.000Z',
+      completedAt: '2026-07-25T00:10:00.000Z',
+      estimatedCostUsd: 2,
+      tags: [],
+      planApproved: true,
+      reportChars: 1200,
+      sourceCount: 30,
+      imageCount: 0,
+      toolsUsed: ['google_search'],
+      corpusStores: [],
+    };
+    await writeFile(join(dir, 'runs', 'dr_legacy00001.json'), JSON.stringify(legacy));
+
+    const read = await store.getRun('dr_legacy00001');
+    expect(read, 'a pre-upgrade record must still parse').not.toBeNull();
+    expect(read?.sourceCount).toBe(30);
+    // Fields added since default rather than failing the parse.
+    expect(read?.reasoningSteps).toBe(0);
+    expect(read?.streamedChars).toBe(0);
+    expect(read?.streamAbandoned).toBe(false);
+    // And it is still visible in the index, which is where disappearance shows.
+    expect((await store.listRuns()).map((r) => r.id)).toContain('dr_legacy00001');
+  });
+});
