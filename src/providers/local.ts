@@ -6,7 +6,7 @@ import type { Config } from '../config.js';
 import type { CreateRunArgs, DeepResearchClient } from '../gemini/client.js';
 import type { CostBand, DurationOptions } from '../gemini/cost.js';
 import type { InteractionSnapshot } from '../gemini/types.js';
-import { adapterFor, CLI_ADAPTERS, resolveOnPath, type CliAdapter } from '../local/cli.js';
+import { adapterFor, CLI_ADAPTERS, probeCli, resolveOnPath, type CliAdapter } from '../local/cli.js';
 import type { Capabilities, CredentialStatus, ProviderEstimate, ResearchProvider } from './types.js';
 
 /**
@@ -125,9 +125,25 @@ export function localProvider(config: Config): ResearchProvider {
   const pidPath = (id: string): string => join(dir, `${id}.pid.json`);
 
   const client: DeepResearchClient = {
-    createRun(args: CreateRunArgs): Promise<InteractionSnapshot> {
+    async createRun(args: CreateRunArgs): Promise<InteractionSnapshot> {
       if (!adapter) throw new Error('No supported research CLI found on PATH.');
-      const bin = resolveOnPath(adapter.bin);
+      // Identity is confirmed HERE, not only in `research_doctor`. Detection
+      // is sync and can only see that a name resolves; this is the last point
+      // before a brief is handed to whatever that name happens to be today,
+      // and on a machine where one installer symlinks over another's binary
+      // that changes between one run and the next.
+      const status = await probeCli(adapter);
+      if (status.state === 'absent') {
+        throw new Error(`\`${adapter.bin}\` is no longer on PATH.`);
+      }
+      if (status.state === 'ambiguous') {
+        throw new Error(
+          `Refusing to run \`${adapter.bin}\`: ${status.detail} ` +
+            'Handing your brief to a different vendor\'s tool is a different bill and a different privacy posture, so an unidentified binary is never used. ' +
+            'Set DOSSIER_LOCAL_CLI to a backend you have verified with `research_doctor`.',
+        );
+      }
+      const bin = status.path ?? resolveOnPath(adapter.bin);
       if (!bin) throw new Error(`\`${adapter.bin}\` is no longer on PATH.`);
 
       mkdirSync(dir, { recursive: true, mode: 0o700 });
@@ -148,13 +164,13 @@ export function localProvider(config: Config): ResearchProvider {
         { mode: 0o600 },
       );
 
-      return Promise.resolve({
+      return {
         interactionId: id,
         status: 'in_progress',
         markdown: '',
         thoughts: [],
         images: [],
-      });
+      };
     },
 
     getRun(interactionId: string): Promise<InteractionSnapshot> {

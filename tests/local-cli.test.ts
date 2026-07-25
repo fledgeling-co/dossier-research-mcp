@@ -149,3 +149,22 @@ describe('the shipped adapters', () => {
     }
   });
 });
+
+describe('path provenance is directory provenance', () => {
+  it('does not accept a binary because its own filename matches the hint', async () => {
+    // `pathHints: ['claude']` matched against the full path is satisfied by the
+    // binary being called `claude`, which is the one fact already known. So a
+    // hostile `claude` on PATH printing anything at all would have been
+    // "identified by install path". Hints are matched against the directory.
+    await fakeBin('faketool', 'not a real product');
+    const byOwnName = await probeCli(adapter({ identity: null, pathHints: ['faketool'] }));
+    expect(byOwnName.state).toBe('ambiguous');
+  });
+
+  it('accepts a binary living in the vendor’s own directory', async () => {
+    await fakeBin('faketool', 'not a real product');
+    // The temp directory stands in for `~/.grok/` or `~/.codex/`.
+    const byDir = await probeCli(adapter({ identity: null, pathHints: ['dossier-cli-'] }));
+    expect(byDir.state).toBe('present-unauthed');
+  });
+});

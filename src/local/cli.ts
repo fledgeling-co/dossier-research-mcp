@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process';
 import { accessSync, constants } from 'node:fs';
 import { access, realpath } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { delimiter, join, resolve } from 'node:path';
+import { delimiter, dirname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 
 const run = promisify(execFile);
@@ -54,7 +54,14 @@ export interface CliAdapter {
    * provenance.
    */
   readonly identity: RegExp | null;
-  /** Absolute-path fragments that identify the vendor when the version cannot. */
+  /**
+   * Directory fragments that identify the vendor when the version cannot.
+   *
+   * Matched against the *directory* the binary resolves into, never the whole
+   * path: a hint of `claude` matched against the full path is satisfied by the
+   * binary being named `claude`, which is the one thing already known and
+   * proves nothing.
+   */
   readonly pathHints: readonly string[];
   /** Config paths whose *presence* implies authentication. Never read. */
   readonly authPaths: readonly string[];
@@ -75,7 +82,7 @@ export const CLI_ADAPTERS: readonly CliAdapter[] = [
     bin: 'claude',
     versionArgs: ['--version'],
     identity: /claude code/i,
-    pathHints: ['.claude', 'claude'],
+    pathHints: ['/claude/', '/.claude/'],
     authPaths: [home('.claude.json'), home('.claude')],
     headless: (prompt) => ['-p', prompt],
     billing:
@@ -89,7 +96,7 @@ export const CLI_ADAPTERS: readonly CliAdapter[] = [
     bin: 'codex',
     versionArgs: ['--version'],
     identity: /codex/i,
-    pathHints: ['.codex', 'codex'],
+    pathHints: ['/.codex/', '/codex/'],
     authPaths: [home('.codex', 'auth.json'), home('.codex')],
     headless: (prompt) => ['exec', '--search', prompt],
     billing:
@@ -101,7 +108,7 @@ export const CLI_ADAPTERS: readonly CliAdapter[] = [
     bin: 'agy',
     versionArgs: ['--version'],
     identity: /agy|antigravity/i,
-    pathHints: ['.local/bin', 'agy'],
+    pathHints: ['/.gemini/', '/agy/'],
     authPaths: [home('.gemini', 'antigravity-cli', 'settings.json'), home('.gemini', 'antigravity-cli')],
     headless: (prompt) => ['-p', prompt],
     billing:
@@ -113,10 +120,18 @@ export const CLI_ADAPTERS: readonly CliAdapter[] = [
     label: 'Grok Build (xAI)',
     bin: 'grok',
     versionArgs: ['--version'],
-    identity: /grok[- ]build|xai/i,
-    // The third-party `grok-dev` package claims the same name and needs its own
-    // key, so provenance under ~/.grok is what distinguishes xAI's build.
-    pathHints: ['.grok/bin'],
+    // Reports `grok 0.2.112 (9bbd559437aa)`: the product name and nothing that
+    // separates it from the third-party npm package of the same name, which
+    // would print something similar. Verified against a real install on
+    // 25 July 2026, and it is why the earlier `/grok[- ]build|xai/` pattern was
+    // wrong: it matched the documentation rather than the binary, and reported
+    // the genuine xAI CLI as unidentifiable.
+    //
+    // So identity comes from provenance instead, exactly as it does for Cursor.
+    identity: null,
+    // The installer symlinks through `~/.grok`; resolving the link lands in
+    // `~/.grok/downloads/`, so the hint is the config home rather than `bin`.
+    pathHints: ['/.grok/'],
     authPaths: [home('.grok', 'auth.json')],
     headless: (prompt) => ['-p', prompt],
     billing:
@@ -131,7 +146,7 @@ export const CLI_ADAPTERS: readonly CliAdapter[] = [
     // Reports `2026.07.17-3e2a980`: a date and a hash, naming nothing. Identity
     // has to come from the path, which is why `ambiguous` exists as a state.
     identity: null,
-    pathHints: ['.local/bin', 'cursor'],
+    pathHints: ['/cursor-agent/', '/.cursor/'],
     authPaths: [home('.cursor'), home('.local', 'share', 'cursor-agent')],
     headless: (prompt) => ['-p', '--force', prompt],
     billing: 'Covered by a Cursor subscription with plan-level pools (verified 25 July 2026).',
@@ -142,7 +157,7 @@ export const CLI_ADAPTERS: readonly CliAdapter[] = [
     bin: 'gemini',
     versionArgs: ['--version'],
     identity: /\d+\.\d+/,
-    pathHints: ['gemini'],
+    pathHints: ['/gemini/', '/.gemini/'],
     // API key only: there is no subscription auth file to look for.
     authPaths: [],
     headless: (prompt) => ['-p', prompt],
@@ -214,7 +229,7 @@ export async function probeCli(adapter: CliAdapter, timeoutMs = 4_000): Promise<
   }
 
   const identified = adapter.identity ? adapter.identity.test(version) : false;
-  const byPath = adapter.pathHints.some((hint) => real.includes(hint));
+  const byPath = adapter.pathHints.some((hint) => dirname(real).includes(hint));
   if (!identified && !byPath) {
     return {
       ...base,

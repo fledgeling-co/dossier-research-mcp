@@ -19,10 +19,16 @@ let store: string;
 let originalPath: string | undefined;
 let config: Config;
 
-/** A fake CLI that prints a report and exits with the code we choose. */
+/**
+ * A fake CLI that prints a report and exits with the code we choose.
+ *
+ * It answers `--version` as Claude Code, because the provider confirms identity
+ * before it spawns anything. A fake that cannot identify itself is a separate
+ * test, below.
+ */
 async function fakeCli(body: string): Promise<void> {
   const path = join(dir, 'claude');
-  await writeFile(path, body);
+  await writeFile(path, `#!/bin/sh\nif [ "$1" = "--version" ]; then echo "2.1.220 (Claude Code)"; exit 0; fi\n${body}\n`);
   await chmod(path, 0o755);
 }
 
@@ -75,14 +81,14 @@ describe('the local CLI backend', () => {
   });
 
   it('never claims ready from a binary on PATH alone', async () => {
-    await fakeCli('#!/bin/sh\necho hi\n');
+    await fakeCli('echo hi');
     // Presence is not identity and is not a signed-in session; `research_doctor`
     // is where that gets checked, and it can say so per CLI.
     expect(localProvider(config).detect().state).toBe('configured-unverified');
   });
 
   it('runs a brief and returns what the CLI wrote', async () => {
-    await fakeCli('#!/bin/sh\necho "# Report"\necho "The answer is 42."\n');
+    await fakeCli('echo "# Report"; echo "The answer is 42."');
     const client = localProvider(config).client();
     const started = await client.createRun({
       prompt: 'what is the answer?',
@@ -99,7 +105,7 @@ describe('the local CLI backend', () => {
   });
 
   it('reports a non-zero exit as a failure, with the code', async () => {
-    await fakeCli('#!/bin/sh\necho "partial output"\nexit 7\n');
+    await fakeCli('echo "partial output"; exit 7');
     const client = localProvider(config).client();
     const started = await client.createRun({
       prompt: 'q',
@@ -118,7 +124,7 @@ describe('the local CLI backend', () => {
   });
 
   it('survives the observing process being a different one', async () => {
-    await fakeCli('#!/bin/sh\necho "durable output"\n');
+    await fakeCli('echo "durable output"');
     const first = localProvider(config).client();
     const started = await first.createRun({
       prompt: 'q',
@@ -139,7 +145,7 @@ describe('the local CLI backend', () => {
   it('does not let a brief reach a shell', async () => {
     // The injection case. If the prompt were interpolated into a shell command,
     // this would create the file; as an argv element it is just text.
-    await fakeCli('#!/bin/sh\necho "$@"\n');
+    await fakeCli('echo "$@"');
     const canary = join(store, 'pwned.txt');
     const client = localProvider(config).client();
     const started = await client.createRun({
@@ -156,11 +162,33 @@ describe('the local CLI backend', () => {
   });
 
   it('refuses a follow-up rather than silently buying a second run', async () => {
-    await fakeCli('#!/bin/sh\necho hi\n');
+    await fakeCli('echo hi');
     const client = localProvider(config).client();
     expect(() => client.followUp({ question: 'why?', previousInteractionId: 'x', model: 'm' })).toThrow(
       /no follow-up turn/,
     );
+  });
+
+  it('refuses to spawn a binary it cannot identify', async () => {
+    // The collision, and it is not hypothetical: installing the xAI CLI on this
+    // machine replaced `~/.local/bin/agent`, which an hour earlier had been
+    // Cursor's, with a symlink to xAI's binary. Detection is sync and can only
+    // see that a name resolves; this is the last check before a brief is handed
+    // to whatever that name happens to be today.
+    const path = join(dir, 'claude');
+    await writeFile(path, '#!/bin/sh\necho "some-other-vendor 1.0"\n');
+    await chmod(path, 0o755);
+    const client = localProvider(config).client();
+    await expect(
+      client.createRun({
+        prompt: 'q',
+        tier: 'fast',
+        collaborativePlanning: false,
+        thinkingSummaries: false,
+        visualization: false,
+        tools: [],
+      }),
+    ).rejects.toThrow(/Refusing to run/);
   });
 
   it('costs nothing, and says what it does consume', () => {

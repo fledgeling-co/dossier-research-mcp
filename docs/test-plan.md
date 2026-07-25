@@ -144,7 +144,9 @@ Acceptance criteria are taken from the README's tool contracts and the tool desc
 | **LOCAL-03** | Dotfiles, credential directories and dependency trees are skipped unread | unit: `local-corpus` | ✓ |
 | **LOCAL-04** | The query is a literal, never a caller-supplied regular expression | unit: `local-corpus` | ✓ |
 | **LOCAL-05** | A missing granted directory is reported, not thrown | unit: `local-corpus` | ✓ |
-| **CLI-01** | A binary of the right name reporting the wrong product is refused, not run | unit: `local-cli` | ✓ |
+| **CLI-01** | A binary of the right name reporting the wrong product is refused, not run | unit: `local-cli`, `local-provider` | ✓ |
+| **CLI-09** | Identity is re-confirmed at spawn time, not only in the doctor | unit: `local-provider` | ✓ |
+| **CLI-10** | Path provenance is matched against the directory, never the binary's own name | unit: `local-cli` | ✓ |
 | **CLI-02** | A tool that names nothing in its version is identified by install path, or reported ambiguous | unit: `local-cli` | ✓ |
 | **CLI-03** | `ready` needs identity AND a sign-in file; presence alone is not enough | unit: `local-cli` | ✓ |
 | **CLI-04** | Every shipped subscription claim is dated, sourced, or marked unconfirmed | unit: `local-cli` | ✓ |
