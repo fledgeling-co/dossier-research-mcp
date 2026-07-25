@@ -125,7 +125,7 @@ export async function safeFetch(
       headers: {
         // Identify honestly; some publishers block unlabelled clients and a
         // 403 would otherwise read as a dead citation.
-        'user-agent': 'dossier-mcp/0.1 (+https://github.com/fledgeling-co/dossier)',
+        'user-agent': 'dossier-research-mcp/0.1 (+https://github.com/fledgeling-co/dossier-research-mcp)',
         accept: 'text/html,application/xhtml+xml,application/pdf;q=0.9,*/*;q=0.8',
       },
     });

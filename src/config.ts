@@ -105,7 +105,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
 
   return {
     auth,
-    storeDir: e.DOSSIER_STORE_DIR || join(homedir(), '.dossier-mcp'),
+    storeDir: e.DOSSIER_STORE_DIR || join(homedir(), '.dossier-research-mcp'),
     budgetUsd: e.DOSSIER_BUDGET_USD,
     budgetWindowHours: e.DOSSIER_BUDGET_WINDOW_HOURS,
     maxConcurrent: e.DOSSIER_MAX_CONCURRENT,

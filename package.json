@@ -1,5 +1,5 @@
 {
-  "name": "dossier-mcp",
+  "name": "dossier-research-mcp",
   "version": "0.1.0",
   "description": "Dossier \u2014 Google Gemini Deep Research as an MCP server. Durable background runs, spend control, context-safe report reading, citation verification, and private-corpus grounding.",
   "type": "module",
@@ -7,11 +7,11 @@
   "author": "fledgeling-co",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/fledgeling-co/dossier.git"
+    "url": "git+https://github.com/fledgeling-co/dossier-research-mcp.git"
   },
-  "homepage": "https://github.com/fledgeling-co/dossier#readme",
+  "homepage": "https://github.com/fledgeling-co/dossier-research-mcp#readme",
   "bugs": {
-    "url": "https://github.com/fledgeling-co/dossier/issues"
+    "url": "https://github.com/fledgeling-co/dossier-research-mcp/issues"
   },
   "keywords": [
     "mcp",
@@ -29,7 +29,7 @@
   },
   "bin": {
     "dossier": "dist/index.js",
-    "dossier-mcp": "dist/index.js"
+    "dossier-research-mcp": "dist/index.js"
   },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -59,7 +59,10 @@
     "inspect": "npm run build && npx fastmcp inspect dist/index.js",
     "gate": "npm run typecheck && npm run lint && npm run test && npm run build",
     "prepublishOnly": "npm run build",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "preversion": "npm run gate",
+    "version": "node scripts/sync-version.mjs && git add src/version.ts",
+    "postversion": "git push --follow-tags"
   },
   "dependencies": {
     "@ai-sdk/google": "^4.0.24",
@@ -82,5 +85,9 @@
   },
   "overrides": {
     "@hono/node-server": "^2.0.5"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
   }
 }

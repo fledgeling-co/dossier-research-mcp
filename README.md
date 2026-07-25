@@ -4,7 +4,7 @@
 
 <br>
 
-[![npm](https://img.shields.io/npm/v/dossier-mcp?color=C8321F&labelColor=1B1513)](https://www.npmjs.com/package/dossier-mcp)
+[![npm](https://img.shields.io/npm/v/dossier-research-mcp?color=C8321F&labelColor=1B1513)](https://www.npmjs.com/package/dossier-research-mcp)
 [![node](https://img.shields.io/badge/node-%E2%89%A520.11-1B1513?labelColor=1B1513&color=C8321F)](https://nodejs.org)
 [![MCP](https://img.shields.io/badge/MCP-2025--06--18-1B1513?labelColor=1B1513&color=C8321F)](https://modelcontextprotocol.io)
 [![tests](https://img.shields.io/badge/tests-95%20hermetic-1B1513?labelColor=1B1513&color=C8321F)](#development)
@@ -14,13 +14,13 @@
 Your runs survive a dropped connection. Your budget survives a retry loop.<br>Your context window survives the report.
 
 ```bash
-npx dossier-mcp
+npx dossier-research-mcp
 ```
 
 </div>
 
 > [!NOTE]
-> **Not on npm yet.** `npx dossier-mcp` works once it's published; until then install [from source](#install), which is two commands. The npm badge above will 404 in the meantime.
+> **Not on npm yet.** `npx dossier-research-mcp` works once it's published; until then install [from source](#install), which is two commands. The npm badge above will 404 in the meantime.
 
 ---
 
@@ -72,7 +72,7 @@ flowchart LR
 <br>
 
 ```bash
-git clone https://github.com/fledgeling-co/dossier.git
+git clone https://github.com/fledgeling-co/dossier-research-mcp.git
 cd dossier && npm install && npm run build
 
 # then point any MCP client at it
@@ -87,7 +87,7 @@ claude mcp add dossier -e GEMINI_API_KEY=your-key -- node "$PWD/dist/index.js"
 <br>
 
 ```bash
-claude mcp add dossier -e GEMINI_API_KEY=your-key -- npx -y dossier-mcp
+claude mcp add dossier -e GEMINI_API_KEY=your-key -- npx -y dossier-research-mcp
 ```
 
 </details>
@@ -102,7 +102,7 @@ claude mcp add dossier -e GEMINI_API_KEY=your-key -- npx -y dossier-mcp
   "mcpServers": {
     "dossier": {
       "command": "npx",
-      "args": ["-y", "dossier-mcp"],
+      "args": ["-y", "dossier-research-mcp"],
       "env": {
         "GEMINI_API_KEY": "your-key-here",
         "DOSSIER_BUDGET_USD": "25"
@@ -121,7 +121,7 @@ claude mcp add dossier -e GEMINI_API_KEY=your-key -- npx -y dossier-mcp
 
 ```bash
 DOSSIER_HTTP_TOKENS=$(openssl rand -hex 32) \
-  npx dossier-mcp --transport http --port 8787
+  npx dossier-research-mcp --transport http --port 8787
 ```
 
 Streamable HTTP on `/mcp`, SSE on `/sse`, health on `/health`. Bearer tokens are compared in constant time.
@@ -294,7 +294,7 @@ Status reports **liveness separately from state**. A run with no forward progres
 `research_tail` replays the durable journal from a cursor. Pass `{ runId, sinceSeq }`, get events plus the next cursor.
 
 > [!NOTE]
-> **Timing, measured against the live API.** While a run is in flight, `interactions.get` returns only the echoed `user_input` step. The full step list, reasoning summaries included, arrives in one batch at completion; a real run produced 25 of them. So mid-run you see lifecycle events, and reasoning lands at the end. Live reasoning would need the SSE stream, which this server doesn't consume yet ([#1](https://github.com/fledgeling-co/dossier/issues/1)).
+> **Timing, measured against the live API.** While a run is in flight, `interactions.get` returns only the echoed `user_input` step. The full step list, reasoning summaries included, arrives in one batch at completion; a real run produced 25 of them. So mid-run you see lifecycle events, and reasoning lands at the end. Live reasoning would need the SSE stream, which this server doesn't consume yet ([#1](https://github.com/fledgeling-co/dossier-research-mcp/issues/1)).
 
 ### `research_read`
 
@@ -427,7 +427,7 @@ You can get the same framework three other ways without installing anything: the
 |---|---|---|
 | `GEMINI_API_KEY` | | Google AI Studio key |
 | `VERTEX_PROJECT` / `VERTEX_LOCATION` | / `global` | Vertex AI. Takes precedence over the API key |
-| `DOSSIER_STORE_DIR` | `~/.dossier-mcp` | Runs, journals, reports, ledger |
+| `DOSSIER_STORE_DIR` | `~/.dossier-research-mcp` | Runs, journals, reports, ledger |
 | `DOSSIER_BUDGET_USD` | `25` | Hard ceiling per rolling window. `0` turns the gate off |
 | `DOSSIER_BUDGET_WINDOW_HOURS` | `24` | The rolling window |
 | `DOSSIER_MAX_CONCURRENT` | `3` | Runs in flight at once |
@@ -498,7 +498,7 @@ npm run inspect    # MCP Inspector
 Using it as a library:
 
 ```ts
-import { buildPrompt } from 'dossier-mcp/server';
+import { buildPrompt } from 'dossier-research-mcp/server';
 
 const { prompt, archetype, preEngineered } = buildPrompt({
   question: 'What disclosure obligations apply to dual-listed issuers?',
@@ -512,7 +512,7 @@ const { prompt, archetype, preEngineered } = buildPrompt({
 
 <div align="center">
 
-**MIT** © fledgeling-co · [Report an issue](https://github.com/fledgeling-co/dossier/issues)
+**MIT** © fledgeling-co · [Report an issue](https://github.com/fledgeling-co/dossier-research-mcp/issues)
 
 <sub>Dossier isn't affiliated with Google. "Gemini" and "Vertex AI" are trademarks of Google LLC.</sub>
 

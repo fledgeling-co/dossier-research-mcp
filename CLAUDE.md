@@ -19,10 +19,10 @@ Two operating specs govern all code in this repo. Read them before generating co
 
 Check here before "fixing" something that looks non-compliant:
 
-- **No Next.js, no Vercel, no Mongo, no Redis.** This is a stdio/HTTP MCP server distributed on npm. Persistence is a plain atomic-write JSON + JSONL store on the local filesystem (`src/store/`); adding a database would make the server undeployable as `npx dossier-mcp`.
+- **No Next.js, no Vercel, no Mongo, no Redis.** This is a stdio/HTTP MCP server distributed on npm. Persistence is a plain atomic-write JSON + JSONL store on the local filesystem (`src/store/`); adding a database would make the server undeployable as `npx dossier-research-mcp`.
 - **npm, single package, no monorepo** (BP §17); one deployable.
 - **Vitest over Playwright** (BP §15); there is no UI. The equivalent of an E2E test here is the stdio MCP handshake smoke check described below.
-- **No hosted CI** (BP §19). The gate is `npm run gate`, run before pushing.
+- **CI is release-only** (BP §19). The dev loop is still `npm run gate` run locally before pushing; there is no CI on push or PR. `.github/workflows/release.yml` re-runs the same gate on a version tag, because a package that fails its own tests must not reach the registry. Publishing is tag-triggered and never push-triggered.
 - **`oxc: false` in `vitest.config.ts`** is load-bearing: Vitest 4 transforms with Oxc, and unplugin-swc only disables esbuild, so without it swc loads and does nothing.
 - **`exactOptionalPropertyTypes: true`** is on, above the CP §1 baseline. Interfaces fed from Zod-parsed input declare `foo?: T | undefined` explicitly.
 
@@ -79,6 +79,7 @@ npm test           # vitest run; hermetic, swc transform
 npm run build      # tsgo -p tsconfig.build.json → dist/
 npm run gate       # typecheck && lint && test && build; run before pushing
 npm run inspect    # build, then MCP Inspector
+npm version patch  # gate, bump, sync src/version.ts, tag, push. The workflow publishes
 ```
 
 **The quality gate is `npm run gate`, run manually before pushing** (BP §19). Toolchain matches the org's other repos: **tsgo** (`@typescript/native-preview`) compiles and typechecks, **eslint 9** flat + type-aware lints, **vitest** with the **swc** transform tests. `typescript@~6` is present only to satisfy typescript-eslint's peer range; tsgo does the real checking. There is intentionally no hosted CI. Run a single test file with `npx vitest run tests/runner.test.ts`.
@@ -98,6 +99,18 @@ Never write a test that spends money. `DOSSIER_HERMETIC=1` (set in `vitest.confi
 - **Tool descriptions are the agent's only documentation.** A tool that spends money says so in its description and carries `readOnlyHint: false`; a tool that sends data to a third party says that too. Write them for a caller that will read nothing else.
 - **Nothing may follow the final `<core_directive>` in a built prompt.** It is the anti-drift re-anchor and only works because it is last. Appending the corpus-grounding block after it shipped once and made the instruction invisible to the model; a run with the corpus indexed and the tool attached returned a 12,660-token report citing none of it. `tests/prompt.test.ts` locks the ordering.
 - **stdout is the MCP protocol.** Diagnostics go to stderr; a stray `console.log` corrupts the stream on stdio.
+
+## Releasing
+
+`npm version patch|minor|major` is the whole flow. It runs the gate first (so a
+failing build can't produce a tag), syncs `src/version.ts`, commits, tags, and
+pushes with the tag. The tag push triggers `.github/workflows/release.yml`,
+which re-runs the gate, checks the tag matches `package.json`, checks the
+advertised version matches the built one, publishes with npm provenance, and
+cuts a GitHub release.
+
+`workflow_dispatch` runs the same job in dry-run mode (gate and pack, no
+publish) when you want to check the pipeline without spending a version number.
 
 ## Keeping this file honest
 
