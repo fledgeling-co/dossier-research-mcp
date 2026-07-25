@@ -3,7 +3,7 @@ import type { CreateRunArgs, DeepResearchClient, FollowUpArgs } from '../gemini/
 import type { CostBand, DurationOptions } from '../gemini/cost.js';
 import { estimateDuration } from '../gemini/cost.js';
 import type { InteractionSnapshot } from '../gemini/types.js';
-import { retry, retryAfterMs } from '../net/retry.js';
+import { attemptOnceThenSettle, retry, retryAfterMs } from '../net/retry.js';
 import type {
   Capabilities,
   CredentialStatus,
@@ -100,6 +100,31 @@ export function openAiProvider(config: Config): ResearchProvider {
   };
 
   const key = config.openaiApiKey;
+  /**
+   * The paid POST, attempted exactly once.
+   *
+   * Deliberately NOT `request`: that retries four times, and a create that
+   * timed out after OpenAI accepted it would then buy up to four jobs while
+   * Dossier reserved for one and tracked only the last id.
+   */
+  const createOnce = async (path: string, init: RequestInit): Promise<Record<string, unknown>> =>
+    attemptOnceThenSettle(async () => {
+      if (!key) throw new Error('OPENAI_API_KEY is not set.');
+      const res = await fetch(`${API}${path}`, {
+        ...init,
+        headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json', ...(init.headers ?? {}) },
+        signal: AbortSignal.timeout(60_000),
+      });
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        throw Object.assign(new Error(`OpenAI ${res.status}: ${body.slice(0, 400)}`), {
+          status: res.status,
+          headers: res.headers,
+        });
+      }
+      return (await res.json()) as Record<string, unknown>;
+    }, { provider: 'OpenAI' });
+
   const kinds = new Map<string, 'response'>();
 
   const request = async (path: string, init: RequestInit): Promise<Record<string, unknown>> => {
@@ -141,7 +166,7 @@ export function openAiProvider(config: Config): ResearchProvider {
         if (block.length) webSearch['filters'] = { ...(webSearch['filters'] as object), blocked_domains: block };
       }
 
-      const raw = await request('/responses', {
+      const raw = await createOnce('/responses', {
         method: 'POST',
         body: JSON.stringify({
           model: MODEL[args.tier],

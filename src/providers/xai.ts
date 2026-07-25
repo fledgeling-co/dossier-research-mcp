@@ -3,7 +3,7 @@ import type { CreateRunArgs, DeepResearchClient, FollowUpArgs } from '../gemini/
 import type { CostBand, DurationOptions } from '../gemini/cost.js';
 import { estimateDuration } from '../gemini/cost.js';
 import type { InteractionSnapshot } from '../gemini/types.js';
-import { retry, retryAfterMs } from '../net/retry.js';
+import { attemptOnceThenSettle, retry, retryAfterMs } from '../net/retry.js';
 import type {
   Capabilities,
   CredentialStatus,
@@ -131,6 +131,31 @@ export function xaiProvider(config: Config): ResearchProvider {
     );
   };
 
+  /**
+   * The paid POST, attempted exactly once.
+   *
+   * Deliberately NOT `request`: that retries four times, and a create that
+   * timed out after xAI accepted it would then buy up to four jobs while
+   * Dossier reserved for one and tracked only the last id.
+   */
+  const createOnce = async (path: string, init: RequestInit): Promise<Record<string, unknown>> =>
+    attemptOnceThenSettle(async () => {
+      if (!key) throw new Error('XAI_API_KEY is not set.');
+      const res = await fetch(`${API}${path}`, {
+        ...init,
+        headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json', ...(init.headers ?? {}) },
+        signal: AbortSignal.timeout(60_000),
+      });
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        throw Object.assign(new Error(`xAI ${res.status}: ${body.slice(0, 400)}`), {
+          status: res.status,
+          headers: res.headers,
+        });
+      }
+      return (await res.json()) as Record<string, unknown>;
+    }, { provider: 'xAI' });
+
   const buildTools = (opts: XaiOptions): Record<string, unknown>[] => {
     const web: Record<string, unknown> = { type: 'web_search' };
     if (opts.domains?.length) web['allowed_domains'] = opts.domains.slice(0, 5);
@@ -151,7 +176,7 @@ export function xaiProvider(config: Config): ResearchProvider {
   const client: DeepResearchClient = {
     async createRun(args: CreateRunArgs): Promise<InteractionSnapshot> {
       const { prompt, opts } = decodeXaiOptions(args.prompt);
-      const raw = await request('/responses', {
+      const raw = await createOnce('/responses', {
         method: 'POST',
         body: JSON.stringify({
           model: MODEL[args.tier],

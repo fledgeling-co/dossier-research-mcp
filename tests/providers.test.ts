@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { loadConfig } from '../src/config.js';
+import { AmbiguousSpendError } from '../src/net/retry.js';
 import { ProviderRegistry } from '../src/providers/registry.js';
 import { decodeFilters, encodeFilters, perplexityProvider } from '../src/providers/perplexity.js';
 import { extractCitedUrls } from '../src/research/report.js';
@@ -299,4 +300,124 @@ describe('no adapter trusts the case of a status string', () => {
     const snapshot = await parseWith(client, payload);
     expect(snapshot.status).toBe('completed');
   });
+});
+
+describe('a paid create is attempted exactly once', () => {
+  /**
+   * The guarantee this product exists to make. A create that times out after
+   * the provider accepted it has already bought a report; retrying buys a
+   * second one, while Dossier reserves for one and tracks only the last id.
+   * One is a support question, the other is a refund request.
+   */
+  const config = loadConfig({
+    DOSSIER_STORE_DIR: '/tmp/x',
+    PERPLEXITY_API_KEY: 'k',
+    OPENAI_API_KEY: 'k',
+    XAI_API_KEY: 'k',
+  });
+
+  const createArgs = {
+    prompt: 'q',
+    tier: 'fast' as const,
+    collaborativePlanning: false,
+    thinkingSummaries: false,
+    visualization: false,
+    tools: [],
+  };
+
+  /** Count how many times the wire was hit, and fail every attempt. */
+  async function attempts(client: { createRun: (a: typeof createArgs) => Promise<unknown> }, failWith: () => Response | never) {
+    const original = globalThis.fetch;
+    let calls = 0;
+    globalThis.fetch = async () => {
+      calls += 1;
+      return failWith();
+    };
+    try {
+      await client.createRun(createArgs).catch((e: unknown) => e);
+      return calls;
+    } finally {
+      globalThis.fetch = original;
+    }
+  }
+
+  const clients = () => [
+    ['perplexity', perplexityProvider(config).client()] as const,
+    ['openai', openAiProvider(config).client()] as const,
+    ['xai', xaiProvider(config).client()] as const,
+  ];
+
+  it('does not retry a timeout, because the job may already exist', async () => {
+    for (const [name, client] of clients()) {
+      const calls = await attempts(client, () => {
+        throw Object.assign(new Error('The operation was aborted due to timeout'), { name: 'TimeoutError' });
+      });
+      expect(calls, `${name} retried a paid create`).toBe(1);
+    }
+  });
+
+  it('does not retry a 5xx either', async () => {
+    for (const [name, client] of clients()) {
+      const calls = await attempts(client, () => new Response('upstream boom', { status: 503 }));
+      expect(calls, `${name} retried a paid create on 5xx`).toBe(1);
+    }
+  });
+
+  it('reports an unknown outcome as ambiguous spend, not as a plain failure', async () => {
+    const client = perplexityProvider(config).client();
+    const original = globalThis.fetch;
+    globalThis.fetch = async () => {
+      throw new Error('socket hang up');
+    };
+    try {
+      const error = await client.createRun(createArgs).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(AmbiguousSpendError);
+      expect(String(error)).toMatch(/unknown whether a job was created/);
+      expect(String(error)).toMatch(/NOT been retried/);
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
+  it('passes a 4xx straight through, since nothing was created', async () => {
+    const client = perplexityProvider(config).client();
+    const original = globalThis.fetch;
+    let calls = 0;
+    globalThis.fetch = async () => {
+      calls += 1;
+      return new Response('bad request', { status: 400 });
+    };
+    try {
+      const error = await client.createRun(createArgs).catch((e: unknown) => e);
+      expect(calls).toBe(1);
+      // The provider's own message, not an ambiguity warning: a rejected
+      // request is a request the caller can fix.
+      expect(error).not.toBeInstanceOf(AmbiguousSpendError);
+      expect(String(error)).toMatch(/400/);
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
+  it('still retries READS, which are free and worth recovering', async () => {
+    const client = perplexityProvider(config).client();
+    const original = globalThis.fetch;
+    let calls = 0;
+    globalThis.fetch = async () => {
+      calls += 1;
+      return calls < 3
+        ? new Response('flaky', { status: 503 })
+        : new Response(JSON.stringify({ status: 'COMPLETED', response: { choices: [{ message: { content: 'ok' } }] } }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+    };
+    try {
+      const snapshot = await client.getRun('some-id');
+      expect(calls).toBeGreaterThan(1);
+      expect(snapshot.status).toBe('completed');
+    } finally {
+      globalThis.fetch = original;
+    }
+  }, 30_000);
 });

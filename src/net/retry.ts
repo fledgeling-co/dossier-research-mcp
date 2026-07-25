@@ -139,6 +139,66 @@ export async function retry<T>(fn: () => Promise<T>, opts: RetryOptions = {}): P
 }
 
 /**
+ * A charge whose outcome is unknown.
+ *
+ * The provider was reached, the response was not. The job may or may not exist,
+ * and it may or may not bill. That is genuinely worse than a clean failure and
+ * the caller must be able to tell the two apart, because the correct response
+ * is "go and look at the provider console", never "try again".
+ */
+export class AmbiguousSpendError extends Error {
+  readonly code = 'ambiguous_spend' as const;
+  constructor(
+    readonly provider: string,
+    override readonly cause: unknown,
+  ) {
+    super(
+      `The ${provider} request to create a run did not return a usable response, so it is unknown whether a job was created. ` +
+        'It has NOT been retried, because a retry here buys a second report rather than recovering the first. ' +
+        `Check your ${provider} console for an in-flight job before starting another. ` +
+        `Underlying failure: ${cause instanceof Error ? cause.message : String(cause)}`,
+    );
+    this.name = 'AmbiguousSpendError';
+  }
+}
+
+/**
+ * Run a paid creation exactly once, and settle honestly about what happened.
+ *
+ * The counterpart to `retry()` promised at the top of this file, and the reason
+ * it exists: a timed-out `createRun` may well have succeeded, so retrying it
+ * buys a second $7 report. One is a support question and the other is a refund
+ * request, so this prefers the support question every time.
+ *
+ * The distinction it draws is between a request the provider **rejected** and
+ * one whose outcome is **unknown**:
+ *
+ * - A 4xx is a rejection. Nothing was created, nothing bills, and the caller
+ *   gets the provider's own error unchanged so it can fix the request.
+ * - A timeout, a dropped connection or a 5xx is unknown. The request may have
+ *   been accepted and be running right now, so this raises
+ *   `AmbiguousSpendError` and stops.
+ *
+ * A 429 counts as a rejection: a rate limiter that answers has not queued the
+ * job. That is the one judgement call here, and it is the direction that risks
+ * a spurious retry rather than a silent orphan, so it is stated rather than
+ * assumed.
+ */
+export async function attemptOnceThenSettle<T>(
+  fn: () => Promise<T>,
+  opts: { readonly provider: string },
+): Promise<T> {
+  try {
+    return await fn();
+  } catch (e: unknown) {
+    const status = (e as { status?: number }).status;
+    // A status at all means the provider answered. Below 500 it answered "no".
+    if (typeof status === 'number' && status < 500) throw e;
+    throw new AmbiguousSpendError(opts.provider, e);
+  }
+}
+
+/**
  * Adaptive interval for a repeating poll.
  *
  * Feed it the count of consecutive failures and it returns how long to wait.
