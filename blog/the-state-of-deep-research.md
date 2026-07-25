@@ -4,7 +4,7 @@
 
 **Everyone built defences against made-up citations.<br>Then the tools stopped making up citations, and started getting the arithmetic wrong instead.**
 
-<sub>Luke Rhodes · 25 July 2026 · ~9 min read</sub>
+<sub>Luke Rhodes · 25 July 2026, updated 26 July · ~12 min read</sub>
 
 </div>
 
@@ -103,32 +103,46 @@ Then you ask, in plain English. *Research which open-source vector databases sup
 
 The design follows from the three properties of the job. Runs are durable, so every step is written to disk before it's reported and closing your laptop doesn't kill a forty-minute investigation. Spending is gated, with a daily ceiling of $100 by default and each run reserving its **worst case** before the call is made, so the limit refuses early instead of discovering the overage afterwards. Reports arrive as a contents page first, and you pull the sections you want.
 
-### What ships today, and what is planned
+### What ships today
 
 Being precise about this, since the article is about not overstating things.
 
-**Today, v0.2.1 is Gemini-only.** One key, one backend, and the durability, spend gating, outline-first reads and citation verification described above. That is the whole of it.
+**Four backends, and the free tiers I actually care about.** Only Gemini lets you edit the research plan before it spends. Perplexity's date and domain filters are enforced rather than asked for in a prompt. Nothing but xAI reaches X, at any price. OpenAI takes the largest domain filter of the four. Routing picks on capability first and price second, because no amount of cheapness makes an incapable backend correct.
 
-**Planned**, and written up in full in the [multi-provider plan](../docs/plan/multi-provider-research.md), is the part I actually care about: **not having to pay per run.**
+The part that matters more, though, is **not having to pay per run at all.**
 
-A local agent loop that uses whatever web search your session already has, calling no research API at all. Given the benchmark above, where a plain CLI agent with web search tied the best hosted system, that is not a consolation prize; on factual multi-hop questions it looks like the good option that happens to be free.
+A **coding CLI you already pay for** can do the research. Claude Code, Codex, Cursor, Grok Build: Dossier shells out to whichever you have and takes the report. Given the benchmark above, where a plain CLI agent with web search tied the best hosted system, that isn't a consolation prize. It's the good option that happens to be free. It's never chosen automatically, mind: it costs nothing, so a price tie-break would pick it every single time, over a subscription quota Dossier can't meter.
 
-And a share-link import for anyone already paying for a chatbot. A Google AI Pro plan includes Deep Research in the Gemini web app, and a ChatGPT plan includes a monthly allowance of it (OpenAI no longer publishes the per-tier numbers; the in-product counter is the authority). You run it there, share or export the result, hand Dossier the link, and it does the brief-writing, normalising, citation-checking and storage around it. Ten seconds of clicking, no API bill.
+A **share-link import** for anyone already paying for a chatbot. A Google AI Pro plan includes Deep Research in the Gemini web app, and a ChatGPT plan includes a monthly allowance. Run it there, hand Dossier the link or paste the text, and it does the brief-writing, normalising, citation-checking and storage around it.
 
 That import path is deliberately the design rather than browser automation, for a reason worth saying out loud: `gemini.google.com/robots.txt` disallows `/app/`, and Google's terms prohibit automated access that violates machine-readable instructions on their pages, naming robots.txt specifically. The `/share/` path is not disallowed, which is lower risk rather than a safe harbour. A human clicking the button avoids the question, and cannot break when Google renames something.
 
-Then Perplexity for wide research and date filters, xAI for X, and cross-provider comparison, where two backends disagreeing about a number is the finding rather than something to average away.
+And a **local loop** that costs nothing and uses whatever web search your session already has. Your client does the searching, because that's where the search is. What runs server-side is the part that can only be enforced there: findings accumulate into one numbered registry, the registry freezes before drafting, and a draft that cites anything you never gathered is **refused**. A prompt can ask a model not to reach for a plausible-looking reference mid-sentence. A server holding the registry can check.
 
-Whatever you pay, you pay providers directly with your own keys. Dossier takes nothing and adds no markup. It is a router, not a middleman.
+Then the things the reviews argued for. `research_compare` runs one brief on two backends and diffs the claims, where disagreement about a number is the finding rather than something to average away. Support is counted in **independent domains**, never in how many backends agreed, because three agents citing one press release is one source with three wrappers. `research_verify_claims` fetches each cited page and asks whether it contains the claim, which is the check link-checking can't make. And a four-lens counter-review, each lens told to refute rather than summarise, that reports four empty lenses as a *failed review* rather than a clean bill of health.
+
+Whatever you pay, you pay providers directly with your own keys. Dossier takes nothing and adds no markup. It's a router, not a middleman.
+
+### What building it taught me about believing documentation
+
+Every one of those backends was written against vendor docs and passed a full hermetic test suite. Then I ran one real request through each, and four things fell over.
+
+Perplexity returns `COMPLETED` in upper case, against its own documentation's lower case. A case-sensitive check meant a finished run was never seen as finished: it polled until the watchdog gave up, and the report somebody had already paid for was never stored. Perplexity, OpenAI and xAI all return their citations out of band, in a sibling array rather than in the report, so a fully cited report was stored as an uncited one. And xAI accepts a `deferred` flag and ignores it, so its runs are synchronous when the capability record claimed they were durable.
+
+None of that was findable without spending money on a real call. It's the same lesson as the article, one layer down. The docs are a description of the API, and a description is not the API.
+
+An adversarial review then found the one that mattered most. The retry module opens by stating the rule that a call which spends money is never retried, names the mechanism that enforces it, and that mechanism had never been written. Every backend retried its paid POST four times. A create that timed out after the provider accepted it has already bought the report; retrying buys a second. The rule had been sitting in a comment for months, correct and unimplemented.
 
 ### What it doesn't do
 
 Since the whole argument above is about honest limits, mine:
 
-- Mid-run progress isn't available. Google's API buffers it, and a 7.1-minute run reported nothing until it finished.
-- "Verified citation" means the link resolves. It does not mean the source supports the claim. Claim checking is a separate, explicitly-costed step, and it's a sampling process rather than a proof.
+- "Verified citation" means the link resolves. It doesn't mean the source supports the claim. Claim checking is a separate, explicitly-costed step, and it's a sampling process rather than a proof.
+- Mid-run progress isn't available on Gemini. Its API buffers it, and a 7.1-minute run reported nothing until it finished.
+- Private-corpus grounding is Gemini only. OpenAI vector stores and xAI collections are real features and aren't wired up, so both declare no corpus support rather than routing your documents somewhere that ignores them.
+- xAI runs inside the request rather than in the background, so it suits fast, broad questions rather than hour-long ones.
 - Vertex AI works but loses features. An ordinary API key is the fuller backend, which surprises most people.
-- Google's own spend cap is soft for long-running agents, by their own documentation. Dossier's ceiling is the tighter of the two. Use both.
+- Provider spend caps are soft for long-running agents, by their own documentation. Dossier's ceiling is the tighter of the two. Use both.
 
 ## Why this exists
 
