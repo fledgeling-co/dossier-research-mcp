@@ -84,6 +84,17 @@ npm version patch  # gate, bump, sync src/version.ts, tag, push. The workflow pu
 
 **The quality gate is `npm run gate`, run manually before pushing** (BP §19). Toolchain matches the org's other repos: **tsgo** (`@typescript/native-preview`) compiles and typechecks, **eslint 9** flat + type-aware lints, **vitest** with the **swc** transform tests. `typescript@~6` is present only to satisfy typescript-eslint's peer range; tsgo does the real checking. There is intentionally no hosted CI. Run a single test file with `npx vitest run tests/runner.test.ts`.
 
+## Test layout
+
+Two vitest projects, because they catch different classes of defect.
+
+- **`tests/*.test.ts`** (`npm test`) is the unit project: pure logic, no processes, milliseconds.
+- **`tests/acceptance/*.acceptance.test.ts`** (`npm run test:acceptance`) spawns the real server via tsx and speaks JSON-RPC to it. This is the only layer that catches a schema FastMCP rejects at registration, a tool absent from `tools/list`, a resource template that never matches, or stdout noise corrupting the stream. It found four real bugs on its first run, including two documented sub-resources that had never worked.
+
+`docs/test-plan.md` holds the AC-traceability matrix and the coverage axes. **Add the AC row before the test**, so coverage follows the contract rather than whatever is convenient to assert. Acceptance tests seed state through `Store` (driving a run to `completed` through Gemini costs money and takes an hour) and run against a `mkdtemp` store per file.
+
+Run the whole suite **twice** before claiming green; isolation breaks and leftover state only show on the second run.
+
 ## Verifying a change actually works
 
 A green typecheck is not a working server. `npm test` covers the pure logic; the MCP surface needs a real handshake. Drive it over stdio; initialize, `tools/list`, then call `research_plan` (it is free and needs no credentials) and assert on the response text. A tool whose Zod schema FastMCP rejects at registration will pass typecheck and fail at `tools/list`.
