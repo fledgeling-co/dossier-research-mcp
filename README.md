@@ -508,6 +508,8 @@ const { prompt, archetype, preEngineered } = buildPrompt({
 
 `createServer(deps)` and `buildDeps(config)` are exported too, so you can mount the tools inside an existing FastMCP server, or inject a fake client for your own tests.
 
+Releasing is `npm version patch`, which gates, bumps, tags and pushes; the workflow publishes from the tag. [docs/releasing.md](docs/releasing.md) has the detail, including how to retire the npm token in favour of Trusted Publishing.
+
 ---
 
 <div align="center">
