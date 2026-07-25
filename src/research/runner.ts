@@ -205,7 +205,10 @@ export class Runner {
   }
 
   fingerprintFor(
-    args: Pick<StartRunArgs, 'prompt' | 'tier' | 'tools' | 'collaborativePlanning' | 'attachments'>,
+    args: Pick<
+      StartRunArgs,
+      'prompt' | 'tier' | 'tools' | 'collaborativePlanning' | 'attachments' | 'provider' | 'shape' | 'window' | 'wideSpec'
+    >,
   ): string {
     return fingerprint({
       prompt: args.prompt,
@@ -214,6 +217,10 @@ export class Runner {
       collaborativePlanning: args.collaborativePlanning,
       // Identity, not just order: `kind` and `uri` both change the purchase.
       attachments: (args.attachments ?? []).map((a) => `${a.kind}:${a.uri}`),
+      ...(args.provider ? { provider: args.provider } : {}),
+      ...(args.shape ? { shape: args.shape } : {}),
+      ...(args.window ? { window: args.window } : {}),
+      ...(args.wideSpec ? { wideSpec: args.wideSpec } : {}),
     });
   }
 

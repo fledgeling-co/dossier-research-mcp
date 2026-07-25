@@ -191,6 +191,28 @@ export function followUpContext(markdown: string): string {
     .join('\n')}`;
 }
 
+/**
+ * Check the credentials of the backend that will run, not Gemini's.
+ *
+ * `requireClient` asks whether Gemini is configured, which is the wrong
+ * question for every other provider and produced the worst possible answer: a
+ * caller who had deliberately configured OpenAI was told they had no Gemini
+ * credentials.
+ */
+function requireProviderClient(deps: ServerDeps, id: ProviderId): void {
+  const provider = deps.providers.get(id);
+  if (!provider) {
+    throw new UserError(`Unknown provider "${id}". Run \`research_doctor\` to see what is configured.`);
+  }
+  const status = provider.detect();
+  if (status.state === 'not-configured') {
+    throw new UserError(
+      `No usable credentials for ${provider.label}: ${status.detail}.${status.fix ? ` ${status.fix}.` : ''} ` +
+        'Run `research_doctor` to see which backends are configured and what each one would need.',
+    );
+  }
+}
+
 function requireClient(deps: ServerDeps): DeepResearchClient {
   if (!deps.client) {
     throw new UserError(
@@ -335,6 +357,21 @@ export function createServer(deps: ServerDeps): FastMCP {
         .boolean()
         .default(false)
         .describe('Ask Gemini for a research plan first, to review and approve. The highest-leverage intervention available on a decision-critical run.'),
+      provider: z
+        .enum(PROVIDER_IDS)
+        .optional()
+        .describe('Plan for a specific backend. Omit to see which one routing would pick.'),
+      attachments: z
+        .array(
+          z.object({
+            kind: z.enum(['document', 'image']),
+            uri: z.string().url().max(2000),
+            mimeType: z.string().max(120),
+          }),
+        )
+        .max(10)
+        .optional()
+        .describe('Multimodal inputs the run will read. Part of the contract: a document added after planning changes the purchase.'),
     }),
     execute: async (args) => {
       const resolved = resolvePrompt({
@@ -344,11 +381,23 @@ export function createServer(deps: ServerDeps): FastMCP {
         ...(args.corpusStores ? { corpusStores: args.corpusStores } : {}),
       });
       const tools = buildTools(args.corpusStores);
+      const routingForPlan = deps.providers.route({
+        shape: 'deep',
+        corpus: (args.corpusStores?.length ?? 0) > 0,
+        planReview: args.collaborativePlanning,
+        estimateInput: { tier: args.tier, tools: tools.map((x) => x.type) },
+      });
+      // The contract binds the backend too. A plan that priced Gemini and a
+      // start that ran OpenAI are different purchases, and the handshake exists
+      // to stop exactly that kind of substitution going unnoticed.
+      const plannedProvider = args.provider ?? routingForPlan.provider?.id;
       const fp = runner.fingerprintFor({
         prompt: resolved.prompt,
         tier: args.tier,
         tools,
         collaborativePlanning: args.collaborativePlanning,
+        ...(plannedProvider ? { provider: plannedProvider } : {}),
+        ...(args.attachments ? { attachments: args.attachments } : {}),
       });
       const estimateInput = {
         tier: args.tier,
@@ -468,11 +517,26 @@ export function createServer(deps: ServerDeps): FastMCP {
         ...(args.corpusStores ? { corpusStores: args.corpusStores } : {}),
       });
       const tools = buildTools(args.corpusStores);
+      // Resolve the backend the same way planning did, so the fingerprint
+      // matches and the credential check is against the provider that will
+      // actually run. Checking Gemini's credentials for an OpenAI run reported
+      // "no Gemini credentials" to somebody who had deliberately configured
+      // OpenAI, and omitting `provider` silently started Gemini even when
+      // planning had recommended something else.
+      const routing = deps.providers.route({
+        shape: 'deep',
+        corpus: (args.corpusStores?.length ?? 0) > 0,
+        planReview: args.collaborativePlanning,
+        estimateInput: { tier: args.tier, tools: tools.map((x) => x.type) },
+      });
+      const chosen = args.provider ?? routing.provider?.id ?? 'gemini';
       const expected = runner.fingerprintFor({
         prompt: resolved.prompt,
         tier: args.tier,
         tools,
         collaborativePlanning: args.collaborativePlanning,
+        provider: chosen,
+        ...(args.attachments ? { attachments: args.attachments } : {}),
       });
 
       if (config.requireContract && !args.contractFingerprint) {
@@ -486,8 +550,8 @@ export function createServer(deps: ServerDeps): FastMCP {
         );
       }
 
-      requireClient(deps);
-      log.info('Starting deep research run', { tier: args.tier, archetype: resolved.archetype });
+      requireProviderClient(deps, chosen);
+      log.info('Starting deep research run', { tier: args.tier, archetype: resolved.archetype, provider: chosen });
 
       const { run, deduped } = await runner.start({
         question: args.question,
@@ -499,7 +563,7 @@ export function createServer(deps: ServerDeps): FastMCP {
         thinkingSummaries: true,
         visualization: true,
         preEngineered: resolved.preEngineered,
-        ...(args.provider ? { provider: args.provider } : {}),
+        provider: chosen,
         ...(args.label ? { label: args.label } : {}),
         ...(args.tags ? { tags: args.tags } : {}),
         ...(args.attachments ? { attachments: args.attachments } : {}),
@@ -511,8 +575,10 @@ export function createServer(deps: ServerDeps): FastMCP {
         attachments: args.attachments?.length ?? 0,
         collaborativePlanning: run.state === 'planning',
       };
-      const band = estimateCost(startEstimate);
-      const duration = estimateDuration(startEstimate);
+      const backend = deps.providers.get(chosen);
+      const estimated = backend?.estimate(startEstimate);
+      const band = estimated?.cost ?? estimateCost(startEstimate);
+      const duration = estimated?.duration ?? estimateDuration(startEstimate);
       const budgetAfter = await runner.budget();
 
       if (deduped) {
@@ -529,6 +595,7 @@ export function createServer(deps: ServerDeps): FastMCP {
         `**Run started.** Handle: \`${run.id}\``,
         '',
         `- State: ${run.state} — ${stateHint(run.state)}`,
+        `- Backend: ${backend?.label ?? chosen}`,
         `- Tier: ${run.tier} · archetype: ${run.archetype}`,
         `- **Estimated cost**: ${formatCostBand(band)} — ${band.basis}. Reserved at the top of that band against your daily ceiling; an estimate, never a quote.`,
         `- **Budget after this run**: $${budgetAfter.remainingUsd.toFixed(2)} of $${budgetAfter.budgetUsd.toFixed(2)} left in the next ${budgetAfter.windowHours}h.`,
@@ -828,15 +895,37 @@ export function createServer(deps: ServerDeps): FastMCP {
       // Continuing the original interaction keeps the researcher's own gathered
       // context; falling back to the stored markdown covers a run whose
       // interaction has aged out server-side.
-      if (deps.client && run.interactionId) {
-        const answer = await deps.client
-          .followUp({
-            question: args.question,
-            previousInteractionId: run.interactionId,
-            model: config.utilityModel,
-          })
-          .catch(() => null);
-        if (answer) return `${answer}\n\n${FOLLOWUP_CAVEAT}`;
+      //
+      // Two things this used to get wrong. It always used `deps.client`, which
+      // is Gemini, so a Perplexity run's interaction id was sent to Google:
+      // guaranteed to fail, and the failure was swallowed. And a *successful*
+      // native follow-up never touched the ledger, so the one path that
+      // reliably bills was the one path that never recorded it.
+      const backend = deps.providers.get(run.provider);
+      const nativeFollowUp = backend?.capabilities.followUp === true;
+      if (nativeFollowUp && run.interactionId) {
+        const client = (() => {
+          try {
+            return backend?.client() ?? null;
+          } catch {
+            return null;
+          }
+        })();
+        if (client) {
+          // Reserve BEFORE the call, like every other billed path. A reservation
+          // after the fact is a record, not a gate.
+          await deps.runner.reserveUtilitySpend(`followup:${args.runId}`);
+          const answer = await client
+            .followUp({
+              question: args.question,
+              previousInteractionId: run.interactionId,
+              model: config.utilityModel,
+            })
+            .catch(() => null);
+          if (answer) return `${answer}\n\n${FOLLOWUP_CAVEAT}`;
+          // The call may have reached the provider and billed, so the fallback
+          // below reserves separately rather than assuming this one was free.
+        }
       }
 
       const markdown = await store.readReport(args.runId);

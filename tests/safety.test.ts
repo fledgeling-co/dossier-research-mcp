@@ -587,3 +587,42 @@ describe('SEC-10: a citation label cannot inject a second link', () => {
     expect(rendered).toBe('[Example Docs](https://example.com/a)');
   });
 });
+
+describe('the purchase fingerprint covers the whole purchase', () => {
+  const base = {
+    prompt: 'which vector database leads on p99?',
+    tier: 'fast' as const,
+    tools: [],
+    collaborativePlanning: false,
+  };
+
+  it('distinguishes the same brief run on different backends', () => {
+    // Without this, `research_compare` deduped its second backend onto its
+    // first and then reported that two independent providers agreed, while
+    // diffing one report against itself. The one output it exists to produce.
+    expect(fingerprint({ ...base, provider: 'gemini' })).not.toBe(
+      fingerprint({ ...base, provider: 'perplexity' }),
+    );
+  });
+
+  it('distinguishes shape, window and matrix spec', () => {
+    expect(fingerprint({ ...base, shape: 'deep' })).not.toBe(fingerprint({ ...base, shape: 'wide' }));
+    expect(fingerprint({ ...base, window: '30d' })).not.toBe(fingerprint({ ...base, window: '1y' }));
+    expect(fingerprint({ ...base, wideSpec: '{"a":1}' })).not.toBe(fingerprint({ ...base, wideSpec: '{"a":2}' }));
+  });
+
+  it('still collapses cosmetic differences', () => {
+    expect(fingerprint({ ...base, provider: 'gemini' })).toBe(
+      fingerprint({ ...base, prompt: '  WHICH vector   database leads on P99?  ', provider: 'gemini' }),
+    );
+  });
+
+  it('treats an added attachment as a different purchase', () => {
+    // The plan/start handshake omitted attachments, so a caller could plan
+    // without a document and start with one while the fingerprint still
+    // matched. In required-contract mode that is the gate opening itself.
+    expect(fingerprint({ ...base, attachments: [] })).not.toBe(
+      fingerprint({ ...base, attachments: ['document:https://example.com/a.pdf'] }),
+    );
+  });
+});

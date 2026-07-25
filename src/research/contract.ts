@@ -29,6 +29,20 @@ export interface FingerprintInput {
    * silently returns the first document's report. Wrong answer, no error.
    */
   readonly attachments?: readonly string[];
+  /**
+   * Which backend will run it. Part of the purchase, not a detail of it.
+   *
+   * Without this, `research_compare` deduped its second backend onto its first:
+   * the same brief shaped the same way hashes identically whoever runs it, so
+   * the second run collapsed onto the first, and the comparison then reported
+   * that two independent providers agreed while diffing one report against
+   * itself. The one output the tool exists to produce, fabricated.
+   */
+  readonly provider?: string;
+  /** Shape, window and matrix spec all change what is bought. */
+  readonly shape?: string;
+  readonly window?: string;
+  readonly wideSpec?: string;
 }
 
 /**
@@ -73,6 +87,10 @@ export function fingerprint(input: FingerprintInput): string {
     input.collaborativePlanning ? 'plan' : 'auto',
     // Sorted, so attachment order is cosmetic while presence and identity are not.
     [...(input.attachments ?? [])].sort().join(','),
+    input.provider ?? 'default',
+    input.shape ?? 'deep',
+    input.window ?? 'none',
+    input.wideSpec ?? '',
   ].join(' ');
   return createHash('sha256').update(canonical).digest('hex').slice(0, 32);
 }
