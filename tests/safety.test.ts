@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { backendLimitations, loadConfig } from '../src/config.js';
 import { toSnapshot } from '../src/gemini/types.js';
+import { estimateCost, estimateDuration, formatDuration } from '../src/gemini/cost.js';
 import { isPrivateAddress, safeFetch } from '../src/net/safe-fetch.js';
+import { classify, pollDelayMs, retry, retryAfterMs } from '../src/net/retry.js';
+import { grepReport } from '../src/research/report.js';
 import { scoreCitations } from '../src/research/citations.js';
+import { normaliseCitations } from '../src/research/report.js';
+import { buildPrompt } from '../src/research/prompt.js';
 import { fingerprint, fingerprintMatches } from '../src/research/contract.js';
 import { assertStoreName, inferMimeType } from '../src/corpus/files.js';
 
@@ -29,6 +34,38 @@ describe('SSRF guards', () => {
     for (const address of ['8.8.8.8', '1.1.1.1', '93.184.216.34', '2606:4700::1111']) {
       expect(isPrivateAddress(address), address).toBe(false);
     }
+  });
+
+  /**
+   * The bypass an external review found in the shipped v0.2.1 guard.
+   *
+   * `new URL('http://[::ffff:127.0.0.1]/').hostname` is `::ffff:7f00:1`: the
+   * WHATWG parser canonicalises the embedded IPv4 to hex. The old check looked
+   * for a *dotted* `::ffff:a.b.c.d` with a regex, matched nothing, and returned
+   * false. So loopback and the cloud metadata endpoint were both reachable
+   * through a URL a model could put in a citation. Byte-level checks now.
+   */
+  it('blocks IPv6 forms that the URL parser canonicalises away from dotted-quad', () => {
+    for (const address of [
+      '::ffff:7f00:1', // == ::ffff:127.0.0.1 after canonicalisation
+      '::ffff:a9fe:a9fe', // == ::ffff:169.254.169.254, the metadata endpoint
+      '::7f00:1', // IPv4-compatible, deprecated but still routable text
+      '64:ff9b::7f00:1', // NAT64 wrapping 127.0.0.1
+      '2002:7f00:1::', // 6to4 wrapping 127.0.0.1
+    ]) {
+      expect(isPrivateAddress(address), address).toBe(true);
+    }
+  });
+
+  it('blocks the whole fe80::/10 link-local range, not just the fe80 prefix', () => {
+    // The old check was startsWith('fe80'), but link-local is a /10: fe80
+    // through febf. fe90::1 and febf::1 were both allowed through.
+    for (const address of ['fe80::1', 'fe90::1', 'fea0::1', 'febf::1']) {
+      expect(isPrivateAddress(address), address).toBe(true);
+    }
+    // fec0::/10 is deprecated site-local, outside the link-local range, and a
+    // public v6 address starting with 'fe' must still resolve normally.
+    expect(isPrivateAddress('2001:4860:4860::8888')).toBe(false);
   });
 
   it('fails closed on anything that is not a recognisable IP', () => {
@@ -199,8 +236,14 @@ describe('interaction parsing (trust boundary)', () => {
     expect(snap.images).toEqual([{ data: 'AAA', mimeType: 'image/png' }]);
   });
 
-  it('degrades an unrecognised status to in_progress rather than throwing', () => {
-    expect(toSnapshot('int_1', { status: 'something_new' }).status).toBe('in_progress');
+  it('surfaces an unrecognised status as `unknown`, not as still-working', () => {
+    // It used to degrade to `in_progress`, so a provider renaming a terminal
+    // state produced a run that polled forever while the paid job was over.
+    // `unknown` maps to `stalled`, which the watchdog and the caller both see.
+    expect(toSnapshot('int_1', { status: 'something_new' }).status).toBe('unknown');
+    expect(toSnapshot('int_1', {}).status).toBe('unknown');
+    // Recognised statuses are untouched.
+    expect(toSnapshot('int_1', { status: 'completed' }).status).toBe('completed');
   });
 
   it('fails loudly on an unparseable payload instead of pretending it succeeded', () => {
@@ -257,7 +300,16 @@ describe('config', () => {
   });
 
   it('parses the HTTP token list', () => {
-    expect(loadConfig({ DOSSIER_HTTP_TOKENS: 'a, b ,,c' }).httpTokens).toEqual(['a', 'b', 'c']);
+    const a = 'a'.repeat(32);
+    const b = 'b'.repeat(32);
+    expect(loadConfig({ DOSSIER_HTTP_TOKENS: `${a}, ${b} ,,` }).httpTokens).toEqual([a, b]);
+  });
+
+  it('refuses a token too short to be worth comparing in constant time', () => {
+    // `DOSSIER_HTTP_TOKENS=a` guarded a money-spending network surface with one
+    // guess. Comparing one character in constant time does not help.
+    expect(() => loadConfig({ DOSSIER_HTTP_TOKENS: 'a, b ,,c' })).toThrow(/shorter than 24/);
+    expect(() => loadConfig({ DOSSIER_HTTP_TOKENS: 'openssl-would-give-you-something-like-this' })).not.toThrow();
   });
 });
 
@@ -314,5 +366,272 @@ describe('backend limitations', () => {
     expect(limits.join(' ')).toContain('Corpus grounding is unavailable');
     expect(limits.join(' ')).toContain('research_followup is unavailable');
     expect(limits.join(' ')).toContain('not been verified against a live Vertex project');
+  });
+});
+
+describe('retry and backoff', () => {
+  it('classifies failures conservatively: unknown is fatal, 429 is rate-limited', () => {
+    expect(classify({ status: 429 })).toBe('rate-limited');
+    expect(classify({ status: 503 })).toBe('retryable');
+    expect(classify({ status: 400 })).toBe('fatal');
+    expect(classify({ status: 401 })).toBe('fatal');
+    expect(classify({ code: 'ECONNRESET' })).toBe('retryable');
+    // ENOTFOUND is a real answer from DNS, not a transient fault.
+    expect(classify({ code: 'ENOTFOUND' })).toBe('fatal');
+    expect(classify(new Error('who knows'))).toBe('fatal');
+  });
+
+  it('honours Retry-After over its own guess, in seconds and as a date', () => {
+    const now = Date.UTC(2026, 0, 1, 12, 0, 0);
+    expect(retryAfterMs({ headers: { 'retry-after': '30' } }, now)).toBe(30_000);
+    expect(
+      retryAfterMs({ headers: { 'retry-after': new Date(now + 45_000).toUTCString() } }, now),
+    ).toBe(45_000);
+    expect(retryAfterMs({ headers: {} }, now)).toBeUndefined();
+  });
+
+  it('stops immediately on a fatal failure rather than burning attempts', async () => {
+    let calls = 0;
+    await expect(
+      retry(
+        async () => {
+          calls += 1;
+          throw Object.assign(new Error('bad request'), { status: 400 });
+        },
+        { sleep: async () => undefined },
+      ),
+    ).rejects.toThrow('bad request');
+    expect(calls).toBe(1);
+  });
+
+  it('retries transient failures and returns the eventual success', async () => {
+    let calls = 0;
+    const result = await retry(
+      async () => {
+        calls += 1;
+        if (calls < 3) throw Object.assign(new Error('boom'), { status: 503 });
+        return 'ok';
+      },
+      { sleep: async () => undefined, random: () => 0.5 },
+    );
+    expect(result).toBe('ok');
+    expect(calls).toBe(3);
+  });
+
+  it('widens the poll interval as failures accumulate, then snaps back', () => {
+    const base = 20_000;
+    expect(pollDelayMs(base, 0)).toBe(base);
+    const one = pollDelayMs(base, 1, { random: () => 1 });
+    const three = pollDelayMs(base, 3, { random: () => 1 });
+    expect(one).toBeGreaterThan(base);
+    expect(three).toBeGreaterThan(one);
+    // Capped, so an outage degrades to occasional probing rather than silence.
+    expect(pollDelayMs(base, 50, { random: () => 1, maxMs: 600_000 })).toBeLessThanOrEqual(600_000);
+    // Recovery is immediate, not gradual.
+    expect(pollDelayMs(base, 0)).toBe(base);
+  });
+});
+
+describe('duration estimates reflect the run, not just the tier', () => {
+  it('widens when a corpus, an MCP server or attachments are involved', () => {
+    const plain = estimateDuration({ tier: 'fast', tools: ['google_search'] });
+    const corpus = estimateDuration({ tier: 'fast', tools: ['google_search', 'file_search'] });
+    const external = estimateDuration({ tier: 'fast', tools: ['google_search', 'mcp_server'] });
+    const files = estimateDuration({ tier: 'fast', tools: ['google_search'], attachments: 3 });
+
+    expect(corpus.highMinutes).toBeGreaterThan(plain.highMinutes);
+    expect(external.highMinutes).toBeGreaterThan(plain.highMinutes);
+    expect(files.highMinutes).toBeGreaterThan(plain.highMinutes);
+  });
+
+  it('names the sources it will consult, so the caller can sanity-check them', () => {
+    const d = estimateDuration({
+      tier: 'max',
+      tools: ['google_search', 'file_search', 'url_context'],
+      attachments: 1,
+    });
+    expect(d.sources.join(' ')).toContain('Google Search');
+    expect(d.sources.join(' ')).toContain('private corpus');
+    expect(d.sources.join(' ')).toContain('attached file');
+    // And explains itself rather than emitting a bare range.
+    expect(d.factors.length).toBeGreaterThan(1);
+  });
+
+  it('flags that a plan-review run waits on a human before it spends', () => {
+    const d = estimateDuration({ tier: 'fast', collaborativePlanning: true });
+    expect(d.awaitsApproval).toBe(true);
+    expect(formatDuration(d)).toContain('after you approve the plan');
+    expect(formatDuration(estimateDuration('fast'))).toContain('background');
+  });
+
+  it('never promises longer than the API will actually run a task', () => {
+    const everything = estimateDuration({
+      tier: 'max',
+      tools: ['google_search', 'url_context', 'file_search', 'code_execution', 'mcp_server', 'mcp_server'],
+      attachments: 6,
+    });
+    expect(everything.highMinutes).toBeLessThanOrEqual(60);
+    expect(everything.cappedByApiLimit).toBe(true);
+    expect(everything.factors.join(' ')).toContain('60-minute task limit');
+  });
+
+  it('still accepts a bare tier, so old callers keep working', () => {
+    expect(estimateDuration('max').highMinutes).toBe(60);
+    expect(estimateDuration('fast').lowMinutes).toBe(4);
+  });
+});
+
+describe('cost estimates track what the run actually attaches', () => {
+  it('leaves the documented bands intact for a default run', () => {
+    // google_search / url_context / code_execution are on for every run and are
+    // already inside Google's published band. If attaching nothing changed the
+    // headline figure, every doc quoting "$1-3" would be wrong.
+    const fast = estimateCost({ tier: 'fast', tools: ['google_search', 'url_context', 'code_execution'] });
+    expect(fast.lowUsd).toBe(1);
+    expect(fast.highUsd).toBe(3);
+    expect(estimateCost('max').highUsd).toBe(7);
+  });
+
+  it('widens for corpora, external servers and attachments', () => {
+    const base = estimateCost('fast').highUsd;
+    expect(estimateCost({ tier: 'fast', tools: ['file_search'] }).highUsd).toBeGreaterThan(base);
+    expect(estimateCost({ tier: 'fast', tools: ['mcp_server'] }).highUsd).toBeGreaterThan(base);
+    expect(estimateCost({ tier: 'fast', attachments: 4 }).highUsd).toBeGreaterThan(base);
+  });
+
+  it('explains the increment rather than silently inflating the number', () => {
+    const b = estimateCost({ tier: 'fast', tools: ['file_search', 'mcp_server'], attachments: 2 });
+    expect(b.basis).toContain('corpus store');
+    expect(b.basis).toContain('MCP server');
+    expect(b.basis).toContain('attached file');
+  });
+
+  it('scales with the number of corpora and servers, not just their presence', () => {
+    const one = estimateCost({ tier: 'fast', tools: ['file_search'] }).highUsd;
+    const two = estimateCost({ tier: 'fast', tools: ['file_search', 'file_search'] }).highUsd;
+    expect(two).toBeGreaterThan(one);
+  });
+});
+
+describe('hardening found by external review', () => {
+  it('renders non-http citation schemes inert instead of clickable', () => {
+    // `javascript:` and `data:` as markdown links hand the client a payload,
+    // and safeFetch refuses them, so they used to vanish from verification too.
+    const out = normaliseCitations(
+      '<cite url="javascript:alert(1)">click</cite> and <cite url="file:///etc/passwd"/> and ' +
+        '<cite url="https://example.com/a">real</cite>',
+    );
+    expect(out).not.toContain('](javascript:');
+    expect(out).not.toContain('](file:');
+    expect(out).toContain('not linked');
+    expect(out).toContain('[real](https://example.com/a)');
+  });
+
+  it('warns, without rewriting, when a brief has content after its directive', () => {
+    // The directive only re-anchors if it is last. We cannot fix someone's
+    // engineered brief without breaking the verbatim promise, so we say so.
+    const drifted =
+      '<role>x</role>\n<core_directive>Answer decisively.</core_directive>\n\nPS: also mention pricing.';
+    const built = buildPrompt({ question: drifted });
+    expect(built.preEngineered).toBe(true);
+    expect(built.prompt).toBe(drifted); // untouched
+    expect(built.warnings?.[0]).toMatch(/after the final <\/core_directive>/);
+  });
+
+  it('does not warn about a correctly anchored brief', () => {
+    const fine = '<role>x</role>\n\n<core_directive>Answer decisively.</core_directive>';
+    const built = buildPrompt({ question: fine });
+    expect(built.preEngineered).toBe(true);
+    expect(built.prompt).toBe(fine);
+    expect(built.warnings).toBeUndefined();
+  });
+
+  it('merges nothing when a self-closing cite precedes a paired one', () => {
+    // The paired pattern used to span from a self-closing tag to the next
+    // `</cite>`, silently eating the prose and the citation in between.
+    const out = normaliseCitations(
+      '<cite url="https://a.test/1"/> middle prose <cite url="https://b.test/2">B</cite>',
+    );
+    expect(out).toContain('middle prose');
+    expect(out).toContain('[B](https://b.test/2)');
+  });
+});
+
+describe('SEC-08: a caller regex cannot block the event loop', () => {
+  // The earlier guard was a blacklist of constructions, and `(a|aa)+$` matched
+  // none of them: no quantifier in the group body, no `+` before the `|`. It
+  // blocked Node for over a second on 38 characters. The rule is now the
+  // property that actually causes it, not the shapes it usually takes.
+  it.each(['(a|aa)+$', '(a?)+$', '(a+)+$', '(x|y|xy)*$', '(a|b|ab){2,}'])(
+    'rejects %s',
+    (pattern) => {
+      expect(() => grepReport('# doc\n\ntext', pattern, { regex: true })).toThrow(/backtrack/i);
+    },
+  );
+
+  it.each(['(ab)+', '\\d{2,4}', '(foo)+bar', 'plain text', '^#+ '])('still allows %s', (pattern) => {
+    expect(() => grepReport('# doc\n\ntext', pattern, { regex: true })).not.toThrow();
+  });
+
+  it('finishes promptly on the pattern that used to hang', () => {
+    // Belt and braces: even the rejection path must be fast.
+    const began = Date.now();
+    expect(() => grepReport(`# doc\n\n${'a'.repeat(60)}b`, '(a|aa)+$', { regex: true })).toThrow();
+    expect(Date.now() - began).toBeLessThan(250);
+  });
+});
+
+describe('SEC-10: a citation label cannot inject a second link', () => {
+  it('strips brackets so the label cannot close the link it sits in', () => {
+    // Validating the URL says nothing about the label, which is model output
+    // too. This payload closes the link early and opens a `javascript:` one
+    // the scheme check never saw.
+    const rendered = normaliseCitations('<cite url="https://safe.example">x](javascript:alert(1))</cite>');
+    expect(rendered).not.toMatch(/]\(javascript:/);
+    expect(rendered).toContain('(https://safe.example)');
+  });
+
+  it('leaves an ordinary label alone', () => {
+    const rendered = normaliseCitations('<cite url="https://example.com/a">Example Docs</cite>');
+    expect(rendered).toBe('[Example Docs](https://example.com/a)');
+  });
+});
+
+describe('the purchase fingerprint covers the whole purchase', () => {
+  const base = {
+    prompt: 'which vector database leads on p99?',
+    tier: 'fast' as const,
+    tools: [],
+    collaborativePlanning: false,
+  };
+
+  it('distinguishes the same brief run on different backends', () => {
+    // Without this, `research_compare` deduped its second backend onto its
+    // first and then reported that two independent providers agreed, while
+    // diffing one report against itself. The one output it exists to produce.
+    expect(fingerprint({ ...base, provider: 'gemini' })).not.toBe(
+      fingerprint({ ...base, provider: 'perplexity' }),
+    );
+  });
+
+  it('distinguishes shape, window and matrix spec', () => {
+    expect(fingerprint({ ...base, shape: 'deep' })).not.toBe(fingerprint({ ...base, shape: 'wide' }));
+    expect(fingerprint({ ...base, window: '30d' })).not.toBe(fingerprint({ ...base, window: '1y' }));
+    expect(fingerprint({ ...base, wideSpec: '{"a":1}' })).not.toBe(fingerprint({ ...base, wideSpec: '{"a":2}' }));
+  });
+
+  it('still collapses cosmetic differences', () => {
+    expect(fingerprint({ ...base, provider: 'gemini' })).toBe(
+      fingerprint({ ...base, prompt: '  WHICH vector   database leads on P99?  ', provider: 'gemini' }),
+    );
+  });
+
+  it('treats an added attachment as a different purchase', () => {
+    // The plan/start handshake omitted attachments, so a caller could plan
+    // without a document and start with one while the fingerprint still
+    // matched. In required-contract mode that is the gate opening itself.
+    expect(fingerprint({ ...base, attachments: [] })).not.toBe(
+      fingerprint({ ...base, attachments: ['document:https://example.com/a.pdf'] }),
+    );
   });
 });

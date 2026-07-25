@@ -16,6 +16,8 @@ import type { RunRecord } from '../src/store/types.js';
 const now = new Date().toISOString();
 const RUN: RunRecord = {
   id: 'dr_stream01',
+  provider: 'gemini' as const,
+  shape: 'deep' as const,
   interactionId: 'int_1',
   state: 'running',
   tier: 'fast',

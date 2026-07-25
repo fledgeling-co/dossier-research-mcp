@@ -135,7 +135,7 @@ describe('SEC-05: nothing leaks', () => {
   it('survives every hostile call and is still answering', async () => {
     // The point of the whole file: none of the above killed the server.
     const tools = await mcp.listTools();
-    expect(tools).toHaveLength(20);
+    expect(tools).toHaveLength(34);
     const budget = await mcp.callTool('research_budget');
     expect(budget.isError).toBe(false);
   });
@@ -149,7 +149,14 @@ describe('PLAN-01..07: the free planning contract', () => {
     });
     expect(result.isError).toBe(false);
     expect(result.text).toMatch(/\$1\.00-\$3\.00/);
-    expect(result.text).toMatch(/4-20 minutes/);
+    // A duration band, the sources it will consult, and why the band is that
+    // wide. Asserted by shape rather than by a fixed range: the estimate is
+    // deliberately tool-aware now, so pinning "4-20" would fail the moment a
+    // corpus or an MCP server is attached, which is exactly when the caller
+    // most needs the number to have moved.
+    expect(result.text).toMatch(/Estimated duration.*\d+-\d+ minutes/);
+    expect(result.text).toMatch(/Sources it will consult.*Google Search/);
+    expect(result.text).toMatch(/What drives that estimate.*searches/);
     expect(result.text).toMatch(/Contract fingerprint.*`[a-f0-9]{32}`/);
     // Nothing was committed to the ledger.
     const budget = await mcp.callTool('research_budget');

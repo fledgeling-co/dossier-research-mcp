@@ -77,7 +77,7 @@ afterEach(async () => {
 
 describe('start', () => {
   it('persists the run and commits the estimated cost to the ledger', async () => {
-    const runner = new Runner(store, config, scriptedClient([snapshot({})]));
+    const runner = new Runner(store, config, () => scriptedClient([snapshot({})]));
     const { run, deduped } = await runner.start(START);
 
     expect(deduped).toBe(false);
@@ -95,7 +95,7 @@ describe('start', () => {
 
   it('de-duplicates an identical request onto the existing run', async () => {
     const client = scriptedClient([snapshot({})]);
-    const runner = new Runner(store, config, client);
+    const runner = new Runner(store, config, () => client);
     const first = await runner.start(START);
     const second = await runner.start(START);
 
@@ -108,7 +108,7 @@ describe('start', () => {
 
   it('does not de-duplicate across tiers — they are different purchases', async () => {
     const client = scriptedClient([snapshot({})]);
-    const runner = new Runner(store, config, client);
+    const runner = new Runner(store, config, () => client);
     await runner.start(START);
     const second = await runner.start({ ...START, tier: 'max' });
     expect(second.deduped).toBe(false);
@@ -117,7 +117,7 @@ describe('start', () => {
 
   it('refuses a run that would cross the budget ceiling', async () => {
     const tight = { ...config, budgetUsd: 3 };
-    const runner = new Runner(store, tight, scriptedClient([snapshot({})]));
+    const runner = new Runner(store, tight, () => scriptedClient([snapshot({})]));
     await runner.start(START);
     await expect(runner.start({ ...START, question: 'a different question', prompt: 'different' })).rejects.toThrow(
       BudgetExceededError,
@@ -126,7 +126,7 @@ describe('start', () => {
 
   it('refuses a run beyond the concurrency cap', async () => {
     const capped = { ...config, maxConcurrent: 1 };
-    const runner = new Runner(store, capped, scriptedClient([snapshot({})]));
+    const runner = new Runner(store, capped, () => scriptedClient([snapshot({})]));
     await runner.start(START);
     await expect(runner.start({ ...START, question: 'another', prompt: 'another prompt' })).rejects.toThrow(
       ConcurrencyExceededError,
@@ -146,7 +146,7 @@ describe('start', () => {
         return '';
       },
     };
-    const runner = new Runner(store, config, failing);
+    const runner = new Runner(store, config, () => failing);
     await expect(runner.start(START)).rejects.toThrow('quota exhausted');
 
     const runs = await store.listRuns();
@@ -158,7 +158,7 @@ describe('start', () => {
 describe('lifecycle', () => {
   it('completes: writes the report, counts sources, journals it', async () => {
     const markdown = '## Executive Summary\n\n- A leads. <cite url="https://a.test/x">src</cite>\n';
-    const runner = new Runner(store, config, scriptedClient([snapshot({ status: 'completed', markdown })]));
+    const runner = new Runner(store, config, () => scriptedClient([snapshot({ status: 'completed', markdown })]));
     const { run } = await runner.start(START);
     const advanced = await runner.refresh(run.id);
 
@@ -175,7 +175,7 @@ describe('lifecycle', () => {
   });
 
   it('is idempotent — refreshing a completed run does not re-finalise it', async () => {
-    const runner = new Runner(store, config, scriptedClient([snapshot({ status: 'completed', markdown: '# R' })]));
+    const runner = new Runner(store, config, () => scriptedClient([snapshot({ status: 'completed', markdown: '# R' })]));
     const { run } = await runner.start(START);
     await runner.refresh(run.id);
     const before = await store.readJournal(run.id);
@@ -187,7 +187,7 @@ describe('lifecycle', () => {
   });
 
   it('records failure with the reported reason', async () => {
-    const runner = new Runner(store, config, scriptedClient([snapshot({ status: 'failed', error: 'upstream 500' })]));
+    const runner = new Runner(store, config, () => scriptedClient([snapshot({ status: 'failed', error: 'upstream 500' })]));
     const { run } = await runner.start(START);
     const advanced = await runner.refresh(run.id);
     expect(advanced?.state).toBe('failed');
@@ -196,7 +196,7 @@ describe('lifecycle', () => {
 
   it('holds a collaborative-planning run for approval, then releases it', async () => {
     const client = scriptedClient([snapshot({ status: 'completed', markdown: 'Proposed plan: 3 subtopics.' })]);
-    const runner = new Runner(store, config, client);
+    const runner = new Runner(store, config, () => client);
     const { run } = await runner.start({ ...START, collaborativePlanning: true });
     expect(run.state).toBe('planning');
 
@@ -216,7 +216,7 @@ describe('lifecycle', () => {
 
   it('marks a silent run stalled, and recovers it on the next delta', async () => {
     const impatient = { ...config, stallMinutes: 1 };
-    const runner = new Runner(store, impatient, scriptedClient([snapshot({}), snapshot({ thoughts: ['still going'] })]));
+    const runner = new Runner(store, impatient, () => scriptedClient([snapshot({}), snapshot({ thoughts: ['still going'] })]));
     const { run } = await runner.start(START);
 
     // Backdate progress past the watchdog window.
@@ -235,7 +235,7 @@ describe('lifecycle', () => {
   });
 
   it('cancels an in-flight run and keeps the committed spend on the ledger', async () => {
-    const runner = new Runner(store, config, scriptedClient([snapshot({})]));
+    const runner = new Runner(store, config, () => scriptedClient([snapshot({})]));
     const { run } = await runner.start(START);
     const cancelled = await runner.cancel(run.id);
     expect(cancelled?.state).toBe('cancelled');
@@ -245,7 +245,7 @@ describe('lifecycle', () => {
 
 describe('durability', () => {
   it('a new Runner over the same store resumes an in-flight run', async () => {
-    const first = new Runner(store, config, scriptedClient([snapshot({})]));
+    const first = new Runner(store, config, () => scriptedClient([snapshot({})]));
     const { run } = await first.start(START);
 
     // Simulate a process restart: fresh Store + Runner, same directory.
@@ -253,7 +253,7 @@ describe('durability', () => {
     const second = new Runner(
       reopened,
       config,
-      scriptedClient([snapshot({ status: 'completed', markdown: '# Recovered' })]),
+      () => scriptedClient([snapshot({ status: 'completed', markdown: '# Recovered' })]),
     );
     const active = await reopened.activeRuns();
     expect(active.map((r) => r.id)).toContain(run.id);
@@ -263,7 +263,7 @@ describe('durability', () => {
   });
 
   it('replays the journal by cursor', async () => {
-    const runner = new Runner(store, config, scriptedClient([snapshot({ thoughts: ['searching'] })]));
+    const runner = new Runner(store, config, () => scriptedClient([snapshot({ thoughts: ['searching'] })]));
     const { run } = await runner.start(START);
     await runner.refresh(run.id);
 
@@ -276,7 +276,7 @@ describe('durability', () => {
   });
 
   it('skips a corrupt record instead of failing the whole listing', async () => {
-    const runner = new Runner(store, config, scriptedClient([snapshot({})]));
+    const runner = new Runner(store, config, () => scriptedClient([snapshot({})]));
     const { run } = await runner.start(START);
     const { writeFile } = await import('node:fs/promises');
     await writeFile(join(dir, 'runs', 'corrupt.json'), '{ not json', 'utf8');
@@ -340,7 +340,7 @@ describe('spend gate hardening', () => {
     // calls routinely, so this was a real over-spend hole.
     const capped = { ...config, maxConcurrent: 2, budgetUsd: 1000 };
     const client = scriptedClient([snapshot({})]);
-    const runner = new Runner(store, capped, client);
+    const runner = new Runner(store, capped, () => client);
 
     const attempts = await Promise.allSettled(
       Array.from({ length: 8 }, (_, i) =>
@@ -359,7 +359,7 @@ describe('spend gate hardening', () => {
     // Budget for exactly two fast runs at the reserved (worst-case) $3.
     const tight = { ...config, maxConcurrent: 64, budgetUsd: 6 };
     const client = scriptedClient([snapshot({})]);
-    const runner = new Runner(store, tight, client);
+    const runner = new Runner(store, tight, () => client);
 
     await Promise.allSettled(
       Array.from({ length: 10 }, (_, i) =>
@@ -373,7 +373,7 @@ describe('spend gate hardening', () => {
   });
 
   it('reserves the worst case, not the midpoint', async () => {
-    const runner = new Runner(store, config, scriptedClient([snapshot({})]));
+    const runner = new Runner(store, config, () => scriptedClient([snapshot({})]));
     const { run } = await runner.start({ ...START, tier: 'max' });
     // A max run is $3-7. Reserving the $5 midpoint would let a run that costs
     // $7 overshoot; a ceiling that overshoots is not a ceiling.
@@ -383,13 +383,13 @@ describe('spend gate hardening', () => {
 
   it('gates a non-research spend against the same ceiling', async () => {
     const tight = { ...config, budgetUsd: 1 };
-    const runner = new Runner(store, tight, scriptedClient([snapshot({})]));
+    const runner = new Runner(store, tight, () => scriptedClient([snapshot({})]));
     // agent_run was previously ungated entirely: no check, no ledger, no cap.
     await expect(runner.reserveNonResearchSpend('agent_run:x')).rejects.toThrow(BudgetExceededError);
   });
 
   it('counts a non-research spend on the ledger so it is visible', async () => {
-    const runner = new Runner(store, config, scriptedClient([snapshot({})]));
+    const runner = new Runner(store, config, () => scriptedClient([snapshot({})]));
     await runner.reserveNonResearchSpend('agent_run:analyst');
     const budget = await runner.budget();
     expect(budget.committedUsd).toBeGreaterThan(0);
@@ -398,7 +398,7 @@ describe('spend gate hardening', () => {
 
   it('a failed reservation does not wedge the queue for later callers', async () => {
     const tight = { ...config, budgetUsd: 3 };
-    const runner = new Runner(store, tight, scriptedClient([snapshot({})]));
+    const runner = new Runner(store, tight, () => scriptedClient([snapshot({})]));
     await runner.start(START);
     // Second one is refused...
     await expect(runner.start({ ...START, question: 'another', prompt: 'another' })).rejects.toThrow(

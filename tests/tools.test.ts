@@ -7,7 +7,13 @@ import { loadConfig, type Config } from '../src/config.js';
 import type { DeepResearchClient, FollowUpArgs } from '../src/gemini/client.js';
 import type { InteractionSnapshot } from '../src/gemini/types.js';
 import { Runner } from '../src/research/runner.js';
-import { buildDeps, createServer, type ServerDeps } from '../src/server.js';
+import {
+  buildDeps,
+  createServer,
+  FOLLOWUP_CAVEAT,
+  followUpContext,
+  type ServerDeps,
+} from '../src/server.js';
 import { Store } from '../src/store/store.js';
 import type { RunRecord } from '../src/store/types.js';
 
@@ -64,6 +70,12 @@ function stubUtility(over: Partial<UtilityModel> = {}): UtilityModel {
     async answer() {
       return { ok: true, value: 'stored-report answer' };
     },
+    async judgeSupport() {
+      return { ok: true, value: { verdict: 'supports' as const } };
+    },
+    async review() {
+      return { ok: true, value: { checked: 'the whole report', issues: [] } };
+    },
     ...over,
   };
 }
@@ -87,6 +99,8 @@ async function seedCompletedRun(markdown = '## Executive Summary\n\n- A leads.\n
   const now = new Date().toISOString();
   const run: RunRecord = {
     id: 'dr_test0001',
+    provider: 'gemini',
+    shape: 'deep',
     interactionId: 'int_1',
     state: 'completed',
     tier: 'fast',
@@ -139,7 +153,11 @@ describe('server construction', () => {
 });
 
 describe('research_followup fallback chain', () => {
-  /** Mirrors the tool's resolution order. */
+  /**
+   * Mirrors the tool's resolution order, and shares its two load-bearing
+   * pieces (`followUpContext`, `FOLLOWUP_CAVEAT`) with it rather than
+   * restating them — a mirror that restates them tests the mirror.
+   */
   async function followup(
     deps: Pick<ServerDeps, 'client' | 'utility' | 'store' | 'config'>,
     runId: string,
@@ -152,15 +170,47 @@ describe('research_followup fallback chain', () => {
       const live = await deps.client
         .followUp({ question, previousInteractionId: run.interactionId, model: deps.config.utilityModel })
         .catch(() => null);
-      if (live) return live;
+      if (live) return `${live}\n\n${FOLLOWUP_CAVEAT}`;
     }
     const markdown = await deps.store.readReport(runId);
     if (!markdown) throw new Error('no report');
     if (!deps.utility) throw new Error('no utility');
-    const answered = await deps.utility.answer(question, markdown);
+    const answered = await deps.utility.answer(question, followUpContext(markdown));
     if (!answered.ok) throw new Error(answered.error);
-    return answered.value;
+    return `${answered.value}\n\n${FOLLOWUP_CAVEAT}`;
   }
+
+  it('marks every answer as synthesised, on both paths', async () => {
+    // A follow-up conditions on the report, so an error in the report becomes a
+    // premise of the answer and the answer reads as corroboration of it. The
+    // marker is the cheap mitigation and it must be unconditional.
+    const run = await seedCompletedRun();
+    const live = await followup({ client: stubClient(), utility: stubUtility(), store, config }, run.id, 'why?');
+    const stored = await followup({ client: null, utility: stubUtility(), store, config }, run.id, 'why?');
+    for (const answer of [live, stored]) {
+      expect(answer).toContain('**synthesised**');
+      expect(answer).toMatch(/cannot raise a claim’s confidence/);
+    }
+  });
+
+  it('answers from the frozen registry, not from the report’s prose alone', async () => {
+    // Closes the failure where a model invents a plausible reference mid-answer
+    // to support a sentence it wanted to write.
+    const run = await seedCompletedRun(
+      '# R\n\nA claim <cite url="https://example.com/a">1</cite> and another <cite url="https://other.org/b">2</cite>.\n',
+    );
+    const seen: string[] = [];
+    const utility = stubUtility({
+      async answer(_q, context) {
+        seen.push(context);
+        return { ok: true, value: 'answered' };
+      },
+    });
+    await followup({ client: null, utility, store, config }, run.id, 'which sources?');
+    expect(seen[0]).toContain('Citation registry');
+    expect(seen[0]).toContain('1. https://example.com/a');
+    expect(seen[0]).toMatch(/cite ONLY from this list/);
+  });
 
   it('prefers the live interaction, which keeps the researcher’s own context', async () => {
     const run = await seedCompletedRun();
@@ -172,7 +222,7 @@ describe('research_followup fallback chain', () => {
       },
     });
     const answer = await followup({ client, utility: stubUtility(), store, config }, run.id, 'why?');
-    expect(answer).toBe('live follow-up answer');
+    expect(answer).toContain('live follow-up answer');
     expect(seen[0]?.previousInteractionId).toBe('int_1');
   });
 
@@ -184,7 +234,7 @@ describe('research_followup fallback chain', () => {
       },
     });
     const answer = await followup({ client, utility: stubUtility(), store, config }, run.id, 'why?');
-    expect(answer).toBe('stored-report answer');
+    expect(answer).toContain('stored-report answer');
   });
 
   it('surfaces the utility model’s reason rather than a bare failure', async () => {
@@ -218,6 +268,8 @@ describe('approve_plan and cancel guards', () => {
     const now = new Date().toISOString();
     await store.saveRun({
       id: 'dr_test0002',
+      provider: 'gemini',
+      shape: 'deep',
       interactionId: 'int_1',
       state: 'planning',
       tier: 'fast',
@@ -253,14 +305,14 @@ describe('approve_plan and cancel guards', () => {
   });
 
   it('cancelling an already-terminal run is a no-op, not an error', async () => {
-    const runner = new Runner(store, config, stubClient());
+    const runner = new Runner(store, config, () => stubClient());
     const run = await seedCompletedRun();
     const result = await runner.cancel(run.id);
     expect(result?.state).toBe('completed');
   });
 
   it('cancelling an unknown run returns null rather than throwing', async () => {
-    const runner = new Runner(store, config, stubClient());
+    const runner = new Runner(store, config, () => stubClient());
     expect(await runner.cancel('dr_doesnotexist')).toBeNull();
   });
 });

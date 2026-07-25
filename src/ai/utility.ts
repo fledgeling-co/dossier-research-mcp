@@ -79,10 +79,61 @@ export type UtilityResult<T> =
   | { readonly ok: true; readonly value: T }
   | { readonly ok: false; readonly error: string };
 
+/**
+ * Does the fetched page actually say what the report says it says.
+ *
+ * `not_addressed` is the load-bearing verdict and the one a naive prompt never
+ * produces: a source that is *about* the topic without containing the specific
+ * claim is the most common failure in a cited report, and it is invisible to
+ * link-checking because the link resolves perfectly.
+ */
+const SupportSchema = z.object({
+  verdict: z
+    .enum(['supports', 'partially_supports', 'contradicts', 'not_addressed', 'unreadable'])
+    .describe(
+      'supports = the page states this claim. partially_supports = it states a weaker or narrower version. contradicts = it states something incompatible. not_addressed = the page is readable but does not contain this claim. unreadable = the text given is not usable (a cookie wall, a login page, an empty body).',
+    ),
+  quote: z
+    .string()
+    .max(1000)
+    .optional()
+    .describe('The sentence from the page that decides it. Verbatim, or omitted if there is none.'),
+  note: z.string().max(600).optional().describe('One sentence on why, when the verdict needs it.'),
+});
+export type SupportJudgement = z.infer<typeof SupportSchema>;
+
+/**
+ * One adversarial lens over a finished report.
+ *
+ * `checked` is required and separate from `issues` on purpose. An earlier
+ * design demanded a minimum number of issues, which rewards inventing
+ * objections to hit a quota. Coverage is what is actually required: each lens
+ * must say what it examined, and "examined, found nothing" is a valid answer
+ * from one lens while a review that finds nothing on *every* lens is a failed
+ * review rather than a passed report.
+ */
+const ReviewSchema = z.object({
+  checked: z.string().min(10).max(2000).describe('What you actually examined, specifically.'),
+  issues: z
+    .array(
+      z.object({
+        severity: z.enum(['high', 'medium', 'low']),
+        where: z.string().max(300).describe('The section or claim this is about.'),
+        problem: z.string().max(1200),
+      }),
+    )
+    .max(20),
+});
+export type LensReview = z.infer<typeof ReviewSchema>;
+
 export interface UtilityModel {
   summarise(markdown: string): Promise<UtilityResult<ReportSummary>>;
   extractClaims(markdown: string, limit: number): Promise<UtilityResult<ExtractedClaims>>;
   answer(question: string, context: string): Promise<UtilityResult<string>>;
+  /** Judge one claim against the text of the page it cites. */
+  judgeSupport(claim: string, sourceText: string): Promise<UtilityResult<SupportJudgement>>;
+  /** Run one adversarial lens over a report. */
+  review(lens: { name: string; question: string; instruction: string }, markdown: string): Promise<UtilityResult<LensReview>>;
 }
 
 function failure(e: unknown): { ok: false; error: string } {
@@ -141,6 +192,40 @@ export function createUtilityModel(config: Config): UtilityModel | null {
           system:
             'You extract load-bearing claims from research reports into portable cards. Copy the claim and its confidence qualifier from the report — do not re-assess, re-word into something stronger, or add claims the report does not make. Attach the citation URL the report gives for each claim, when it gives one. Keep each claim to one sentence where the report allows it.',
           prompt: `Extract at most ${limit} load-bearing claims from this report.\n\n${head(markdown, 40_000)}`,
+        });
+        return { ok: true, value: output };
+      } catch (e: unknown) {
+        return failure(e);
+      }
+    },
+
+    async judgeSupport(claim, sourceText) {
+      try {
+        const { output } = await generateText({
+          model,
+          output: Output.object({ schema: SupportSchema }),
+          system:
+            'You check whether a source supports a claim. Judge ONLY from the page text supplied; your own knowledge of the topic is irrelevant and using it defeats the point of the check. ' +
+            'A page that is about the right topic but does not contain the specific claim is `not_addressed`, not `supports` — that is the most common failure and the one this check exists to catch. ' +
+            'A page whose text is a cookie banner, a login wall or empty is `unreadable`, not `not_addressed`. Quote the deciding sentence verbatim when there is one.',
+          prompt: `Claim:\n${claim.slice(0, 2000)}\n\n---\n\nPage text:\n\n${head(sourceText, 30_000)}`,
+        });
+        return { ok: true, value: output };
+      } catch (e: unknown) {
+        return failure(e);
+      }
+    },
+
+    async review(lens, markdown) {
+      try {
+        const { output } = await generateText({
+          model,
+          output: Output.object({ schema: ReviewSchema }),
+          system:
+            `You are reviewing a research report through one lens only: ${lens.name}. Your job is to REFUTE, not to summarise or to agree. ` +
+            'Fluent prose reads as correct; unprompted reviewers agree with it, which is why this pass is adversarial by instruction. ' +
+            'Report what you checked whether or not you found anything — "checked, found nothing" is a real answer and is better than an invented objection. Never pad the issue list to look thorough.',
+          prompt: `${lens.question}\n\n${lens.instruction}\n\n---\n\nReport:\n\n${head(markdown, 40_000)}`,
         });
         return { ok: true, value: output };
       } catch (e: unknown) {

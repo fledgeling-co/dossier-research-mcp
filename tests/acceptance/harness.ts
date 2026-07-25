@@ -219,7 +219,9 @@ export function makeRun(over: Partial<RunRecord> = {}): RunRecord {
   const now = new Date().toISOString();
   return {
     id: `dr_${Math.abs(hash(JSON.stringify(over))).toString(16).padStart(12, '0').slice(0, 12)}`,
-    interactionId: 'int_seed',
+    provider: 'gemini' as const,
+    shape: 'deep' as const,
+  interactionId: 'int_seed',
     state: 'completed',
     tier: 'fast',
     archetype: 'technical',

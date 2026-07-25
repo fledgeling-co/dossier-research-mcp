@@ -19,7 +19,29 @@ afterAll(async () => {
 });
 
 /** Tools that spend money or send data somewhere. Kept explicit, not derived. */
-const SPENDING = ['research_start', 'agent_run'];
+// Anything that invokes a model bills, however small. `research_followup` and
+// `research_claims` both call the utility model; annotating them read-only told
+// callers a paid operation was free to retry.
+const SPENDING = [
+  'research_start',
+  'agent_run',
+  'research_followup',
+  'research_claims',
+  'research_wide',
+  'research_recent',
+  'research_compare',
+  'research_verify_claims',
+  'research_counter_review',
+];
+// Imports store a run but buy nothing: whatever produced the report was billed
+// wherever it ran. Not read-only (it writes), not spending.
+const WRITES_WITHOUT_SPENDING = [
+  'research_import',
+  'research_local_start',
+  'research_local_note',
+  'research_local_draft',
+  'research_local_submit',
+];
 const EGRESS = ['corpus_add_file'];
 const READ_ONLY = [
   'research_plan',
@@ -27,11 +49,12 @@ const READ_ONLY = [
   'research_tail',
   'research_read',
   'research_verify_citations',
-  'research_followup',
-  'research_claims',
   'research_list',
   'research_budget',
+  'research_evidence',
   'corpus_list',
+  'corpus_local_list',
+  'corpus_local_search',
   'agent_list',
 ];
 
@@ -43,9 +66,15 @@ describe('PROTO-01: every tool registers', () => {
       [
         'agent_create', 'agent_delete', 'agent_list', 'agent_run',
         'corpus_add_file', 'corpus_create', 'corpus_delete', 'corpus_list',
+        'corpus_local_list', 'corpus_local_search',
         'research_approve_plan', 'research_budget', 'research_cancel', 'research_claims',
-        'research_followup', 'research_list', 'research_plan', 'research_read',
-        'research_start', 'research_status', 'research_tail', 'research_verify_citations',
+        'research_compare', 'research_counter_review', 'research_doctor',
+        'research_evidence', 'research_followup', 'research_list', 'research_plan',
+        'research_read', 'research_recent', 'research_start', 'research_status',
+        'research_import', 'research_local_draft', 'research_local_note',
+        'research_local_start', 'research_local_submit',
+        'research_tail', 'research_verify_citations',
+        'research_verify_claims', 'research_wide',
       ].sort(),
     );
   });
@@ -75,6 +104,22 @@ describe('PROTO-02: annotations match what the tool actually does', () => {
     for (const name of READ_ONLY) {
       const tool = tools.find((t) => t.name === name);
       expect(tool?.annotations?.['readOnlyHint'], name).toBe(true);
+    }
+  });
+
+  it('marks a tool that writes without buying as neither read-only nor spending', async () => {
+    // `research_import` stores a run, so it is not read-only; it buys nothing,
+    // so claiming it spends money would be the opposite error. Both halves
+    // matter: an agent decides whether to retry on exactly this signal.
+    const tools = await mcp.listTools();
+    for (const name of WRITES_WITHOUT_SPENDING) {
+      const tool = tools.find((t) => t.name === name);
+      expect(tool, name).toBeDefined();
+      expect(tool?.annotations?.['readOnlyHint'], name).toBe(false);
+      expect(tool?.description ?? '', name).not.toMatch(/SPENDS MONEY/);
+      // The meaning, not one phrasing: an agent reading only the description
+      // must be able to tell this is free before it decides whether to retry.
+      expect(tool?.description ?? '', name).toMatch(/spends nothing|nothing is charged|nothing will be|\bfree\b/i);
     }
   });
 
@@ -122,7 +167,9 @@ describe('PROTO-04: resources and prompts register and are readable', () => {
 
   it('exposes the documented prompts, and each renders real content', async () => {
     const prompts = (await mcp.listPrompts()).map((p) => p.name).sort();
-    expect(prompts).toEqual(['deep-research-brief', 'research-red-team', 'research-triage']);
+    expect(prompts.sort()).toEqual(
+      ['deep-research-brief', 'gemini-web-session', 'research-red-team', 'research-triage'].sort(),
+    );
 
     // Rendering, not just listing: a prompt that throws on load lists fine.
     const brief = await mcp.getPrompt('deep-research-brief', { need: 'compare two vector databases' });
@@ -131,6 +178,21 @@ describe('PROTO-04: resources and prompts register and are readable', () => {
     expect(triage).toContain('2+2');
     const red = await mcp.getPrompt('research-red-team', { runId: 'dr_x' });
     expect(red).toContain('dr_x');
+
+    // The subscription route: it must hand over a usable brief, and it must
+    // state the terms-of-service position rather than burying it. The default
+    // mode is the one that touches nothing Google disallows.
+    const web = await mcp.getPrompt('gemini-web-session', { question: 'which vector db leads on p99' });
+    expect(web).toContain('<core_directive>');
+    expect(web).toContain('research_import');
+    expect(web).toMatch(/menuitemcheckbox|checkbox, not a button/);
+    const automated = await mcp.getPrompt('gemini-web-session', {
+      question: 'which vector db leads on p99',
+      mode: 'automated',
+    });
+    expect(automated).toMatch(/robots\.txt/);
+    expect(automated).toMatch(/suspension of your Google account/i);
+    expect(automated).toMatch(/Never type a password/i);
   });
 });
 
@@ -169,7 +231,7 @@ describe('PROTO-06 / DEGRADE-02: usable with no credentials', () => {
     expect(started.isError).toBe(true);
     expect(started.text).toMatch(/credential/i);
     // The decisive part: the server is still alive and answering afterwards.
-    expect((await mcp.listTools()).length).toBe(20);
+    expect((await mcp.listTools()).length).toBe(34);
   });
 });
 

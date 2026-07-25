@@ -1,6 +1,8 @@
 import { randomBytes } from 'node:crypto';
-import { appendFile, mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { appendFile, chmod, mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { KeyedMutex } from '../research/spend.js';
+import { FileLock } from './file-lock.js';
 import {
   JournalEventSchema,
   LedgerEntrySchema,
@@ -42,6 +44,9 @@ function assertSafeId(id: string): void {
 }
 
 export class Store {
+  /** Serialises journal sequence allocation per run, within this process. */
+  private readonly journalLock = new KeyedMutex();
+
   readonly root: string;
 
   constructor(root: string) {
@@ -67,11 +72,25 @@ export class Store {
     return join(this.root, 'ledger.jsonl');
   }
 
+  /**
+   * Cross-process lock guarding admission control for THIS store directory.
+   *
+   * Scoped to the store, not the process, because that is the resource being
+   * contended: two servers on one store must serialise, two servers on separate
+   * stores must not.
+   */
+  admissionLock(): FileLock {
+    return new FileLock(join(this.root, '.admission.lock'));
+  }
+
   async init(): Promise<void> {
     await Promise.all([
-      mkdir(join(this.root, 'runs'), { recursive: true }),
-      mkdir(join(this.root, 'journal'), { recursive: true }),
-      mkdir(join(this.root, 'reports'), { recursive: true }),
+      // 0700/0600 throughout. The store holds research prompts, full reports
+      // and a spend ledger; under a typical 022 umask every one of those was
+      // world-readable on a shared machine.
+      mkdir(join(this.root, 'runs'), { recursive: true, mode: 0o700 }),
+      mkdir(join(this.root, 'journal'), { recursive: true, mode: 0o700 }),
+      mkdir(join(this.root, 'reports'), { recursive: true, mode: 0o700 }),
     ]);
   }
 
@@ -81,7 +100,10 @@ export class Store {
    */
   private async writeAtomic(path: string, contents: string): Promise<void> {
     const tmp = `${path}.${randomBytes(4).toString('hex')}.tmp`;
-    await writeFile(tmp, contents, 'utf8');
+    // Mode on create, then an explicit chmod: `mode` is masked by the umask, so
+    // it alone does not guarantee 0600.
+    await writeFile(tmp, contents, { encoding: 'utf8', mode: 0o600 });
+    await chmod(tmp, 0o600).catch(() => undefined);
     await rename(tmp, path);
   }
 
@@ -112,13 +134,24 @@ export class Store {
    * aborting the whole listing (skip-not-fatal, CP §1) — one hand-edited file
    * must not make the index unreadable.
    */
-  async listRuns(): Promise<RunRecord[]> {
-    let names: string[];
+  /**
+   * Enumerate the run directory, distinguishing "empty" from "unreadable".
+   *
+   * Both used to collapse to zero, and zero is the answer that opens the gate:
+   * dedupe sees no existing work and concurrency sees no runs in flight. A
+   * directory that has become non-enumerable must abort admission, not widen it.
+   */
+  private async readRunDir(): Promise<string[]> {
     try {
-      names = await readdir(join(this.root, 'runs'));
-    } catch {
-      return [];
+      return await readdir(join(this.root, 'runs'));
+    } catch (e: unknown) {
+      if ((e as { code?: string }).code === 'ENOENT') return [];
+      throw e;
     }
+  }
+
+  async listRuns(): Promise<RunRecord[]> {
+    const names = await this.readRunDir();
     const out: RunRecord[] = [];
     for (const name of names) {
       if (!name.endsWith('.json')) continue;
@@ -127,6 +160,24 @@ export class Store {
     }
     out.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     return out;
+  }
+
+  /**
+   * Count run files that exist but cannot be parsed.
+   *
+   * A malformed active run disappears from the concurrency count and from
+   * dedupe, so corruption raises the concurrency cap and can buy a duplicate
+   * report. The gate treats these as occupied slots rather than pretending
+   * they are absent.
+   */
+  async unreadableRunCount(): Promise<number> {
+    const names = await this.readRunDir();
+    let bad = 0;
+    for (const name of names) {
+      if (!name.endsWith('.json')) continue;
+      if (!(await this.getRun(name.slice(0, -'.json'.length)))) bad += 1;
+    }
+    return bad;
   }
 
   async activeRuns(): Promise<RunRecord[]> {
@@ -145,6 +196,31 @@ export class Store {
     return true;
   }
 
+  private sessionPath(id: string): string {
+    assertSafeId(id);
+    return join(this.root, 'sessions', `${id}.json`);
+  }
+
+  /**
+   * A local-loop session: its task list, its registry and its freeze state.
+   *
+   * Separate from the run record because it is written on every finding
+   * submission while the record is not, and because a session that fails to
+   * parse must not take a completed run's report down with it.
+   */
+  async saveSession(id: string, data: unknown): Promise<void> {
+    await mkdir(join(this.root, 'sessions'), { recursive: true, mode: 0o700 });
+    await this.writeAtomic(this.sessionPath(id), JSON.stringify(data, null, 2));
+  }
+
+  async readSession(id: string): Promise<unknown> {
+    try {
+      return JSON.parse(await readFile(this.sessionPath(id), 'utf8')) as unknown;
+    } catch {
+      return null;
+    }
+  }
+
   async saveReport(id: string, markdown: string): Promise<string> {
     const path = this.reportPath(id);
     await this.writeAtomic(path, markdown);
@@ -160,17 +236,30 @@ export class Store {
   }
 
   /** Append one journal event. Sequence numbers are per-run and monotonic. */
+  /**
+   * Append a journal event.
+   *
+   * Sequence allocation is read-then-append, so the poller and the stream
+   * supervisor writing at the same moment could both read seq N and both write
+   * N+1. `research_tail` pages by cursor, so a duplicate seq silently hides an
+   * event from replay. Serialising per run makes allocation atomic in-process.
+   */
   async appendJournal(id: string, kind: JournalEvent['kind'], message: string): Promise<JournalEvent> {
-    const existing = await this.readJournal(id, -1);
-    const seq = (existing.at(-1)?.seq ?? -1) + 1;
-    const event: JournalEvent = {
-      seq,
-      at: new Date().toISOString(),
-      kind,
-      message: message.slice(0, 20_000),
-    };
-    await appendFile(this.journalPath(id), `${JSON.stringify(event)}\n`, 'utf8');
-    return event;
+    return this.journalLock.run(id, async () => {
+      const existing = await this.readJournal(id, -1);
+      const seq = (existing.at(-1)?.seq ?? -1) + 1;
+      const event: JournalEvent = {
+        seq,
+        at: new Date().toISOString(),
+        kind,
+        message: message.slice(0, 20_000),
+      };
+      await appendFile(this.journalPath(id), `${JSON.stringify(event)}\n`, {
+        encoding: 'utf8',
+        mode: 0o600,
+      });
+      return event;
+    });
   }
 
   /**
@@ -201,31 +290,57 @@ export class Store {
 
   async appendLedger(entry: LedgerEntry): Promise<void> {
     const validated = LedgerEntrySchema.parse(entry);
-    await appendFile(this.ledgerPath, `${JSON.stringify(validated)}\n`, 'utf8');
+    await appendFile(this.ledgerPath, `${JSON.stringify(validated)}\n`, { encoding: 'utf8', mode: 0o600 });
   }
 
+  /**
+   * Read the ledger, counting what could not be parsed.
+   *
+   * Skip-not-fatal is right for a listing and wrong for a spend gate. A
+   * corrupted ledger line used to vanish from committed spend, so damaging the
+   * file *raised* the ceiling: the one direction a budget must never fail.
+   * Callers doing admission control use {@link readLedgerStrict}.
+   */
   async readLedger(sinceIso?: string): Promise<LedgerEntry[]> {
+    return (await this.readLedgerStrict(sinceIso)).entries;
+  }
+
+  async readLedgerStrict(
+    sinceIso?: string,
+  ): Promise<{ entries: LedgerEntry[]; unreadableLines: number }> {
     let raw: string;
     try {
       raw = await readFile(this.ledgerPath, 'utf8');
-    } catch {
-      return [];
+    } catch (e: unknown) {
+      // A missing ledger is an empty ledger. Any other read failure is not:
+      // treating "permission denied" as "nothing spent" unlocks the budget.
+      if ((e as { code?: string }).code === 'ENOENT') return { entries: [], unreadableLines: 0 };
+      throw new Error(
+        `Cannot read the spend ledger at ${this.ledgerPath}: ${e instanceof Error ? e.message : String(e)}. ` +
+          'Refusing to treat an unreadable ledger as zero spend.',
+        { cause: e },
+      );
     }
-    const out: LedgerEntry[] = [];
+    const entries: LedgerEntry[] = [];
+    let unreadableLines = 0;
     for (const line of raw.split('\n')) {
       if (!line.trim()) continue;
       let json: unknown;
       try {
         json = JSON.parse(line);
       } catch {
+        unreadableLines += 1;
         continue;
       }
       const parsed = LedgerEntrySchema.safeParse(json);
-      if (!parsed.success) continue;
+      if (!parsed.success) {
+        unreadableLines += 1;
+        continue;
+      }
       if (sinceIso && parsed.data.at < sinceIso) continue;
-      out.push(parsed.data);
+      entries.push(parsed.data);
     }
-    return out;
+    return { entries, unreadableLines };
   }
 
   /**

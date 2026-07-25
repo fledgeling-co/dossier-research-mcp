@@ -15,13 +15,13 @@ Method borrowed from two places. The **AC-traceability matrix** comes first and 
 
 Every one of those passes `tsgo` and every unit test, and every one is a total failure for a caller. Only driving the protocol finds them.
 
-## Coverage model — the axes
+## Coverage model: the axes
 
 The QA plan's unit of work is a *surface × state* cell. For an MCP server the axes are:
 
 | Axis | Values | Sampling |
 |---|---|---|
-| **Surface** | 20 tools · 6 resources · 3 prompts | 100%, enumerated from `tools/list` so a new tool cannot be missed |
+| **Surface** | 34 tools · 6 resources · 4 prompts | 100%, enumerated from `tools/list` so a new tool cannot be missed |
 | **Run state** | `planning` · `running` · `completed` · `failed` · `cancelled` · `stalled` · absent | every state that changes a tool's answer |
 | **Data shape** | realistic · headingless · unicode/emoji/RTL · huge · empty · malformed · adversarial | seeded via `Store`, per the plan's data-seeding section |
 | **Credentials** | none (hermetic) · api-key · vertex | hermetic here; the paid paths are verified by hand and logged in the README |
@@ -41,7 +41,7 @@ Acceptance criteria are taken from the README's tool contracts and the tool desc
 | **PROTO-01** | Every tool registers and appears in `tools/list` | `protocol` | ✓ |
 | **PROTO-02** | Money-spending tools are annotated `readOnlyHint: false`; read-only ones `true` | `protocol` | ✓ |
 | **PROTO-03** | Every tool description names its cost when it has one | `protocol` | ✓ |
-| **PROTO-04** | All 6 resources and 3 prompts register and are readable | `protocol` | ✓ |
+| **PROTO-04** | All 6 resources and 4 prompts register and are readable | `protocol` | ✓ |
 | **PROTO-05** | stdout carries only JSON-RPC; diagnostics go to stderr | `protocol` | ✓ |
 | **PROTO-06** | The server starts and serves read-only tools with no credentials | `protocol` | ✓ |
 | **PLAN-01** | `research_plan` spends nothing and needs no credentials | `plan` | ✓ |
@@ -96,6 +96,97 @@ Acceptance criteria are taken from the README's tool contracts and the tool desc
 | **RES-02** | A resource for an unknown run returns an explanation, not a crash | `protocol` | ✓ |
 | **STREAM-01** | Live counters surface in status when present | `state-matrix` | ✓ |
 | **STREAM-02** | An abandoned stream is disclosed rather than looking stuck | `state-matrix` | ✓ |
+| **CONC-01** | One budget ceiling holds across **separate OS processes** sharing a store | `concurrency` | ✓ |
+| **CONC-02** | The store lock grants to one holder, breaks stale/dead locks, releases on throw | `concurrency` | ✓ |
+| **CONC-03** | Concurrent plan approvals start exactly one paid continuation | `concurrency` | ◑ one process, two callers; the cross-process case is not covered |
+| **CONC-04** | A cancelled run cannot be approved back into a paid run | `concurrency` | ✓ |
+| **CONC-05** | A cancellation the provider refused is reported as unconfirmed, not as success | `concurrency` | ✓ |
+| **CONC-06** | A paid call returning no interaction id fails loudly rather than polling forever | `concurrency` | ✓ |
+| **CONC-07** | Journal sequences never duplicate under concurrent appends | `concurrency` | ✓ |
+| **FAILC-01** | A corrupt ledger line is charged, not ignored | `concurrency` | ✓ |
+| **FAILC-02** | An unreadable ledger throws rather than reading as zero spend | `concurrency` | ✓ |
+| **FAILC-03** | Unparseable run records count as occupied concurrency slots | `concurrency` | ✓ |
+| **FAILC-04** | Unrecognised env booleans fail startup instead of defaulting to false | unit: `safety` | ✓ |
+| **PRIV-01** | Reports, prompts and the ledger are 0600; directories 0700 | `concurrency` | ✓ |
+| **SEC-06** | IPv6 forms the URL parser canonicalises (`::ffff:7f00:1`, NAT64, 6to4) are blocked | unit: `safety` | ✓ |
+| **SEC-07** | The whole `fe80::/10` range is link-local, not just the `fe80` prefix | unit: `safety` | ✓ |
+| **SEC-08** | A caller regex that can backtrack exponentially is rejected before it blocks the loop | unit: `safety` | ✓ |
+| **SEC-09** | Non-http citation schemes render inert rather than as clickable links | unit: `safety` | ✓ |
+| **EST-01** | Duration and cost widen with corpora, MCP servers and attachments | unit: `safety` | ✓ |
+| **EST-02** | Default runs keep the documented $1-3 / $3-7 bands | unit: `safety` | ✓ |
+| **EST-03** | Duration never promises longer than the API's 60-minute task cap | unit: `safety` | ✓ |
+| **SHAPE-01** | `research_wide` validates a finished matrix against the spec it was asked for | `shapes` | ✓ |
+| **SHAPE-02** | A column absent from the returned table is a gap, not a declared uncertainty | unit: `shapes` | ✓ |
+| **SHAPE-03** | A report with no table reports every row missing rather than passing | unit: `shapes` | ✓ |
+| **SHAPE-04** | A wide brief ends on the re-anchor, with nothing after it | unit: `shapes` | ✓ |
+| **SHAPE-05** | `research_wide` refuses a spec and a runId together, and refuses a partial spec | `shapes` | ✓ |
+| **SHAPE-06** | `research_wide { runId }` on a non-wide run says so instead of guessing | `shapes` | ✓ |
+| **WIN-01** | A window a backend cannot enforce is reported as requested, never as enforced | unit: `providers` | ✓ |
+| **WIN-02** | A recency bucket that merely contains the window is not called enforcement | unit: `providers` | ✓ |
+| **WIN-03** | Prose constraints land before the closing directive, never after it | unit: `providers` | ✓ |
+| **WIN-04** | Domains past a backend's cap are trimmed, disclosed, and kept in the prompt | unit: `providers` | ✓ |
+| **CMP-01** | `research_compare` refuses both entry conditions at once, and neither | `shapes` | ✓ |
+| **CMP-02** | Comparison needs two configured backends and says so when it has one | `shapes` | ✓ |
+| **CMP-03** | Agreement across backends citing one domain is scored single-source | unit: `shapes` | ✓ |
+| **CMP-04** | A claim only one backend made is reported as a coverage gap, not an error | unit: `shapes` | ✓ |
+| **EVID-01** | `research_evidence` profiles sources with no fetch, no model call and no credentials | `evidence` | ✓ |
+| **EVID-02** | One organisation cited through three of its own pages counts as one domain | `evidence` | ✓ |
+| **EVID-03** | The citation registry is numbered from one and deduplicated by canonical URL | `evidence` | ✓ |
+| **EVID-04** | The search trace records the backend and declines to promise reproducibility | `evidence` | ✓ |
+| **EVID-05** | The paid evidence tools refuse clearly, name the credential, and are not read-only | `evidence` | ✓ |
+| **EVID-06** | A failed quality floor is reported as advisory; nothing is ever withheld | unit: `evidence` | ✓ |
+| **EVID-07** | An unrecognised domain is classified `other`, never guessed into `official` | unit: `evidence` | ✓ |
+| **EVID-08** | A user's own document is never independent corroboration of an external fact | unit: `evidence` | ✓ |
+| **EVID-09** | Every follow-up answer is marked synthesised, on both the live and stored paths | unit: `tools` | ✓ |
+| **EVID-10** | A follow-up answers from the frozen citation registry, not the report's prose alone | unit: `tools` | ✓ |
+| **LOCAL-01** | The local corpus is off until an operator grants directories via the environment | unit: `local-corpus` | ✓ |
+| **LOCAL-02** | A symlink out of a granted directory is not followed | unit: `local-corpus` | ✓ |
+| **LOCAL-03** | Dotfiles, credential directories and dependency trees are skipped unread, including through an in-root alias | unit: `local-corpus` | ✓ |
+| **LOCAL-04** | The query is a literal, never a caller-supplied regular expression | unit: `local-corpus` | ✓ |
+| **LOCAL-05** | A missing granted directory is reported, not thrown | unit: `local-corpus` | ✓ |
+| **CLI-01** | A binary of the right name reporting the wrong product is refused, not run | unit: `local-cli`, `local-provider` | ✓ |
+| **CLI-09** | Identity is re-confirmed at spawn time, not only in the doctor | unit: `local-provider` | ✓ |
+| **CLI-10** | Path provenance is matched against the directory, never the binary's own name | unit: `local-cli` | ✓ |
+| **CLI-02** | A tool that names nothing in its version is identified by install path, or reported ambiguous | unit: `local-cli` | ✓ |
+| **CLI-03** | `ready` needs identity AND a sign-in file; presence alone is not enough | unit: `local-cli` | ✓ |
+| **CLI-04** | Every shipped subscription claim is dated, sourced, or marked unconfirmed | unit: `local-cli` | ✓ |
+| **CLI-05** | The brief reaches the CLI as an argv element, never through a shell | unit: `local-cli`, `local-provider` | ✓ |
+| **CLI-06** | A local run's outcome is readable by a different process than started it | unit: `local-provider` | ✓ |
+| **CLI-07** | A non-zero exit is a failure that keeps the partial output | unit: `local-provider` | ✓ |
+| **CLI-08** | The local backend is never selected automatically, and stays reachable by name | unit: `providers` | ✓ |
+| **IMPORT-01** | An imported report becomes a normal run: reads, greps and profiles identically | `evidence` | ✓ |
+| **IMPORT-02** | Import refuses a url and markdown together, and neither | `evidence` | ✓ |
+| **IMPORT-03** | An import charges nothing against the budget, with or without a utility model | `evidence` | ✓ |
+| **IMPORT-04** | An imported report that cites nothing is flagged as unverifiable | `evidence` | ✓ |
+| **WEB-01** | The subscription prompt hands over a real brief and the import command | `protocol` | ✓ |
+| **WEB-02** | Its automated mode states the robots.txt position and the account exposure | `protocol` | ✓ |
+| **LOOP-01** | The loop plans one task per source class, each in that index's query dialect | `loop`, unit: `local-loop` | ✓ |
+| **LOOP-02** | One page reported by two tasks is one registry entry, not two corroborations | `loop`, unit: `local-loop` | ✓ |
+| **LOOP-03** | A finding for an unknown task id is refused with the real task list | `loop` | ✓ |
+| **LOOP-04** | Submitting before the freeze is refused: an unfrozen registry cannot check a draft | `loop` | ✓ |
+| **LOOP-05** | Freezing closes the registry; a later finding is refused and recorded, never merged | `loop`, unit: `local-loop` | ✓ |
+| **LOOP-06** | A draft citing anything outside the frozen registry is REFUSED | `loop`, unit: `local-loop` | ✓ |
+| **LOOP-07** | A silent task is named as a coverage gap rather than averaged away | unit: `local-loop` | ✓ |
+| **LOOP-08** | An accepted draft becomes a normal run: reads, greps and profiles identically | `loop` | ✓ |
+| **SPEND-01** | A paid create is attempted exactly once; a timeout or 5xx never retries it | unit: `providers` | ✓ |
+| **SPEND-02** | An unknown create outcome is reported as ambiguous spend, not as a plain failure | unit: `providers` | ✓ |
+| **SPEND-03** | Reads still retry, because they are free and worth recovering | unit: `providers` | ✓ |
+| **SPEND-04** | The purchase fingerprint covers provider, shape, window, matrix spec and attachments | unit: `safety` | ✓ |
+| **SPEND-05** | A per-provider sub-ceiling stops one backend consuming the global budget | `concurrency` | ✓ |
+| **SPEND-06** | Utility spend is recorded even when the ceiling is disabled | `concurrency` | ✓ |
+| **SEC-11** | The admission lock is released only by its owner, and a live holder is never broken on age | `concurrency` | ✓ |
+| **SEC-12** | A citation label cannot open a second markdown link | unit: `safety` | ✓ |
+| **SEC-13** | Decoded provider options are Zod-bounded, so prompt text cannot inject wire options | unit: `providers` | ✓ |
+| **SEC-14** | A bearer token shorter than 24 characters fails startup | unit: `safety` | ✓ |
+| **FAILC-05** | An unreadable run directory aborts admission rather than reading as zero runs | `concurrency` | ✓ |
+| **PROV-01** | A terminal status is recognised whatever its case, on every adapter | unit: `providers` | ✓ |
+| **PROV-02** | Perplexity's out-of-band citations reach the report text | unit: `providers` | ✓ |
+| **PROV-03** | A Perplexity handle carries its endpoint, so a restart still polls the right one | unit: `providers` | ✓ |
+| **PROV-04** | Enforcement is claimed only where the request actually carries the filter | unit: `providers` | ✓ |
+| **CLI-11** | The supervisor bounds runtime and output, and confirms death before recording a cancel | unit: `local-provider` | ✓ |
+| **LOOP-09** | A CommonMark autolink to an ungathered source is refused | unit: `local-loop` | ✓ |
+| **EVID-11** | A model saying "unknown" is not counted as an independent domain | unit: `evidence` | ✓ |
+| **SHAPE-07** | An uncited wide cell is reported, not treated as a missing cell | unit: `shapes` | ✓ |
 
 ### The paid project
 
@@ -108,6 +199,12 @@ DOSSIER_PAID_TESTS=1 GEMINI_API_KEY=... npm run test:paid
 Roughly **$2–4** per full run at `fast` tier. `PAID-05` (the `max` tier, $3–7 on its own) needs a further `DOSSIER_PAID_MAX=1`, because it exercises the same code path with a different agent id and is rarely worth the money.
 
 The suite gives itself a `DOSSIER_BUDGET_USD=15` ceiling so a bug in the tests cannot drain a real budget, and cancels every run it started in `afterAll`, because an abandoned run keeps billing.
+
+### The multi-process test
+
+`tests/concurrency.test.ts` spawns **real OS processes** against one store rather than using worker threads, because threads share the in-process mutex, which was the mechanism that already worked. With a $15 ceiling and $7 reserved per `max` run, three processes racing to start six runs each must admit exactly two.
+
+Verified to fail against the pre-fix implementation: **3 admitted, $21 committed against a $15 ceiling.** A concurrency test that passes both before and after the fix proves nothing, so this one was checked in both directions.
 
 ### Remaining gaps, named
 
@@ -127,6 +224,6 @@ The suite gives itself a `DOSSIER_BUDGET_USD=15` ceiling so a bug in the tests c
 
 ```bash
 npm run test:acceptance     # this suite
-npm test                    # unit + acceptance
+npm run test:all            # unit + acceptance (npm test runs unit only)
 npm run gate                # typecheck, lint, test, build
 ```

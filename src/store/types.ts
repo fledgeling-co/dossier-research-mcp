@@ -34,6 +34,30 @@ export const RunRecordSchema = z.object({
   /** Stable local handle. Callers only ever see this, never the interaction id. */
   id: z.string().min(1).max(64),
   interactionId: z.string().max(200).default(''),
+  /**
+   * Which backend owns this run.
+   *
+   * Defaulted rather than required so every record written before the provider
+   * layer existed still parses. A store predating this change is by definition
+   * a Gemini store, and a migration that invalidated existing runs would lose
+   * reports people paid for.
+   */
+  provider: z.enum(['gemini', 'perplexity', 'openai', 'xai', 'local']).default('gemini'),
+  /**
+   * What artefact this run was asked for. Defaulted for the same reason as
+   * `provider`: every record written before shapes existed is a deep run.
+   */
+  shape: z.enum(['deep', 'wide', 'recent', 'corpus']).default('deep'),
+  /** The time window requested, when one was. Recorded for the audit trail. */
+  window: z.string().max(10).optional(),
+  /**
+   * The wide spec, serialised.
+   *
+   * Held so the completion gate can run against the finished report: checking
+   * that every requested column came back needs to know what was requested,
+   * and that is not recoverable from the prompt an hour later.
+   */
+  wideSpec: z.string().max(20_000).optional(),
   state: z.enum(RUN_STATES),
   tier: z.enum(RESEARCH_TIERS),
   archetype: z.enum(ARCHETYPE_NAMES),
@@ -106,5 +130,13 @@ export const LedgerEntrySchema = z.object({
   tier: z.enum(RESEARCH_TIERS),
   estimatedCostUsd: z.number().nonnegative(),
   label: z.string().max(200).optional(),
+  /**
+   * Which backend the money went to.
+   *
+   * Defaulted rather than required so every line written before per-provider
+   * accounting existed still parses; a ledger that fails to load is a ledger
+   * that reads as zero spend, which is the one failure this file cannot have.
+   */
+  provider: z.enum(['gemini', 'perplexity', 'openai', 'xai', 'local']).default('gemini'),
 });
 export type LedgerEntry = z.infer<typeof LedgerEntrySchema>;

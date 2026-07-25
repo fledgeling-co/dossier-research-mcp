@@ -177,7 +177,7 @@ With no credentials the server still starts and every read-only tool works. You 
 
 Every value is Zod-validated once at start-up, so an invalid one fails fast with a readable message rather than surfacing as a mystery mid-run. An empty string counts as unset, because a committed `.env.example` key is very often present-but-empty.
 
-**Credentials.** Set one of these two. Vertex wins if you set both.
+**Credentials.** Set one of the two Gemini options. Vertex wins if you set both.
 
 | Variable | Default | What it does |
 |---|---|---|
@@ -186,12 +186,25 @@ Every value is Zod-validated once at start-up, so an invalid one fails fast with
 | `VERTEX_PROJECT` | | GCP project id. Setting it switches to Vertex and **disables corpus grounding, follow-ups, titles, summaries and claim extraction** |
 | `VERTEX_LOCATION` | `global` | Vertex region. Only read when `VERTEX_PROJECT` is set |
 
+**Other backends.** Presence enables; nothing else is required. See [Providers](providers/README.md).
+
+| Variable | Default | What it does |
+|---|---|---|
+| `PERPLEXITY_API_KEY` | | Enables Perplexity: enforced date and domain filters, and native wide research |
+| `OPENAI_API_KEY` | | Enables OpenAI: a 100-domain filter and vector-store grounding |
+| `XAI_API_KEY` | | Enables xAI, which is the only backend that reaches X |
+| `DOSSIER_PROVIDERS` | | Explicit allow-list, comma separated. **Overrides detection**: a key present in your environment for some other tool should not silently become a place Dossier can spend money. Also the way to let the `local` CLI backend be chosen automatically, which it otherwise never is |
+
 **Spend control.** The reason this server exists in the shape it does.
 
 | Variable | Default | What it does |
 |---|---|---|
 | `DOSSIER_BUDGET_USD` | `100` | Hard ceiling per rolling window, in USD. A run reserves its **worst-case** cost against this before the call is made, so the gate refuses early rather than discovering an overage. `0` disables it, which the budget tool then says out loud |
 | `DOSSIER_BUDGET_WINDOW_HOURS` | `24` | The rolling window. With the default budget that is $100/day |
+| `DOSSIER_BUDGET_USD_GEMINI` | `0` | Optional sub-ceiling for one backend, inside the global one. `0` means only the global ceiling applies. Evaluated under the same lock, so one backend cannot quietly consume the lot |
+| `DOSSIER_BUDGET_USD_PERPLEXITY` | `0` | As above |
+| `DOSSIER_BUDGET_USD_OPENAI` | `0` | As above |
+| `DOSSIER_BUDGET_USD_XAI` | `0` | As above |
 | `DOSSIER_MAX_CONCURRENT` | `10` | Runs in flight at once. Checked inside the same lock as the budget, so parallel calls cannot slip past it |
 | `DOSSIER_REQUIRE_CONTRACT` | `false` | Makes `research_plan` → `research_start` mandatory. **Turn this on for any server an autonomous agent can reach**: without the fingerprint from a plan, a looping agent makes free no-ops instead of $7 mistakes |
 | `DOSSIER_DEDUPE_TTL_MINUTES` | `1440` | How long an identical request collapses onto the existing run instead of paying again. Set `0` to disable, which you almost never want |
@@ -204,13 +217,16 @@ Every value is Zod-validated once at start-up, so an invalid one fails fast with
 | `DOSSIER_POLL_SECONDS` | `20` | How often in-flight runs are polled. Lower is more responsive and more API calls; polling itself is not billed, but there is no reason to go below ~10 |
 | `DOSSIER_STALL_MINUTES` | `12` | Silence before a run is marked `stalled`. Raise it if you use `max` tier a lot, since a long synthesis phase is quiet by nature |
 | `DOSSIER_UTILITY_MODEL` | `gemini-3.1-pro-preview` | The cheap model behind titles, summaries and claim extraction. See [The utility model](how-it-works.md#the-utility-model) |
+| `DOSSIER_LOCAL_CORPUS_DIRS` | | Absolute directories `corpus_local_search` may read, colon or comma separated. Files are read and matched on this machine and never sent anywhere. **There is no tool that adds a directory**, deliberately: a file reader an agent can point anywhere is an exfiltration primitive, so the grant lives with you |
+| `DOSSIER_LOCAL_CLI` | | Which coding CLI backs `provider: "local"`: `claude`, `codex`, `agy`, `cursor`, `grok` or `gemini`. Omit to auto-detect in that order. `research_doctor` shows what is installed, identified and signed in |
 
 **HTTP transport.** Only read with `--transport http`.
 
 | Variable | Default | What it does |
 |---|---|---|
 | `DOSSIER_HTTP_PORT` | `8787` | Port to listen on |
-| `DOSSIER_HTTP_TOKENS` | | Comma-separated bearer tokens. Compared in constant time, and the `Bearer` scheme is required. **Bind to loopback if you leave this empty**; the server warns you |
+| `DOSSIER_HTTP_TOKENS` | | Comma-separated bearer tokens. Compared in constant time, and the `Bearer` scheme is required. **Minimum 24 characters**: this guards a surface that spends money, and comparing a short token in constant time does not make it harder to guess. `openssl rand -base64 32` |
+| `DOSSIER_HTTP_ALLOW_ANONYMOUS` | `false` | Required to start an HTTP listener with no tokens. Without it the server exits rather than serving a money-spending tool surface to anything that can reach the port |
 
 **Testing.**
 

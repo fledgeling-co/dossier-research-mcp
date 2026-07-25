@@ -18,7 +18,13 @@ export const AGENT_BY_TIER: Record<ResearchTier, string> = {
   max: 'deep-research-max-preview-04-2026',
 };
 
-export const INTERACTION_STATUSES = ['in_progress', 'completed', 'failed'] as const;
+/**
+ * `unknown` is not a provider status; it is ours, for a response whose status
+ * we could not recognise. It used to collapse into `in_progress`, which meant
+ * a renamed terminal state or a malformed payload produced a run that polled
+ * forever while the paid job had already finished.
+ */
+export const INTERACTION_STATUSES = ['in_progress', 'completed', 'failed', 'unknown'] as const;
 export type InteractionStatus = (typeof INTERACTION_STATUSES)[number];
 
 const ContentItemSchema = z.union([
@@ -55,7 +61,13 @@ export type InteractionStep = z.infer<typeof StepSchema>;
  */
 export const InteractionSchema = z.object({
   id: z.string().min(1).optional(),
-  status: z.enum(INTERACTION_STATUSES).catch('in_progress'),
+  /**
+   * An unrecognised status used to become `in_progress`, so a provider that
+   * renamed a terminal state, or a malformed response, produced a run that
+   * polled forever while the paid job was already over. `unknown` is a real
+   * state the caller can be told about instead.
+   */
+  status: z.enum(INTERACTION_STATUSES).catch('unknown'),
   error: z.unknown().optional(),
   steps: z.array(StepSchema).optional(),
 });
@@ -73,6 +85,16 @@ export interface InteractionSnapshot {
   /** Base64 images (charts) the run produced. */
   readonly images: readonly { readonly data: string; readonly mimeType: string }[];
   readonly error?: string;
+  /**
+   * What the provider says the run actually cost, when it says.
+   *
+   * Everything else here is an estimate reserved before the fact, so an
+   * authoritative figure is worth surfacing: it is the only way to tell whether
+   * the bands are calibrated. Perplexity reports one per request; a live run
+   * came back at $0.29 against a $2.00 reservation, which is the safe direction
+   * and worth knowing rather than assuming.
+   */
+  readonly actualCostUsd?: number;
 }
 
 /** Flatten a validated Interaction into the snapshot the runner persists. */

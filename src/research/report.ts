@@ -122,6 +122,48 @@ export interface GrepHit {
  * `regex: true` opts into a pattern, which is length-capped and compiled inside
  * a try so a malformed expression is a user error, not a crash.
  */
+/**
+ * Reject the regex shapes that can hang the process.
+ *
+ * `grepReport` runs a caller-supplied pattern against every line of a report
+ * that can run to tens of thousands of lines. JavaScript's engine backtracks,
+ * so `(a+)+$` against a long non-matching line is exponential, and there is one
+ * thread: a single grep call can stop the whole MCP server answering. A length
+ * cap does not help, because the dangerous patterns are short.
+ *
+ * This is a conservative structural check, not a decision procedure (that is
+ * undecidable in general). It rejects nested quantifiers and quantified
+ * alternations containing a quantifier, which covers the classic constructions.
+ * False positives are acceptable here: literal search is the default, and a
+ * rejected pattern costs a user one retry while an accepted one can cost every
+ * user the server.
+ */
+function assertNoCatastrophicBacktracking(pattern: string): void {
+  // Reject a quantified group whose body can match the same text more than one
+  // way. That is the property that makes backtracking exponential, and it is
+  // broader than "a quantifier inside a quantifier".
+  //
+  // The earlier version tested for a quantifier or a quantified alternation
+  // inside the group, and `(a|aa)+$` has neither: no quantifier in the body, no
+  // `+` before the `|`. It sailed through and blocked the event loop for over a
+  // second on 38 characters. `(a?)+$` slipped by for the same reason. A
+  // blacklist of constructions was the wrong shape; the property is.
+  const QUANTIFIED_GROUP = /\((?:\?[:=!<]*)?((?:[^()\\]|\\.)*)\)\s*(?:[+*]|\{\d*,\d*\})/g;
+  for (const match of pattern.matchAll(QUANTIFIED_GROUP)) {
+    const body = match[1] ?? '';
+    // An alternation, or any repetition inside the body, means more than one
+    // way to consume the same input. `(ab)+` is fine; `(a|aa)+` and `(a+)+`
+    // are not.
+    if (/[|+*?]|\{\d*,\d*\}/.test(body.replace(/\\./g, ''))) {
+      throw new Error(
+        'Pattern rejected: a repeated group that can match the same text in more than one way ' +
+          '(an alternation or another quantifier inside it) backtracks exponentially and would block the server. ' +
+          'Rewrite it, or drop `regex` to search literally.',
+      );
+    }
+  }
+}
+
 export function grepReport(
   markdown: string,
   pattern: string,
@@ -131,6 +173,7 @@ export function grepReport(
   let re: RegExp;
   if (opts.regex) {
     if (pattern.length > 500) throw new Error('Pattern too long (max 500 characters).');
+    assertNoCatastrophicBacktracking(pattern);
     try {
       re = new RegExp(pattern, 'i');
     } catch (e: unknown) {
@@ -167,13 +210,66 @@ export function grepReport(
  * links, so the report renders in any markdown viewer. Both the wrapping and
  * the self-closing forms are handled.
  */
+/**
+ * Schemes a citation may be rendered as a clickable link in.
+ *
+ * A citation is model output that was itself reading the open web, so the URL
+ * is attacker-influenced. Rendering `javascript:` or `data:` as a markdown link
+ * hands a client a clickable payload, and `file:` an exfiltration probe. They
+ * also disappear from verification, because `safeFetch` refuses the scheme, so
+ * the very citations most worth flagging were the ones that quietly vanished.
+ * Anything unsupported is now rendered as inert code, visible but not clickable.
+ */
+const RENDERABLE_SCHEMES = new Set(['http:', 'https:']);
+
+function renderCitation(url: string, label: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return `\`${label} (unusable citation URL)\``;
+  }
+  if (!RENDERABLE_SCHEMES.has(parsed.protocol)) {
+    return `\`${label} (${parsed.protocol} citation, not linked)\``;
+  }
+  return `[${escapeLabel(label)}](${url})`;
+}
+
+/**
+ * Neutralise markdown metacharacters in a citation's label.
+ *
+ * The label is model output too, and validating the URL says nothing about it.
+ * `<cite url="https://safe.example">x](javascript:alert(1))</cite>` closes the
+ * link early and opens a second one the scheme check never saw, so a validated
+ * citation renders a `javascript:` link. Escaping the brackets is enough to
+ * stop the label ending the construct it sits inside.
+ */
+function escapeLabel(label: string): string {
+  // Removed rather than backslash-escaped. `\]` is correct CommonMark and a
+  // conforming renderer handles it, but the result still reads as `](javascript:`
+  // to anything less careful, and a citation label is a title or a host name:
+  // brackets in it carry nothing worth preserving at that risk.
+  return label.replace(/[[\]]/g, '').replace(/\s+/g, ' ').trim();
+}
+
 export function normaliseCitations(markdown: string): string {
-  return markdown
-    .replace(/<cite\s+url="([^"]*)"[^>]*>([\s\S]*?)<\/cite>/gi, (_m, url: string, text: string) => {
-      const label = text.trim() || hostLabel(url);
-      return `[${label}](${url})`;
-    })
-    .replace(/<cite\s+url="([^"]*)"[^>]*\/?>/gi, (_m, url: string) => `[${hostLabel(url)}](${url})`);
+  return (
+    markdown
+      // Self-closing first. Run the paired pattern first and a `<cite ... />`
+      // followed later by a real `<cite>text</cite>` gets swallowed whole: the
+      // paired regex spans from the self-closing tag to the next `</cite>`,
+      // taking the intervening prose and a second citation with it.
+      .replace(/<cite\s+url="([^"]*)"[^>]*\/>/gi, (_m, url: string) =>
+        renderCitation(url, hostLabel(url)),
+      )
+      .replace(/<cite\s+url="([^"]*)"[^>]*>([\s\S]*?)<\/cite>/gi, (_m, url: string, text: string) =>
+        renderCitation(url, text.trim() || hostLabel(url)),
+      )
+      // Any unpaired opening tag left over.
+      .replace(/<cite\s+url="([^"]*)"[^>]*>/gi, (_m, url: string) =>
+        renderCitation(url, hostLabel(url)),
+      )
+  );
 }
 
 function hostLabel(url: string): string {
@@ -201,6 +297,11 @@ export function extractCitedUrls(markdown: string): string[] {
 
   for (const m of markdown.matchAll(/<cite\s+url="([^"]+)"/gi)) push(m[1] ?? '');
   for (const m of markdown.matchAll(/\]\((https?:\/\/[^\s)]+)\)/gi)) push(m[1] ?? '');
+  // CommonMark autolinks. `<https://example.com>` is a perfectly ordinary
+  // citation and was excluded by the bare-URL pattern's `(?<![("<])` guard,
+  // which meant a draft could cite a source the local loop never gathered and
+  // still pass the registry check.
+  for (const m of markdown.matchAll(/<(https?:\/\/[^\s<>]+)>/gi)) push(m[1] ?? '');
   for (const m of markdown.matchAll(/(?<![("<])\bhttps?:\/\/[^\s<>"'|)\]]+/gi)) push(m[0]);
 
   return out;

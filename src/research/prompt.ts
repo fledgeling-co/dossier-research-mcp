@@ -56,6 +56,11 @@ export interface BuiltPrompt {
   readonly archetype: Archetype;
   /** True when the caller's text was already scaffolded and passed through. */
   readonly preEngineered: boolean;
+  /**
+   * Problems worth telling a human about that are not worth refusing over,
+   * and that cannot be repaired without rewriting their brief.
+   */
+  readonly warnings?: readonly string[];
 }
 
 /**
@@ -132,14 +137,47 @@ function list(items: readonly string[]): string {
  * exactly twice — once near the top and once verbatim at the very end, which
  * re-anchors synthesis after up to an hour of recursive search.
  */
+/**
+ * Warn when content follows the final `<core_directive>`.
+ *
+ * The closing directive works because it is last: it re-anchors synthesis after
+ * up to an hour of recursive search. Appending the corpus-grounding block after
+ * it shipped once and made the instruction invisible; that run returned a
+ * 12,660-token report citing none of the corpus it had been given.
+ *
+ * Generated prompts satisfy this by construction. Pre-engineered ones are the
+ * caller's own text, so this reports rather than repairs.
+ */
+function trailingAfterDirective(prompt: string): string | null {
+  const CLOSE = '</core_directive>';
+  const last = prompt.lastIndexOf(CLOSE);
+  if (last === -1) return null;
+  const trailing = prompt.slice(last + CLOSE.length).trim();
+  if (trailing.length === 0) return null;
+  const preview = trailing.slice(0, 80).replace(/\s+/g, ' ');
+  return (
+    `Your brief has ${trailing.length} characters after the final </core_directive> ("${preview}...").` +
+    ' The closing directive re-anchors the model after a long search and only works when it is last;' +
+    ' content after it can be ignored entirely. Move </core_directive> to the end if that content matters.'
+  );
+}
+
 export function buildPrompt(args: BuildPromptArgs): BuiltPrompt {
   const raw = args.question.trim();
 
   if (isPreEngineered(raw)) {
+    // Verbatim means verbatim. The anti-drift invariant (nothing after the
+    // final `<core_directive>`) is enforced by construction for generated
+    // prompts but cannot be enforced here without rewriting the caller's own
+    // brief, which is the one thing this path promises not to do. So warn
+    // instead: a human can move their own closing tag, and a silent rewrite of
+    // a carefully engineered prompt would be the worse failure.
+    const warnings = trailingAfterDirective(raw);
     return {
       prompt: raw,
       archetype: args.archetype ?? selectArchetype(raw),
       preEngineered: true,
+      ...(warnings ? { warnings: [warnings] } : {}),
     };
   }
 
@@ -245,7 +283,7 @@ export function buildPrompt(args: BuildPromptArgs): BuiltPrompt {
           '`<INSUFFICIENT_EVIDENCE>[claim that could not be corroborated, and why]</INSUFFICIENT_EVIDENCE>`',
           '`<CONFLICTING_EVIDENCE>[the positions, their sources, the nature of the disagreement]</CONFLICTING_EVIDENCE>`',
           '`<CONFIDENCE:LOW>[the claim]</CONFIDENCE:LOW>` for weakly-supported but load-bearing estimates',
-          '`<INFERENCE>[claim derived by reasoning; show the chain]</INFERENCE>`',
+          '`<INFERENCE from="[the cited claims it rests on]">[claim derived by reasoning; show the chain]</INFERENCE>` — this tag is required for every statement you assembled rather than read. A conclusion drawn from three sourced facts is an inference even when all three are correct, and naming which facts it rests on is what lets a reader check the step you took between them.',
         ]),
         'Do not present extrapolated or synthesised numbers as empirical findings.',
       ].join('\n')}`,

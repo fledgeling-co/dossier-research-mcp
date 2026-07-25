@@ -1,13 +1,16 @@
 import type { Config } from '../config.js';
 import type { DeepResearchClient, ResearchToolSpec } from '../gemini/client.js';
-import { AGENT_RUN_BAND, estimateCost } from '../gemini/cost.js';
+import { pollDelayMs } from '../net/retry.js';
+import { AGENT_RUN_BAND, AGENT_RUN_HARD_CAP_USD, UTILITY_CALL_BAND, estimateCost } from '../gemini/cost.js';
+import type { CostBand, DurationOptions } from '../gemini/cost.js';
 import type { InteractionSnapshot, ResearchTier } from '../gemini/types.js';
 import { newRunId, Store } from '../store/store.js';
 import { TERMINAL_STATES, type RunRecord, type RunState } from '../store/types.js';
 import type { Archetype } from './archetypes.js';
+import type { ProviderId } from '../providers/types.js';
 import { fingerprint } from './contract.js';
 import { extractPlan } from './plan.js';
-import { Mutex } from './spend.js';
+import { KeyedMutex, Mutex } from './spend.js';
 import { StreamSupervisor } from './stream.js';
 import { extractCitedUrls, normaliseCitations } from './report.js';
 
@@ -19,6 +22,13 @@ import { extractCitedUrls, normaliseCitations } from './report.js';
  * the next tick. Disconnect the MCP client mid-run and nothing is lost — the
  * journal keeps accumulating and `research_tail` replays it by cursor.
  */
+
+/** The report's own first heading, which is a better title than a bought one. */
+function firstHeading(markdown: string): string | undefined {
+  const match = /^#{1,3}\s+(.+)$/m.exec(markdown);
+  const text = match?.[1]?.trim().slice(0, 300);
+  return text && text.length > 0 ? text : undefined;
+}
 
 export class BudgetExceededError extends Error {
   readonly code = 'budget_exceeded' as const;
@@ -53,6 +63,14 @@ export interface StartRunArgs {
   readonly thinkingSummaries: boolean;
   readonly visualization: boolean;
   readonly preEngineered: boolean;
+  /** Which backend runs this. Defaults to Gemini. */
+  readonly provider?: ProviderId;
+  /** The artefact shape asked for. Defaults to a deep report. */
+  readonly shape?: 'deep' | 'wide' | 'recent' | 'corpus';
+  /** The time window asked for, recorded for the audit trail. */
+  readonly window?: string;
+  /** The wide spec, serialised, when this is a wide run. */
+  readonly wideSpec?: string;
   readonly label?: string;
   readonly tags?: readonly string[];
   readonly attachments?: readonly {
@@ -68,6 +86,24 @@ export interface StartRunResult {
   readonly deduped: boolean;
 }
 
+/**
+ * Does this run hold a slot the concurrency cap exists to limit?
+ *
+ * The cap bounds work in flight at a provider, not records in a directory. A
+ * local-loop session is an open notebook: nothing is executing anywhere, it is
+ * waiting for its host to report findings, and it may sit open for an hour
+ * while somebody searches. Counting those would let ten free sessions refuse a
+ * paid run with "10 runs already in flight", which is both wrong and baffling.
+ *
+ * An interaction id means something is genuinely running (an API job, or a
+ * subprocess). A non-zero reservation covers the window inside `start()` where
+ * the record exists and the paid call has not returned yet, which is precisely
+ * the window the admission lock is protecting.
+ */
+function occupiesSlot(run: RunRecord): boolean {
+  return run.interactionId !== '' || run.estimatedCostUsd > 0;
+}
+
 export interface BudgetSnapshot {
   readonly budgetUsd: number;
   readonly windowHours: number;
@@ -80,24 +116,51 @@ export interface BudgetSnapshot {
 
 export class Runner {
   private timer: NodeJS.Timeout | null = null;
+  /** Drives poll backoff; reset to 0 by any successful tick. */
+  private consecutivePollFailures = 0;
   /** Guards against overlapping ticks when a poll outlives its interval. */
   private ticking = false;
   private readonly supervisor: StreamSupervisor | null;
   /**
-   * Serialises check-and-reserve. Without it, concurrent starts each read
-   * headroom before any of them writes a ledger entry, and all of them pass.
+   * Serialises check-and-reserve *within* this process. Fast, and the common
+   * case: an agent making parallel tool calls.
    */
   private readonly spendLock = new Mutex();
+  /** Serialises lifecycle transitions per run: approve, cancel, finalise. */
+  private readonly runLock = new KeyedMutex();
 
   constructor(
     private readonly store: Store,
     private readonly config: Config,
-    private readonly client: DeepResearchClient | null,
+    /**
+     * Resolve the client for a given backend.
+     *
+     * A function rather than a fixed client because a run's provider is now a
+     * property of the run, not of the server: a Gemini run and a Perplexity run
+     * are polled, cancelled and continued through different clients, and the
+     * runner must be able to pick the right one an hour after the run started.
+     * Returns null when that backend has no credentials.
+     */
+    private readonly resolveClient: (provider: ProviderId) => DeepResearchClient | null,
     private readonly onFinalise?: (run: RunRecord, markdown: string) => Promise<void>,
+    /**
+     * Per-provider cost band.
+     *
+     * The gate reserves before it spends, so it has to reserve the band of the
+     * backend that will actually run. Reserving Google's $1-3 for a Perplexity
+     * wide run that can reach $6 is not a ceiling, it is a ceiling-shaped hole.
+     * Optional so every existing single-provider caller keeps working on the
+     * Gemini bands, which is what they were already getting.
+     */
+    private readonly estimateFor?: (provider: ProviderId, input: DurationOptions) => CostBand,
   ) {
     // Streaming is additive: without a client that supports it, everything
     // below still works on polling alone.
-    this.supervisor = client?.streamRun ? new StreamSupervisor({ store, client }) : null;
+    // Streaming is a Gemini capability today. Resolved once for the default
+    // backend rather than per run: a provider without a stream simply polls,
+    // which is the same fallback that already existed.
+    const streaming = resolveClient('gemini');
+    this.supervisor = streaming?.streamRun ? new StreamSupervisor({ store, client: streaming }) : null;
   }
 
   /**
@@ -112,12 +175,31 @@ export class Runner {
     void this.supervisor.attach(run).catch(() => undefined);
   }
 
+  /**
+   * Run a check-and-reserve section under both locks.
+   *
+   * In-process mutex first, so concurrent calls in one server queue cheaply
+   * without touching the filesystem. Cross-process file lock second, so a
+   * second server on the same store cannot observe headroom this one has
+   * already claimed. Order matters: taking the file lock first would hold a
+   * filesystem lock while waiting on an in-memory queue, which is the slow way
+   * round and blocks other processes for no reason.
+   */
+  private async withAdmissionLock<T>(task: () => Promise<T>): Promise<T> {
+    return this.spendLock.run(async () => this.store.admissionLock().run(task));
+  }
+
   /** Current spend position within the rolling window. */
   async budget(): Promise<BudgetSnapshot> {
     const since = new Date(Date.now() - this.config.budgetWindowHours * 3_600_000).toISOString();
-    const entries = await this.store.readLedger(since);
-    const committed = entries.reduce((sum, e) => sum + e.estimatedCostUsd, 0);
-    const active = await this.store.activeRuns();
+    const { entries, unreadableLines } = await this.store.readLedgerStrict(since);
+    // A line we cannot parse is spend we cannot see. Charging the worst case
+    // per damaged line keeps corruption from raising the ceiling; the
+    // alternative is that editing the ledger grants free runs.
+    const committed =
+      entries.reduce((sum, e) => sum + e.estimatedCostUsd, 0) +
+      unreadableLines * estimateCost('max').highUsd;
+    const active = (await this.store.activeRuns()).filter(occupiesSlot);
     return {
       budgetUsd: this.config.budgetUsd,
       windowHours: this.config.budgetWindowHours,
@@ -129,12 +211,23 @@ export class Runner {
     };
   }
 
-  fingerprintFor(args: Pick<StartRunArgs, 'prompt' | 'tier' | 'tools' | 'collaborativePlanning'>): string {
+  fingerprintFor(
+    args: Pick<
+      StartRunArgs,
+      'prompt' | 'tier' | 'tools' | 'collaborativePlanning' | 'attachments' | 'provider' | 'shape' | 'window' | 'wideSpec'
+    >,
+  ): string {
     return fingerprint({
       prompt: args.prompt,
       tier: args.tier,
       tools: args.tools,
       collaborativePlanning: args.collaborativePlanning,
+      // Identity, not just order: `kind` and `uri` both change the purchase.
+      attachments: (args.attachments ?? []).map((a) => `${a.kind}:${a.uri}`),
+      ...(args.provider ? { provider: args.provider } : {}),
+      ...(args.shape ? { shape: args.shape } : {}),
+      ...(args.window ? { window: args.window } : {}),
+      ...(args.wideSpec ? { wideSpec: args.wideSpec } : {}),
     });
   }
 
@@ -145,28 +238,53 @@ export class Runner {
    * over-counts rather than under-counts — the safe direction for a spend gate.
    */
   async start(args: StartRunArgs): Promise<StartRunResult> {
-    if (!this.client) {
+    const provider: ProviderId = args.provider ?? 'gemini';
+    const client = this.resolveClient(provider);
+    if (!client) {
       throw new Error(
-        'No Gemini client available. Set GEMINI_API_KEY or VERTEX_PROJECT (and unset DOSSIER_HERMETIC).',
+        `No ${provider} client available. Check its credentials with \`research_doctor\`.`,
       );
     }
 
     const fp = this.fingerprintFor(args);
-    const band = estimateCost(args.tier);
+    // Same estimate the caller was shown in `research_plan`. If the gate
+    // reserved a bare tier band while the plan advertised a tool-inflated one,
+    // the ceiling would quietly under-reserve exactly the heaviest runs.
+    const estimateInput: DurationOptions = {
+      tier: args.tier,
+      tools: args.tools.map((x) => x.type),
+      attachments: args.attachments?.length ?? 0,
+      collaborativePlanning: args.collaborativePlanning,
+      ...(args.shape ? { shape: args.shape } : {}),
+    };
+    const band = this.estimateFor
+      ? this.estimateFor(provider, estimateInput)
+      : estimateCost(estimateInput);
 
     // Everything from here to the ledger write is one critical section. Dedupe
     // is inside it too: two identical concurrent requests must collapse onto
     // one run rather than both missing and both paying.
-    const reserved = await this.spendLock.run(async () => {
+    const reserved = await this.withAdmissionLock(async () => {
       const existing = await this.store.findByFingerprint(fp, this.config.dedupeTtlMinutes);
       if (existing) return { existing } as const;
 
-      const active = await this.store.activeRuns();
-      if (active.length >= this.config.maxConcurrent) {
-        throw new ConcurrencyExceededError(active.length, this.config.maxConcurrent);
+      const active = (await this.store.activeRuns()).filter(occupiesSlot);
+      // Unreadable run files count as occupied slots. Skipping them would mean
+      // corrupting a file raises the concurrency cap.
+      const unreadable = await this.store.unreadableRunCount();
+      const occupied = active.length + unreadable;
+      if (occupied >= this.config.maxConcurrent) {
+        throw new ConcurrencyExceededError(occupied, this.config.maxConcurrent);
       }
 
       if (this.config.budgetUsd > 0) {
+        const perProvider = this.config.providerBudgetsUsd[provider] ?? 0;
+        if (perProvider > 0) {
+          const spentHere = await this.committedFor(provider);
+          if (spentHere + band.highUsd > perProvider) {
+            throw new BudgetExceededError(spentHere, perProvider, this.config.budgetWindowHours);
+          }
+        }
         const snapshot = await this.budget();
         // Reserve the WORST case, not the midpoint. A max run is $3-7;
         // reserving $5 for a run that costs $7 overshoots systematically, and
@@ -197,6 +315,10 @@ export class Runner {
         question: args.question.slice(0, 20_000),
         prompt: args.prompt.slice(0, 200_000),
         promptWasPreEngineered: args.preEngineered,
+        provider,
+        shape: args.shape ?? 'deep',
+        ...(args.window ? { window: args.window } : {}),
+        ...(args.wideSpec ? { wideSpec: args.wideSpec } : {}),
         fingerprint: fp,
         createdAt: at,
         updatedAt: at,
@@ -226,6 +348,7 @@ export class Runner {
         runId: id,
         tier: args.tier,
         estimatedCostUsd: band.highUsd,
+        provider,
         ...(args.label ? { label: args.label } : {}),
       });
       return { record } as const;
@@ -238,7 +361,7 @@ export class Runner {
 
     let snapshot: InteractionSnapshot;
     try {
-      snapshot = await this.client.createRun({
+      snapshot = await client.createRun({
         prompt: args.prompt,
         tier: args.tier,
         collaborativePlanning: args.collaborativePlanning,
@@ -259,6 +382,23 @@ export class Runner {
       throw e;
     }
 
+    if (!snapshot.interactionId) {
+      // The call was billed but returned nothing we can poll. Failing loudly
+      // beats a record that polls forever and never resolves, because the only
+      // useful action here is a human looking at the provider console.
+      const orphaned: RunRecord = {
+        ...record,
+        state: 'failed',
+        error:
+          'The provider accepted the run but returned no interaction id, so it cannot be polled or cancelled from here. ' +
+          'It has been charged against your budget. Check the provider console for an in-flight run before retrying.',
+        updatedAt: new Date().toISOString(),
+      };
+      await this.store.saveRun(orphaned);
+      await this.store.appendJournal(id, 'failed', orphaned.error ?? '');
+      return { run: orphaned, deduped: false };
+    }
+
     const started: RunRecord = { ...record, interactionId: snapshot.interactionId };
     await this.store.saveRun(started);
     await this.store.appendJournal(
@@ -271,6 +411,177 @@ export class Runner {
     const advanced = await this.applySnapshot(started, snapshot);
     this.attachStream(advanced);
     return { run: advanced, deduped: false };
+  }
+
+  /**
+   * Store a report that was produced somewhere else.
+   *
+   * The subscription path, and the reason it exists: someone with a Google AI
+   * Pro or a ChatGPT plan has already paid for deep research, and the only
+   * thing standing between that and Dossier's durable, greppable,
+   * citation-checked store is a copy and a paste. No admission control runs
+   * here because nothing is being bought — this is the one entry point to the
+   * store that costs nothing, and pretending otherwise by charging it against
+   * the ceiling would refuse imports on a day the budget happened to be full.
+   */
+  async importRun(args: {
+    question: string;
+    markdown: string;
+    source: string;
+    label?: string;
+    tags?: readonly string[];
+  }): Promise<RunRecord> {
+    const markdown = normaliseCitations(args.markdown);
+    const id = newRunId();
+    const at = new Date().toISOString();
+    const record: RunRecord = {
+      id,
+      interactionId: '',
+      provider: 'local',
+      shape: 'deep',
+      state: 'completed',
+      tier: 'fast',
+      archetype: 'technical',
+      question: args.question.slice(0, 20_000),
+      // The "prompt" is a provenance note. There was no prompt: whatever
+      // produced this ran somewhere Dossier could not see, and recording a
+      // fabricated one would put a prompt in the store that never existed.
+      prompt: `[imported from ${args.source}; the original brief is not recorded here]`,
+      promptWasPreEngineered: false,
+      fingerprint: fingerprint({
+        prompt: `import:${args.source}:${args.question}`,
+        tier: 'fast',
+        tools: [],
+        collaborativePlanning: false,
+        attachments: [],
+      }),
+      createdAt: at,
+      updatedAt: at,
+      lastProgressAt: at,
+      completedAt: at,
+      estimatedCostUsd: 0,
+      tags: [...(args.tags ?? [])],
+      planApproved: true,
+      reportPath: `reports/${id}.md`,
+      reportChars: markdown.length,
+      sourceCount: extractCitedUrls(markdown).length,
+      imageCount: 0,
+      reasoningSteps: 0,
+      streamedChars: 0,
+      searches: 0,
+      urlsFetched: 0,
+      corpusQueries: 0,
+      codeRuns: 0,
+      streamAbandoned: false,
+      toolsUsed: [],
+      corpusStores: [],
+      ...(args.label ? { label: args.label } : {}),
+    };
+    await this.store.saveReport(id, markdown);
+    await this.store.saveRun(record);
+    await this.store.appendJournal(
+      id,
+      'created',
+      `Imported from ${args.source} — ${String(markdown.length)} chars, ${String(record.sourceCount)} cited sources. Nothing was charged.`,
+    );
+
+    // Deliberately NOT titled by the model.
+    //
+    // `onFinalise` reserves and calls the summariser, which bills. Doing that
+    // here while the tool's own response says "Charged: nothing" made the one
+    // claim this path exists to make into a false one. A deterministic title
+    // off the report's first heading costs nothing and is usually better than a
+    // generated one anyway, because it is what the document actually says.
+    const titled: RunRecord = { ...record, ...(firstHeading(markdown) ? { title: firstHeading(markdown) } : {}) };
+    if (titled.title !== record.title) await this.store.saveRun(titled);
+    return (await this.store.getRun(id)) ?? titled;
+  }
+
+  /**
+   * Open a local-loop run: a record with no interaction behind it.
+   *
+   * No admission control, for the same reason `importRun` has none: nothing is
+   * being bought. The host does the searching with capability it already has,
+   * and charging that against a spend ceiling would refuse free work on a day
+   * the budget happened to be full.
+   */
+  async openLoop(args: { question: string; archetype: Archetype; label?: string }): Promise<RunRecord> {
+    const id = newRunId();
+    const at = new Date().toISOString();
+    const record: RunRecord = {
+      id,
+      interactionId: '',
+      provider: 'local',
+      shape: 'deep',
+      state: 'running',
+      tier: 'fast',
+      archetype: args.archetype,
+      question: args.question.slice(0, 20_000),
+      prompt: '[local loop: the host ran the searches; the task list is in the session record]',
+      promptWasPreEngineered: false,
+      fingerprint: fingerprint({
+        prompt: `local-loop:${args.question}:${at}`,
+        tier: 'fast',
+        tools: [],
+        collaborativePlanning: false,
+        attachments: [],
+      }),
+      createdAt: at,
+      updatedAt: at,
+      lastProgressAt: at,
+      estimatedCostUsd: 0,
+      tags: ['local-loop'],
+      planApproved: true,
+      reportChars: 0,
+      sourceCount: 0,
+      imageCount: 0,
+      reasoningSteps: 0,
+      streamedChars: 0,
+      searches: 0,
+      urlsFetched: 0,
+      corpusQueries: 0,
+      codeRuns: 0,
+      streamAbandoned: false,
+      toolsUsed: [],
+      corpusStores: [],
+      ...(args.label ? { label: args.label } : {}),
+    };
+    await this.store.saveRun(record);
+    await this.store.appendJournal(id, 'created', 'Local research loop opened. Nothing charged.');
+    return record;
+  }
+
+  /** Store a local-loop draft and complete the run. */
+  async closeLoop(runId: string, markdown: string): Promise<RunRecord> {
+    const existing = await this.store.getRun(runId);
+    if (!existing) throw new Error(`No run ${runId}.`);
+    const report = normaliseCitations(markdown);
+    await this.store.saveReport(runId, report);
+    const at = new Date().toISOString();
+    const completed: RunRecord = {
+      ...existing,
+      state: 'completed',
+      updatedAt: at,
+      lastProgressAt: at,
+      completedAt: at,
+      reportPath: `reports/${runId}.md`,
+      reportChars: report.length,
+      sourceCount: extractCitedUrls(report).length,
+    };
+    await this.store.saveRun(completed);
+    await this.store.appendJournal(
+      runId,
+      'completed',
+      `Local-loop report accepted — ${String(report.length)} chars, ${String(completed.sourceCount)} cited sources, all from the frozen registry.`,
+    );
+    // Same rule as `importRun`: a path that advertises itself as free does not
+    // quietly buy a title.
+    const titled: RunRecord = {
+      ...completed,
+      ...(firstHeading(report) ? { title: firstHeading(report) } : {}),
+    };
+    if (titled.title !== completed.title) await this.store.saveRun(titled);
+    return (await this.store.getRun(runId)) ?? titled;
   }
 
   /**
@@ -348,6 +659,18 @@ export class Runner {
           'completed',
           `Report ready — ${markdown.length} chars, ${next.sourceCount} cited sources.`,
         );
+        // An authoritative figure beside our estimate, when the provider gives
+        // one. It is the only way to tell whether the reserved bands are
+        // calibrated rather than merely conservative.
+        if (snapshot.actualCostUsd !== undefined) {
+          await this.store.appendJournal(
+            run.id,
+            'note',
+            `The provider reports this run cost $${snapshot.actualCostUsd.toFixed(4)}; ` +
+              `$${next.estimatedCostUsd.toFixed(2)} was reserved against your ceiling. ` +
+              'The ledger keeps the reservation, because that is what the gate counted.',
+          );
+        }
         if (this.onFinalise) {
           // Title/summary generation is best-effort: a utility-model hiccup must
           // not lose a report that already cost dollars to produce.
@@ -374,6 +697,24 @@ export class Runner {
         }
         break;
       }
+      case 'unknown': {
+        // We could not read the provider's status. Treat it as a stall signal
+        // rather than progress: the watchdog will surface it, and the caller
+        // is told plainly rather than watching a run that never moves.
+        next = {
+          ...next,
+          state: 'stalled',
+          error:
+            'The provider returned a status this server does not recognise, so the run cannot be tracked reliably. ' +
+            'Check the provider console; the run may still be executing and billing.',
+        };
+        await this.store.appendJournal(
+          run.id,
+          'progress',
+          'Provider returned an unrecognised status; treating the run as stalled.',
+        );
+        break;
+      }
       default: {
         const _exhaustive: never = snapshot.status;
         return _exhaustive;
@@ -396,21 +737,72 @@ export class Runner {
    * It goes through the same critical section as a research run so the two
    * cannot race each other either.
    */
+  /**
+   * Reserve for a managed-agent run.
+   *
+   * The band is a guess: the agent's model and token volume are the caller's
+   * choice, not ours, and a Pro-class agent can exceed a Flash-rate estimate
+   * several times over. Reserving the hard cap rather than the band means an
+   * unpredictable call cannot quietly outrun the ceiling. It refuses earlier
+   * than strictly necessary, which is the correct direction for a guardrail.
+   */
   async reserveNonResearchSpend(label: string): Promise<void> {
-    if (this.config.budgetUsd <= 0) return;
-    await this.spendLock.run(async () => {
-      const snapshot = await this.budget();
-      if (snapshot.committedUsd + AGENT_RUN_BAND.highUsd > snapshot.budgetUsd) {
-        throw new BudgetExceededError(snapshot.committedUsd, snapshot.budgetUsd, snapshot.windowHours);
+    await this.reserveSpend(label, Math.max(AGENT_RUN_BAND.highUsd, AGENT_RUN_HARD_CAP_USD), 'agent');
+  }
+
+  /**
+   * Reserve for a utility-model call: titles, summaries, follow-ups, claims.
+   *
+   * Every one of these bills, and every one of them used to run outside the
+   * ledger, so the advertised daily ceiling covered research runs only. Same
+   * mutex and same worst-case reservation as everything else; only the band
+   * differs.
+   */
+  async reserveUtilitySpend(label: string, provider: ProviderId = 'gemini'): Promise<void> {
+    await this.reserveSpend(label, UTILITY_CALL_BAND.highUsd, 'util', provider);
+  }
+
+  private async reserveSpend(
+    label: string,
+    amountUsd: number,
+    prefix: string,
+    provider: ProviderId = 'gemini',
+  ): Promise<void> {
+    await this.withAdmissionLock(async () => {
+      // The ceiling check is skipped when the gate is disabled; the ledger
+      // entry is not. `DOSSIER_BUDGET_USD=0` used to return before appending,
+      // so disabling the *limit* also erased the *history* for utility and
+      // agent calls while research starts kept recording theirs. Spend
+      // reporting that is silently partial is worse than none.
+      if (this.config.budgetUsd > 0) {
+        const snapshot = await this.budget();
+        if (snapshot.committedUsd + amountUsd > snapshot.budgetUsd) {
+          throw new BudgetExceededError(snapshot.committedUsd, snapshot.budgetUsd, snapshot.windowHours);
+        }
+        const perProvider = this.config.providerBudgetsUsd[provider] ?? 0;
+        if (perProvider > 0) {
+          const spentHere = await this.committedFor(provider);
+          if (spentHere + amountUsd > perProvider) {
+            throw new BudgetExceededError(spentHere, perProvider, snapshot.windowHours);
+          }
+        }
       }
       await this.store.appendLedger({
         at: new Date().toISOString(),
-        runId: `agent_${Date.now().toString(36)}`,
+        runId: `${prefix}_${Date.now().toString(36)}_${Math.trunc(performance.now() * 1000) % 1000}`,
         tier: 'fast',
-        estimatedCostUsd: AGENT_RUN_BAND.highUsd,
+        estimatedCostUsd: amountUsd,
+        provider,
         label,
       });
     });
+  }
+
+  /** Committed dollars against one backend inside the rolling window. */
+  private async committedFor(provider: ProviderId): Promise<number> {
+    const since = new Date(Date.now() - this.config.budgetWindowHours * 3_600_000).toISOString();
+    const { entries } = await this.store.readLedgerStrict(since);
+    return entries.filter((e) => e.provider === provider).reduce((sum, e) => sum + e.estimatedCostUsd, 0);
   }
 
   /** Poll one run against the API and persist whatever changed. */
@@ -423,11 +815,12 @@ export class Runner {
     // the output of the collaborative-planning turn. Only once it is captured
     // does the run park, waiting on a human rather than on Gemini.
     if (run.state === 'planning' && !run.planApproved && run.plan) return run;
-    if (!this.client) return run;
+    const client = this.resolveClient(run.provider);
+    if (!client) return run;
 
     let snapshot: InteractionSnapshot;
     try {
-      snapshot = await this.client.getRun(run.interactionId);
+      snapshot = await client.getRun(run.interactionId);
     } catch (e: unknown) {
       // A transient poll failure is not a failed run. Record a breadcrumb and
       // let the watchdog decide when silence has gone on too long.
@@ -466,14 +859,30 @@ export class Runner {
 
   /** Approve a collaborative plan, releasing the run to execute. */
   async approvePlan(runId: string, amendment?: string): Promise<RunRecord | null> {
+    // The whole read-check-pay-write sequence is one critical section. Without
+    // it two concurrent approvals both observe `planApproved === false`, both
+    // start a paid continuation, and only one interaction id survives the
+    // write: the other run is orphaned upstream and still billing.
+    return this.runLock.run(runId, async () => this.approvePlanLocked(runId, amendment));
+  }
+
+  private async approvePlanLocked(runId: string, amendment?: string): Promise<RunRecord | null> {
     const run = await this.store.getRun(runId);
     if (!run) return null;
     if (run.planApproved) return run;
-    if (!this.client) throw new Error('No Gemini client available.');
+    // A cancelled or failed run must not be resurrected into a paid run by a
+    // late approval; neither layer used to check.
+    if (TERMINAL_STATES.includes(run.state)) {
+      throw new Error(
+        `Run ${runId} is ${run.state} and cannot be approved. Start a new run if you still want this research.`,
+      );
+    }
+    const client = this.resolveClient(run.provider);
+    if (!client) throw new Error(`No ${run.provider} client available to continue this run.`);
 
     // Approval is "continue from the planning interaction with the flag off" —
     // an amendment rides along as the input for that turn.
-    const snapshot = await this.client.createRun({
+    const snapshot = await client.createRun({
       prompt:
         amendment?.trim() ||
         'The plan is approved as proposed. Proceed with the research and produce the full report in the specified output format.',
@@ -505,20 +914,46 @@ export class Runner {
   }
 
   async cancel(runId: string): Promise<RunRecord | null> {
-    const run = await this.store.getRun(runId);
-    if (!run) return null;
-    if (TERMINAL_STATES.includes(run.state)) return run;
-    if (this.client && run.interactionId) {
-      await this.client.cancelRun(run.interactionId).catch(() => undefined);
-    }
-    const cancelled: RunRecord = {
-      ...run,
-      state: 'cancelled',
-      updatedAt: new Date().toISOString(),
-    };
-    await this.store.saveRun(cancelled);
-    await this.store.appendJournal(runId, 'cancelled', 'Run cancelled by the caller.');
-    return cancelled;
+    return this.runLock.run(runId, async () => {
+      const run = await this.store.getRun(runId);
+      if (!run) return null;
+      if (TERMINAL_STATES.includes(run.state)) return run;
+
+      // Swallowing this error and recording local success was a lie with a
+      // price attached: a timeout or a 503 leaves the provider running and
+      // billing while Dossier reports the run cancelled. Say which happened.
+      let providerError: string | null = null;
+      const client = this.resolveClient(run.provider);
+      if (client && run.interactionId) {
+        try {
+          await client.cancelRun(run.interactionId);
+        } catch (e: unknown) {
+          providerError = e instanceof Error ? e.message : String(e);
+        }
+      }
+
+      const cancelled: RunRecord = {
+        ...run,
+        state: 'cancelled',
+        updatedAt: new Date().toISOString(),
+        ...(providerError
+          ? {
+              error:
+                `Cancelled locally, but the provider did not confirm: ${providerError}. ` +
+                'The upstream run may still be executing and billing. Check the provider console.',
+            }
+          : {}),
+      };
+      await this.store.saveRun(cancelled);
+      await this.store.appendJournal(
+        runId,
+        'cancelled',
+        providerError
+          ? `Cancellation requested but NOT confirmed upstream (${providerError}). The provider run may still be running and billing.`
+          : 'Run cancelled by the caller and confirmed upstream.',
+      );
+      return cancelled;
+    });
   }
 
   /** Advance every in-flight run once. Safe to call concurrently with itself. */
@@ -544,20 +979,46 @@ export class Runner {
     }
   }
 
-  /** Start the background poller. Idempotent. */
+  /**
+   * Start the background poller. Idempotent.
+   *
+   * Self-rescheduling rather than `setInterval`, so the interval can widen when
+   * the provider is failing. A fixed interval sends exactly the same request
+   * rate into a 429 as into a 200, which is the one case where backing off is
+   * the whole remedy. Consecutive failures double the wait (jittered, capped);
+   * one success returns it to the configured cadence immediately.
+   */
   startPolling(): void {
     if (this.timer) return;
-    this.timer = setInterval(() => {
-      void this.tick().catch(() => undefined);
-    }, this.config.pollSeconds * 1000);
-    // Never hold the process open on the poller alone — a stdio server must
-    // exit when its client disconnects.
-    this.timer.unref?.();
+    const schedule = (delayMs: number): void => {
+      this.timer = setTimeout(() => {
+        void this.tick()
+          .then(() => {
+            this.consecutivePollFailures = 0;
+          })
+          .catch((e: unknown) => {
+            this.consecutivePollFailures += 1;
+            // stdout is the MCP protocol; diagnostics go to stderr.
+            process.stderr.write(
+              `[dossier] poll failed (${this.consecutivePollFailures} in a row): ${
+                e instanceof Error ? e.message : String(e)
+              }\n`,
+            );
+          })
+          .finally(() => {
+            if (this.timer) schedule(pollDelayMs(this.config.pollSeconds * 1000, this.consecutivePollFailures));
+          });
+      }, delayMs);
+      // Never hold the process open on the poller alone — a stdio server must
+      // exit when its client disconnects.
+      this.timer.unref?.();
+    };
+    schedule(this.config.pollSeconds * 1000);
   }
 
   stopPolling(): void {
     if (!this.timer) return;
-    clearInterval(this.timer);
+    clearTimeout(this.timer);
     this.timer = null;
   }
 }
