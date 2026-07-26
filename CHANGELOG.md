@@ -8,6 +8,8 @@ This project follows [semantic versioning](https://semver.org/). Until 1.0 the m
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-07-26
+
 ### Added
 
 - **The free local loop now runs as a lead with workers, and the lead does not read search results.** `research_local_start` returns a dispatch plan rather than a flat task list: one worker per task, each doing its own searching and handing back at most ten one-sentence findings. The cap is in the schema, not in the prose, because a worker that returns everything it saw has moved the sifting to the lead, which is the job it was dispatched to do. The lead drafts from the registry plus the deep-read notes the workers send back, and never goes near a result page.
@@ -164,7 +166,8 @@ Four defects that a full hermetic suite passed and one real API call each found.
 
 - First release. Gemini Deep Research wrapped so an agent can drive it safely: durable runs that survive a disconnect, a spend gate that reserves the worst case before the call, and outline-first reading so a 60,000-token report never lands inline.
 
-[Unreleased]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.3.1...v0.4.0
