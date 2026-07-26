@@ -71,6 +71,7 @@
   },
   "dependencies": {
     "@ai-sdk/google": "^4.0.24",
+    "@clack/prompts": "^1.7.0",
     "@google/genai": "^2.13.0",
     "ai": "^7.0.37",
     "fastmcp": "^4.9.0",

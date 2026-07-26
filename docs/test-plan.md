@@ -137,6 +137,11 @@ Acceptance criteria are taken from the README's tool contracts and the tool desc
 | **EVID-12** | A verdict on a claim that was never fetched is discarded | `evidence` | ✓ |
 | **EVID-13** | Four caller-supplied empty lenses are reported as a failed review | `evidence` | ✓ |
 | **EVID-14** | A lens that was never applied is named, not counted as one that found nothing | `evidence` | ✓ |
+| **SETUP-01** | The registration is an argument list, so a key containing shell syntax cannot execute | `setup` | ✓ |
+| **SETUP-02** | A printed command never contains a key | `setup` | ✓ |
+| **SETUP-03** | Subscription coverage is only claimed where confirmed, and confirmations carry a date | `setup` | ✓ |
+| **SETUP-04** | Every provider warns that its consumer subscription is not API credit | `setup` | ✓ |
+| **SETUP-05** | `setup` refuses a non-interactive stdout rather than drawing into an MCP stream | manual | ✓ |
 | **EVID-15** | Merging deduplicates one page reached three different ways into one source | `synthesise` | ✓ |
 | **EVID-16** | Support is counted in independent domains, never in how many runs agreed | `synthesise` | ✓ |
 | **EVID-17** | A fan-out that mostly re-read the same pages is reported as such, with a warning | `synthesise` | ✓ |

@@ -69,7 +69,15 @@ Handing an AI assistant a tool that spends $7 a call and takes an hour isn't str
 
 ## Getting started
 
-**No API key needed.** Install it and it works:
+One command. It walks you through the whole thing:
+
+```bash
+npx -y dossier-research-mcp@latest setup
+```
+
+It looks at what you already have, asks which subscriptions you pay for, offers to install and sign you into the ones you want, helps you get an API key only if you actually need one, and shows what each choice costs before you commit to it. Nothing is installed, signed into, or charged without you saying yes, and every command is printed before it runs.
+
+If you would rather do it by hand, **no API key is needed**:
 
 ```bash
 claude mcp add dossier -- npx -y dossier-research-mcp

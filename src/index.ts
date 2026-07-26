@@ -8,6 +8,7 @@ import { version } from './version.js';
  *
  *   dossier-research-mcp                    # stdio (the default; what MCP clients use)
  *   dossier-research-mcp --transport http   # streamable HTTP on DOSSIER_HTTP_PORT
+ *   dossier-research-mcp setup              # the guided setup, for a human
  *
  * Nothing is written to stdout except the MCP protocol itself — on stdio, a
  * stray `console.log` corrupts the stream and the client sees a parse error
@@ -17,6 +18,24 @@ import { version } from './version.js';
 interface Args {
   readonly transport: 'stdio' | 'http';
   readonly port?: number;
+}
+
+/**
+ * The setup wizard runs before anything else and never touches the server.
+ *
+ * It is interactive by definition, so it is refused outright when stdout is not
+ * a terminal: an MCP client launching this binary must get the protocol, and a
+ * wizard drawing prompts into that stream would look like a corrupt server
+ * rather than a mistake.
+ */
+async function maybeRunSetup(argv: readonly string[]): Promise<number | null> {
+  if (!argv.includes('setup') && !argv.includes('--setup')) return null;
+  if (!process.stdout.isTTY) {
+    process.stderr.write('`setup` needs an interactive terminal. Run it directly rather than through an MCP client.\n');
+    return 1;
+  }
+  const { runWizard } = await import('./setup/wizard.js');
+  return runWizard();
 }
 
 function parseArgs(argv: readonly string[]): Args {
@@ -76,6 +95,11 @@ See .env.example for the full configuration surface.
 `;
 
 async function main(): Promise<void> {
+  const setupExit = await maybeRunSetup(process.argv.slice(2));
+  if (setupExit !== null) {
+    process.exit(setupExit);
+  }
+
   const args = parseArgs(process.argv.slice(2));
   const config = loadConfig();
   const deps = await buildDeps(config);

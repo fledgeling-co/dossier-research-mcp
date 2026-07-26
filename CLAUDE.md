@@ -72,6 +72,10 @@ src/
     files.ts            File Search stores (private-corpus grounding, uploaded)
     local.ts            the corpus that never leaves the machine
   local/cli.ts          coding-CLI detection: resolve, identify, check sign-in
+  setup/
+    catalog.ts          what the wizard tells a stranger: install commands, plans,
+                        costs, console steps. Data only, every claim dated
+    wizard.ts           the guided setup. Asks before it changes anything
   net/
     safe-fetch.ts       SSRF-safe fetch: DNS validation, per-hop redirect checks, caps
     retry.ts            classify / backoff with full jitter / Retry-After

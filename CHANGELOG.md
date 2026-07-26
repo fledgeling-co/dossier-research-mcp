@@ -8,6 +8,17 @@ This project follows [semantic versioning](https://semver.org/). Until 1.0 the m
 
 ## [Unreleased]
 
+### Added
+
+- **A guided setup, in one command:** `npx -y dossier-research-mcp@latest setup`.
+
+  It reads what is already on the machine, offers the coding CLIs by the subscription that pays for them (Claude Pro, ChatGPT Plus, SuperGrok or X Premium+, Cursor, and Google's free Antigravity tier), installs and signs into the ones you pick, and only then asks about API keys. The default is one paid backend rather than four, and doing nothing at all is offered before either.
+
+  Each provider comes with what it costs per run, what only it can do, and the parts of its console that are not just copying a key: Gemini's $10 minimum prepay and soft spend cap, OpenAI's per-project model allow-list, and the fact that a Perplexity, ChatGPT or SuperGrok subscription does **not** include API access.
+
+  Nothing is installed, signed into, or charged without an explicit yes, and every command is printed before it runs. Sign-in is always handed to the human: the wizard never types a password.
+
+
 ## [0.5.0] - 2026-07-26
 
 ### Added

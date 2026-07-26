@@ -1,5 +1,20 @@
 # Setup
 
+## The short way
+
+```bash
+npx -y dossier-research-mcp@latest setup
+```
+
+A guided setup that does everything on this page for you. It checks what is already installed, offers each coding CLI by the subscription that pays for it, signs you in, walks you through getting an API key only if you need one, sets the spend ceilings, and registers the server.
+
+Three things it holds to, because it is talking to someone who cannot check the work: nothing is installed, signed into or charged without an explicit yes; every command is printed before it runs; and it never types a password, so signing in is always handed back to you.
+
+Your keys go straight into the client's own config. If registration fails it writes the command to `~/.dossier-setup-command.sh` with owner-only permissions rather than printing your keys to the screen, where copying them would put them in your shell history.
+
+The rest of this page is the same setup done by hand.
+
+
 Everything needed to get Dossier running, from having nothing to a first research report. Already have a Gemini API key? Skip to [Install](#install).
 
 ### 1. Get a Gemini API key
