@@ -271,3 +271,28 @@ describe('RES-01/02: run resources', () => {
     expect(parsed.hint).toMatch(/research_verify_citations/);
   });
 });
+
+describe('PLAN-04: an explicit provider is reported, not just honoured', () => {
+  // Shipped in 0.6.0 and reported by a user: research_start honoured
+  // `provider` while research_plan showed the routed backend instead, so
+  // asking for Gemini and being shown xAI made the argument look ignored. The
+  // plan exists to confirm what the run will do; showing a different backend
+  // is a lie about the one thing it was called to check.
+  it('names the requested backend rather than the routed one', async () => {
+    const result = await mcp.callTool('research_plan', {
+      question: 'statutory liability provisions for company directors',
+      provider: 'gemini',
+    });
+    const backend = result.text.split('\n').find((l) => l.includes('**Backend**')) ?? '';
+    expect(backend).toMatch(/Gemini/);
+    expect(backend).toMatch(/you asked for this one/);
+  });
+
+  it('still explains its own choice when nothing was requested', async () => {
+    const result = await mcp.callTool('research_plan', {
+      question: 'statutory liability provisions for company directors',
+    });
+    const backend = result.text.split('\n').find((l) => l.includes('**Backend**')) ?? '';
+    expect(backend).not.toMatch(/you asked for this one/);
+  });
+});

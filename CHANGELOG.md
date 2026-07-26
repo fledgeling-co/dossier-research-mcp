@@ -8,6 +8,11 @@ This project follows [semantic versioning](https://semver.org/). Until 1.0 the m
 
 ## [Unreleased]
 
+### Fixed
+
+- **`research_plan` reported the routed backend even when you asked for a specific one.** `research_start` honoured `provider` correctly and the contract fingerprint included it, but the plan's own **Backend** line came from a second routing call that ignored the argument. So asking for Gemini and being shown xAI made the override look broken, in the one tool whose entire job is to tell you what the run will do before it spends. Reported by a user against 0.6.0.
+
+
 ## [0.6.0] - 2026-07-26
 
 ### Added

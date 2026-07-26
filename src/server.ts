@@ -424,6 +424,13 @@ export function createServer(deps: ServerDeps): FastMCP {
         questionLength: args.question.length,
       });
 
+      // The plan exists to show what the run will actually do. `research_start`
+      // honours an explicit `provider`, so a plan that reports the routed
+      // backend instead is lying about the thing it was called to confirm.
+      // This shipped: asking for Gemini and being shown xAI made the argument
+      // look ignored when only the display was wrong.
+      const overridden = Boolean(args.provider) && args.provider === plannedProvider;
+
       const existing = await store.findByFingerprint(fp, config.dedupeTtlMinutes);
 
       return [
@@ -438,9 +445,9 @@ export function createServer(deps: ServerDeps): FastMCP {
         `- **Tools**: ${tools.map((t) => t.type).join(', ')}`,
         `- **Plan review**: ${args.collaborativePlanning ? 'ON — you will approve a plan before the run executes' : 'OFF — the run executes autonomously'}`,
         `- **Budget**: $${budget.committedUsd.toFixed(2)} committed of $${budget.budgetUsd.toFixed(2)} in the last ${budget.windowHours}h; $${budget.remainingUsd.toFixed(2)} remaining.`,
-        `- **Backend**: ${routing.provider ? routing.provider.label : 'none available'} — ${routing.reason}`,
-        ...(routing.runnerUp ? [`- **Runner-up**: ${routing.runnerUp.label}`] : []),
-        ...(routing.rejected.length > 0
+        `- **Backend**: ${overridden ? `${deps.providers.get(plannedProvider!)?.label ?? plannedProvider} — you asked for this one, so routing was not consulted` : routing.provider ? `${routing.provider.label} — ${routing.reason}` : 'none available'}`,
+        ...(overridden || !routing.runnerUp ? [] : [`- **Runner-up**: ${routing.runnerUp.label}`]),
+        ...(!overridden && routing.rejected.length > 0
           ? [`- **Not eligible**: ${routing.rejected.map((r) => `${r.id} (${r.why})`).join('; ')}`]
           : []),
         `- **Contract fingerprint**: \`${fp}\``,
