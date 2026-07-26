@@ -8,6 +8,8 @@ This project follows [semantic versioning](https://semver.org/). Until 1.0 the m
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-07-26
+
 ### Added
 
 - **`research_synthesise`** merges two or more completed runs into one evidence base and distils a single report. Different from `research_compare`, which diffs what backends claim and leaves you holding two reports. The merge is deterministic and free: deduplicate by canonical URL, count **independent registrable domains**, profile the sources, and record which run found what. The distillation goes to a model if one is configured and to the caller otherwise.
@@ -90,7 +92,8 @@ Four defects that a full hermetic suite passed and one real API call each found.
 
 - First release. Gemini Deep Research wrapped so an agent can drive it safely: durable runs that survive a disconnect, a spend gate that reserves the worst case before the call, and outline-first reading so a 60,000-token report never lands inline.
 
-[Unreleased]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.2.1...v0.3.0
