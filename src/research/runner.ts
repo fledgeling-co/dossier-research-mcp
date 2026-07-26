@@ -153,6 +153,8 @@ export class Runner {
      * Gemini bands, which is what they were already getting.
      */
     private readonly estimateFor?: (provider: ProviderId, input: DurationOptions) => CostBand,
+    /** The model a backend will use for a tier, so the run can be attributed. */
+    private readonly modelFor?: (provider: ProviderId, tier: ResearchTier) => string | null,
   ) {
     // Streaming is additive: without a client that supports it, everything
     // below still works on polling alone.
@@ -311,6 +313,9 @@ export class Runner {
         interactionId: '',
         state: args.collaborativePlanning ? 'planning' : 'running',
         tier: args.tier,
+        // Recorded at start, not at completion: a run that fails halfway is
+        // exactly the one you want to attribute to a model.
+        ...(this.modelFor?.(provider, args.tier) ? { model: this.modelFor(provider, args.tier)! } : {}),
         archetype: args.archetype,
         question: args.question.slice(0, 20_000),
         prompt: args.prompt.slice(0, 200_000),

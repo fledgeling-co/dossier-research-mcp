@@ -77,9 +77,10 @@ src/
     retry.ts            classify / backoff with full jitter / Retry-After
   ai/utility.ts         AI SDK v7; Output.object for every structured result
 assets/                 icon.svg (master, 1024) + rendered PNGs, banner, social preview
+CHANGELOG.md            what changed per release; updated in the same commit as the change
 docs/                   the documentation set; README is the approachable entry point
   setup.md              getting a key, billing, spend caps, install, every env var
-  tools.md              full contract for all 34 tools, 6 resources, 4 prompts
+  tools.md              full contract for all 36 tools, 6 resources, 4 prompts
   how-it-works.md       tier/archetype selection, the utility model, a real session
   security.md           injection, SSRF, data egress
   development.md        toolchain and the two test suites
@@ -164,8 +165,9 @@ Never write a test that spends money. `DOSSIER_HERMETIC=1` (set in `vitest.confi
 
 ## Releasing
 
-`npm version patch|minor|major` is the whole flow. It runs the gate first (so a
-failing build can't produce a tag), syncs `src/version.ts`, commits, tags, and
+`npm version patch|minor|major` is the whole flow. Move the `## [Unreleased]`
+entries in `CHANGELOG.md` under the new version number first. It runs the gate
+first (so a failing build can't produce a tag), syncs `src/version.ts`, commits, tags, and
 pushes with the tag. The tag push triggers `.github/workflows/release.yml`,
 which re-runs the gate, checks the tag matches `package.json`, checks the
 advertised version matches the built one, publishes with npm provenance, and
@@ -173,6 +175,17 @@ cuts a GitHub release.
 
 `workflow_dispatch` runs the same job in dry-run mode (gate and pack, no
 publish) when you want to check the pipeline without spending a version number.
+
+## The changelog
+
+`CHANGELOG.md` is part of the change, not part of the release. **Add the entry in the same commit as the behaviour**, under `## [Unreleased]`, and `npm version` promotes it.
+
+What earns an entry: anything a user would notice. A new or removed tool, a changed default, a changed cost, a new requirement, a behaviour that used to do X and now does Y, a security fix. What does not: an internal refactor, a test, a doc tidy, a dependency bump nobody can observe.
+
+Two rules that make it worth reading:
+
+- **Say what was actually wrong, not that something was fixed.** "Routing preferred Gemini for any deep run regardless of price" tells someone whether it bit them; "improved routing" does not.
+- **Record where a fact came from when it cost something to learn.** The upper-case Perplexity status and the never-implemented retry rule are in there because a real call and an adversarial review found them, and because the same class of defect will happen again.
 
 ## Documentation
 

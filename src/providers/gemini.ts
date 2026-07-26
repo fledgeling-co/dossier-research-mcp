@@ -1,3 +1,5 @@
+import { AGENT_BY_TIER } from '../gemini/types.js';
+import type { ResearchTier } from '../gemini/types.js';
 import type { Config } from '../config.js';
 import { backendLimitations } from '../config.js';
 import type { DeepResearchClient } from '../gemini/client.js';
@@ -77,6 +79,9 @@ export function geminiProvider(
 
     estimate(input: DurationOptions): ProviderEstimate {
       return { cost: estimateCost(input), duration: estimateDuration(input) };
+    },
+    modelFor(tier: ResearchTier): string {
+      return AGENT_BY_TIER[tier];
     },
 
     client(): DeepResearchClient {

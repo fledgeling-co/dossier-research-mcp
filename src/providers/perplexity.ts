@@ -410,6 +410,9 @@ export function perplexityProvider(config: Config): ResearchProvider {
         },
       };
     },
+    modelFor(): string {
+      return DEEP_MODEL;
+    },
 
     client(): DeepResearchClient {
       if (!key) throw new Error('PERPLEXITY_API_KEY is not set.');

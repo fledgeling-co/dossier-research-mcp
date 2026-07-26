@@ -32,6 +32,10 @@ const SPENDING = [
   'research_compare',
   'research_verify_claims',
   'research_counter_review',
+  // Merges reports you already paid for, so it is free in caller mode, but it
+  // will use the utility model to extract and cross-check claims when one is
+  // configured. A tool that can invoke a model is not read-only.
+  'research_synthesise',
 ];
 // Imports store a run but buy nothing: whatever produced the report was billed
 // wherever it ran. Not read-only (it writes), not spending.
@@ -41,6 +45,8 @@ const WRITES_WITHOUT_SPENDING = [
   'research_local_note',
   'research_local_draft',
   'research_local_submit',
+  // Writes files into the caller's project. No model, no network, still a write.
+  'research_export',
 ];
 const EGRESS = ['corpus_add_file'];
 const READ_ONLY = [
@@ -69,8 +75,10 @@ describe('PROTO-01: every tool registers', () => {
         'corpus_local_list', 'corpus_local_search',
         'research_approve_plan', 'research_budget', 'research_cancel', 'research_claims',
         'research_compare', 'research_counter_review', 'research_doctor',
-        'research_evidence', 'research_followup', 'research_list', 'research_plan',
+        'research_evidence',
+      'research_export', 'research_followup', 'research_list', 'research_plan',
         'research_read', 'research_recent', 'research_start', 'research_status',
+      'research_synthesise',
         'research_import', 'research_local_draft', 'research_local_note',
         'research_local_start', 'research_local_submit',
         'research_tail', 'research_verify_citations',
@@ -231,7 +239,7 @@ describe('PROTO-06 / DEGRADE-02: usable with no credentials', () => {
     expect(started.isError).toBe(true);
     expect(started.text).toMatch(/credential/i);
     // The decisive part: the server is still alive and answering afterwards.
-    expect((await mcp.listTools()).length).toBe(34);
+    expect((await mcp.listTools()).length).toBe(36);
   });
 });
 

@@ -539,3 +539,39 @@ async function withFetch<T>(fn: () => Promise<T>, respond: (url: unknown) => Res
     globalThis.fetch = original;
   }
 }
+
+describe('routing follows the documented tie-break order', () => {
+  // docs/plan/multi-provider-research.md:245-248 — capability, then cost, then
+  // dated accuracy as weak evidence, then diversity. Gemini used to win every
+  // deep run outright, which made three configured backends unreachable without
+  // naming them: four consecutive real runs all went to the dearest provider.
+  it('sends an ordinary deep run to the cheapest capable backend, not Gemini', () => {
+    const registry = withKeys({ GEMINI_API_KEY: 'g', PERPLEXITY_API_KEY: 'p', XAI_API_KEY: 'x' });
+    const decision = registry.route({ shape: 'deep', estimateInput: { tier: 'fast', tools: [] } });
+    expect(decision.provider?.id).not.toBe('gemini');
+    expect(decision.reason).toMatch(/cheapest configured backend/);
+    expect(decision.runnerUp).not.toBeNull();
+  });
+
+  it('still forces Gemini when the question needs an editable plan', () => {
+    // Capability outranks cost. This is the case the old preference was really
+    // for, and it was already handled by the eligibility filter.
+    const registry = withKeys({ GEMINI_API_KEY: 'g', PERPLEXITY_API_KEY: 'p', XAI_API_KEY: 'x' });
+    const decision = registry.route({ planReview: true, estimateInput: { tier: 'fast', tools: [] } });
+    expect(decision.provider?.id).toBe('gemini');
+    expect(decision.reason).toMatch(/only backend offering an editable plan/);
+  });
+
+  it('still forces xAI when the question needs X', () => {
+    const registry = withKeys({ GEMINI_API_KEY: 'g', PERPLEXITY_API_KEY: 'p', XAI_API_KEY: 'x' });
+    const decision = registry.route({ social: ['x'], estimateInput: { tier: 'fast', tools: [] } });
+    expect(decision.provider?.id).toBe('xai');
+  });
+
+  it('names why each rejected backend could not run', () => {
+    const registry = withKeys({ GEMINI_API_KEY: 'g', PERPLEXITY_API_KEY: 'p', XAI_API_KEY: 'x' });
+    const decision = registry.route({ planReview: true, estimateInput: { tier: 'fast', tools: [] } });
+    expect(decision.rejected.length).toBeGreaterThan(0);
+    for (const r of decision.rejected) expect(r.why).toMatch(/no editable plan/);
+  });
+});

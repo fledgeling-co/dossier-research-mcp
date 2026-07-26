@@ -133,13 +133,19 @@ export class ProviderRegistry {
     const estimateFor = (p: ResearchProvider): number => p.estimate(need.estimateInput).cost.highUsd;
     const ranked = [...eligible].sort((a, b) => estimateFor(a) - estimateFor(b));
 
-    // Gemini first among equals when nothing forced the choice: it is the only
-    // one that lets a human edit the plan before the money is spent, which
-    // matters more than a small price difference.
-    const preferred =
-      !need.shape || need.shape === 'deep'
-        ? (ranked.find((p) => p.id === 'gemini') ?? ranked[0]!)
-        : ranked[0]!;
+    // Cost, on the reserved worst case, once capability has already decided
+    // who is eligible.
+    //
+    // This used to hand every deep run to Gemini regardless of price, on the
+    // grounds that its editable plan is worth more than the difference. That
+    // reasoning is sound and belongs in the *capability* filter, where asking
+    // for a plan review already forces Gemini and nothing else qualifies. As a
+    // blanket preference it did something else: it made three configured
+    // backends unreachable without naming them, so four runs in a row went to
+    // the most expensive eligible provider and the operator's other keys never
+    // ran. The documented tie-break order is capability, then cost, then dated
+    // accuracy as weak evidence, then diversity.
+    const preferred = ranked[0]!;
     const runnerUp = ranked.find((p) => p.id !== preferred.id) ?? null;
 
     return {
@@ -182,7 +188,7 @@ function describeChoice(p: ResearchProvider, need: RoutingNeed, eligible: number
   if (need.shape === 'wide') return `${p.label} has a native wide-research mode that cites every row.`;
   if (need.dateWindow) return `${p.label} can enforce the date window rather than only asking for it.`;
   if (need.domains) return `${p.label} accepts a domain filter of ${String(need.domains)}; the others cap lower.`;
+  if (need.corpus) return `${p.label} is the only backend that can ground on a private corpus.`;
   if (eligible === 1) return `${p.label} is the only configured provider that can do this.`;
-  if (p.id === 'gemini') return `${p.label}: preferred for deep research because you can edit the plan before it spends.`;
-  return `${p.label}: cheapest configured backend that meets the requirements.`;
+  return `${p.label}: cheapest configured backend meeting the requirements, of ${String(eligible)} eligible.`;
 }

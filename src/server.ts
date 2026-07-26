@@ -40,6 +40,7 @@ import {
 } from './research/report.js';
 import { canonicaliseUrl, crossCheck, type ProviderClaimSet } from './research/corroborate.js';
 import { decompose, renderTasks } from './research/decompose.js';
+import { describeOverlap, mergeEvidence, renderMergedRegistry, type RunEvidence } from './research/synthesise.js';
 import {
   FindingSchema,
   freezeRegistry,
@@ -70,6 +71,8 @@ import {
 import { Store } from './store/store.js';
 import { RUN_STATES, type RunRecord } from './store/types.js';
 import { version } from './version.js';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
 
 /**
  * The public library surface.
@@ -778,6 +781,12 @@ export function createServer(deps: ServerDeps): FastMCP {
         );
       }
 
+      // Where the full report actually lives, and what produced it. Both were
+      // recorded from the first release and neither was ever shown, so a caller
+      // could read an outline of a 48,000-character report without learning
+      // that the report was on disk or which model wrote it.
+      const provenance = describeProvenance(run, store.reportPath(run.id));
+
       switch (args.mode) {
         case 'summary': {
           const outline = outlineReport(markdown);
@@ -789,10 +798,12 @@ export function createServer(deps: ServerDeps): FastMCP {
             `_${run.sourceCount} cited sources · ~${estimateTokens(markdown)} estimated tokens · ${outline.length} sections_`,
             '',
             clampToTokens(body, args.maxTokens).text,
+            '',
+            provenance,
           ].join('\n');
         }
         case 'outline':
-          return renderOutline(markdown);
+          return `${renderOutline(markdown)}\n\n${provenance}`;
         case 'section': {
           if (!args.section) throw new UserError('mode "section" needs a `section` (index or heading substring).');
           const found = findSection(markdown, args.section);
@@ -803,7 +814,7 @@ export function createServer(deps: ServerDeps): FastMCP {
           }
           const body = readSection(markdown, found);
           const clamped = clampToTokens(body, args.maxTokens);
-          return `_Section ${found.index}/${outlineReport(markdown).length} · ~${found.estimatedTokens} estimated tokens_\n\n${clamped.text}`;
+          return `_Section ${found.index}/${outlineReport(markdown).length} · ~${found.estimatedTokens} estimated tokens_\n\n${clamped.text}\n\n${provenance}`;
         }
         case 'grep': {
           if (!args.pattern) throw new UserError('mode "grep" needs a `pattern`.');
@@ -815,13 +826,15 @@ export function createServer(deps: ServerDeps): FastMCP {
             ...hits.map((h) => `- **L${h.line}** _(${h.section})_ — ${h.text}`),
             '',
             'Read a whole section with `research_read { mode: "section", section: "<heading>" }`.',
+            '',
+            provenance,
           ].join('\n');
         }
         case 'full': {
           const clamped = clampToTokens(markdown, args.maxTokens);
           return clamped.truncated
-            ? `${clamped.text}\n\n_Tip: \`mode: "outline"\` then \`mode: "section"\` reads the whole report without a single oversized response._`
-            : clamped.text;
+            ? `${clamped.text}\n\n_Tip: \`mode: "outline"\` then \`mode: "section"\` reads the whole report without a single oversized response._\n\n${provenance}`
+            : `${clamped.text}\n\n${provenance}`;
         }
         default: {
           const _exhaustive: never = args.mode;
@@ -832,6 +845,89 @@ export function createServer(deps: ServerDeps): FastMCP {
   });
 
   // ────────────────────────────────────────────────── verify citations ────
+  server.addTool({
+    name: 'research_export',
+    description:
+      'Copy a finished report OUT of the server\'s store and into a directory you name, so it lives in the project rather than in `~/.dossier-research-mcp`. Writes the FULL markdown (not the outline, not a summary) plus, optionally, its numbered source registry as a second file. Free, local, no model call. Use it whenever the research should end up in the repo alongside the work it informs.',
+    annotations: {
+      title: 'Export a report into your project',
+      readOnlyHint: false,
+      destructiveHint: false,
+      openWorldHint: false,
+    },
+    parameters: z.object({
+      runId: z.string().max(64),
+      dir: z
+        .string()
+        .max(1000)
+        .default('.')
+        .describe('Directory to write into, relative to the working directory or absolute. Created if missing.'),
+      filename: z
+        .string()
+        .max(200)
+        .optional()
+        .describe('Base filename without extension. Defaults to the date plus a slug of the report title.'),
+      sources: z
+        .boolean()
+        .default(true)
+        .describe('Also write `<name>.sources.md`, the numbered registry with every cited URL.'),
+    }),
+    execute: async (args) => {
+      const run = await requireRun(deps, args.runId);
+      const markdown = await store.readReport(args.runId);
+      if (!markdown) throw new UserError(`No report for \`${run.id}\` (state: ${run.state}). ${stateHint(run.state)}`);
+
+      const base = args.filename ?? defaultExportName(run);
+      const dir = resolve(args.dir);
+      await mkdir(dir, { recursive: true });
+
+      // A report is the artefact; the front matter is what makes it findable
+      // again in six months, when "which model, which day, what did it cost"
+      // is the whole question.
+      const front = [
+        '---',
+        `title: ${JSON.stringify(run.title ?? run.question.slice(0, 120))}`,
+        `run_id: ${run.id}`,
+        `question: ${JSON.stringify(run.question)}`,
+        `provider: ${run.provider}`,
+        ...(run.model ? [`model: ${run.model}`] : []),
+        `tier: ${run.tier}`,
+        ...(run.archetype ? [`archetype: ${run.archetype}`] : []),
+        `sources: ${String(run.sourceCount)}`,
+        ...(run.toolsUsed.length > 0 ? [`tools: [${run.toolsUsed.join(', ')}]`] : []),
+        ...(typeof run.estimatedCostUsd === 'number' ? [`estimated_cost_usd: ${run.estimatedCostUsd.toFixed(2)}`] : []),
+        `completed: ${run.completedAt ?? run.updatedAt}`,
+        '---',
+        '',
+      ].join('\n');
+
+      const reportFile = join(dir, `${base}.md`);
+      await writeFile(reportFile, front + markdown, 'utf8');
+      const written = [`${reportFile} (${markdown.length.toLocaleString()} chars)`];
+
+      if (args.sources) {
+        const registry = buildRegistry(markdown);
+        if (registry.length > 0) {
+          const sourcesFile = join(dir, `${base}.sources.md`);
+          await writeFile(
+            sourcesFile,
+            [`# Sources for ${run.title ?? run.id}`, '', renderRegistryList(registry), ''].join('\n'),
+            'utf8',
+          );
+          written.push(`${sourcesFile} (${String(registry.length)} source(s))`);
+        }
+      }
+
+      return [
+        `## Exported \`${run.id}\``,
+        '',
+        ...written.map((w) => `- ${w}`),
+        '',
+        'The markdown is the complete report with a front-matter block recording which backend and model produced it, what it cost, and when. That header is what makes the file attributable later; keep it if you commit the file.',
+      ].join('\n');
+    },
+  });
+
   server.addTool({
     name: 'research_verify_citations',
     description:
@@ -1579,6 +1675,140 @@ function registerEvidenceTools(server: FastMCP, deps: ServerDeps): void {
   }
 
   server.addTool({
+    name: 'research_synthesise',
+    description:
+      'Merge several completed runs into ONE evidence base and distil a single comprehensive report. Different from `research_compare`, which diffs what backends claim and leaves you two reports: this produces one, with every claim carrying the backend(s) behind it. Free — it merges reports you have already paid for, and makes no research call. Pass `runIds` of 2+ completed runs. The merge is deterministic (deduplicate by canonical URL, count INDEPENDENT DOMAINS, profile the sources); the distillation is done by a model if one is configured, otherwise handed to you with the frozen registry to write yourself. To fan out in the first place, use `research_compare { question }`, which starts one run per backend and bills each.',
+    annotations: {
+      title: 'Merge several runs into one report',
+      readOnlyHint: false,
+      destructiveHint: false,
+      openWorldHint: false,
+    },
+    parameters: z.object({
+      runIds: z
+        .array(z.string().max(64))
+        .min(2)
+        .max(6)
+        .describe('Completed runs to merge. Two or more; they should answer the same question.'),
+      distil: z
+        .enum(['auto', 'model', 'caller'])
+        .default('auto')
+        .describe('Who writes the merged report. auto = a model if one is configured, otherwise you. caller = always you, and always free.'),
+    }),
+    execute: async (args) => {
+      const runs: RunEvidence[] = [];
+      const missing: string[] = [];
+      for (const id of args.runIds) {
+        const run = await store.getRun(id);
+        if (!run) {
+          missing.push(`\`${id}\` — no such run`);
+          continue;
+        }
+        const markdown = await store.readReport(id);
+        if (!markdown) {
+          missing.push(`\`${id}\` — no report (state: ${run.state})`);
+          continue;
+        }
+        runs.push({ runId: id, provider: run.provider, model: run.model, markdown });
+      }
+
+      if (runs.length < 2) {
+        throw new UserError(
+          [
+            `Need at least two completed runs to merge; got ${String(runs.length)}.`,
+            ...missing.map((m) => `- ${m}`),
+            '',
+            'Start a fan-out with `research_compare { question: "..." }`, wait for the runs to finish, then merge them here.',
+          ].join('\n'),
+        );
+      }
+
+      const merged = mergeEvidence(runs);
+      const header = [
+        `## Merged evidence from ${String(runs.length)} run(s)`,
+        '',
+        ...merged.runs.map(
+          (r) => `- \`${r.runId}\` — **${r.provider}**${r.model ? ` (\`${r.model}\`)` : ''}, ${String(r.sourceCount)} cited source(s)`,
+        ),
+        ...missing.map((m) => `- ⚠ skipped: ${m}`),
+        '',
+        describeOverlap(merged),
+        '',
+        renderProfile(merged.profile),
+      ].join('\n');
+
+      const wantsCaller = args.distil === 'caller' || (args.distil === 'auto' && !deps.utility);
+      if (wantsCaller) {
+        return [
+          header,
+          '',
+          '---',
+          '',
+          '## Now write the merged report',
+          '',
+          'The evidence is merged; the synthesis is yours. Read each source report with `research_read { runId, mode: "section" }` — the full text of each is on disk, and the paths are in that tool\'s output.',
+          '',
+          '**The rules that make a merged report worth more than the reports it came from:**',
+          '',
+          '1. **Every claim names its backing.** A merged report where you cannot tell which backend produced which claim is worse than the separate reports, because it launders a weak finding into a strong-looking one.',
+          '2. **Count support in independent domains, never in backends.** Two backends citing the same page is one source. The registry below records who found what.',
+          '3. **A claim only one backend made is uncorroborated, not wrong.** Say which, and say it is single-sourced.',
+          '4. **Where they disagree, that is the finding.** Do not average two numbers into a third that nobody reported. State both, with who said what, and which evidence is stronger.',
+          '5. **Mark what you inferred.** A conclusion you drew by combining sources is `synthesised`, not `sourced`, even when every input was cited. The 2026 failure mode is correct facts assembled into a wrong conclusion, and it is invisible unless the joins are labelled.',
+          '',
+          '**Cite only from this registry.** It is frozen; a source that is not on it did not come from these runs.',
+          '',
+          renderMergedRegistry(merged),
+        ].join('\n');
+      }
+
+      const utility = requireUtility('Synthesis');
+      const sets: ProviderClaimSet[] = [];
+      for (const run of runs) {
+        await runner.reserveUtilitySpend(`synthesise-extract:${run.runId}`);
+        const extracted = await utility.extractClaims(run.markdown, 20);
+        if (!extracted.ok) continue;
+        sets.push({
+          provider: run.provider,
+          claims: extracted.value.claims.map((c) => ({
+            text: c.claim,
+            provider: run.provider,
+            urls: c.sourceUrl ? [c.sourceUrl] : [],
+          })),
+        });
+      }
+
+      const checked = crossCheck(sets);
+      return [
+        header,
+        '',
+        '---',
+        '',
+        `## ${String(checked.shared.length)} claim(s) more than one backend made`,
+        '',
+        ...checked.shared.map((v) => {
+          const icon = v.support === 'corroborated' ? '✅' : v.support === 'weakly-supported' ? '🟡' : '⚠️';
+          return `- ${icon} **${v.support}** (${String(v.independentDomains)} independent domain(s)) — ${v.claim.slice(0, 300)}`;
+        }),
+        '',
+        '## Claims only one backend made',
+        '',
+        ...checked.unique.flatMap((u) =>
+          u.claims.length === 0
+            ? []
+            : [`**${u.provider}** alone:`, ...u.claims.slice(0, 12).map((c) => `- ${c.text.slice(0, 260)}`), ''],
+        ),
+        '> [!IMPORTANT]',
+        '> A claim only one backend made is a **coverage difference**, not an error, and it is also **not corroborated**. The verdicts above count independent domains, never how many backends agreed, because backends reading the same page agree for free.',
+        '',
+        'Cite only from the merged registry:',
+        '',
+        renderMergedRegistry(merged),
+      ].join('\n');
+    },
+  });
+
+  server.addTool({
     name: 'research_verify_claims',
     description:
       'Test whether each cited source ACTUALLY contains the claim attached to it. Different from `research_verify_citations` in the way that matters: that one proves a link resolves, this one tests whether the page says what the report says it says. Two ways to run it. **You do the judging** (free): pass `claims`, get back the fetched page text for each, then pass `verdicts`. **Or a model does it** (spends money, one small call per claim): pass `sample` and it runs end to end, which needs GEMINI_API_KEY. Either way the fetching, the sampling and the tally happen here, so a verdict cannot be recorded for a claim that was never checked.',
@@ -2074,6 +2304,59 @@ function renderCounterReview(runId: string, results: readonly LensResult[], expe
   ]
     .filter(Boolean)
     .join('\n');
+}
+
+/**
+ * What produced this report, and where the full text is.
+ *
+ * Every field here was already being recorded and none of it was ever shown.
+ * A caller reading an outline could not tell which backend ran, which model,
+ * how many sources it actually opened, or that a 48,000-character report was
+ * sitting on disk — so it distilled a short answer from a short outline and
+ * the real work stayed in a directory nobody had been told about.
+ */
+function describeProvenance(run: RunRecord, absolutePath: string): string {
+  const bits: string[] = [`**${run.provider}**`];
+  if (run.model) bits.push(`\`${run.model}\``);
+  bits.push(`${run.tier} tier`);
+  if (run.archetype) bits.push(`${run.archetype} archetype`);
+
+  const work: string[] = [];
+  if (run.sourceCount) work.push(`${String(run.sourceCount)} cited source(s)`);
+  if (run.toolsUsed.length > 0) work.push(`tools: ${run.toolsUsed.join(', ')}`);
+  if (run.searches) work.push(`${String(run.searches)} search(es)`);
+  if (run.urlsFetched) work.push(`${String(run.urlsFetched)} page(s) fetched`);
+  if (run.corpusQueries) work.push(`${String(run.corpusQueries)} corpus quer(ies)`);
+  if (typeof run.estimatedCostUsd === 'number') work.push(`~$${run.estimatedCostUsd.toFixed(2)} estimated`);
+
+  return [
+    '---',
+    `_Produced by ${bits.join(' · ')}._`,
+    work.length > 0 ? `_${work.join(' · ')}._` : '',
+    '',
+    `**Full report:** \`${absolutePath}\`${run.reportChars ? ` (${run.reportChars.toLocaleString()} chars)` : ''}`,
+    '',
+    'That file is the complete text, not this excerpt. Copy it into the project with `research_export`, or read it directly.',
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
+
+/** A filename that sorts by date and still says what the report is about. */
+function defaultExportName(run: RunRecord): string {
+  const date = (run.completedAt ?? run.updatedAt ?? run.createdAt).slice(0, 10);
+  const slug = (run.title ?? run.question)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60)
+    .replace(/-+$/, '');
+  return `${date}-${slug || run.id}`;
+}
+
+/** The numbered registry, as a file someone can actually read. */
+function renderRegistryList(registry: readonly { n: number; url: string; domain: string }[]): string {
+  return registry.map((e) => `${String(e.n)}. ${e.url}  \n   _${e.domain}_`).join('\n');
 }
 
 function severityRank(s: 'high' | 'medium' | 'low'): number {
@@ -3270,6 +3553,9 @@ export async function buildDeps(config: Config = loadConfig()): Promise<ServerDe
   },
   // The gate must reserve the band of the backend that will actually run.
   (id, input) => providers.get(id)?.estimate(input).cost ?? estimateCost(input),
+  // The model that will actually produce the report, recorded on the run so a
+  // finished report can be attributed to something more specific than "gemini".
+  (id, tier) => providers.get(id)?.modelFor?.(tier) ?? null,
   );
 
   return {

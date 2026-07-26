@@ -173,6 +173,39 @@ Classification is coarse and admits it: an unrecognised domain is `other`, never
 
 The **citation registry** is the other half. One numbered, deduplicated list built from the report, in which the same page cited three different ways is entry 7 three times rather than 7, 12 and 19. `research_followup` answers from it rather than from the report's prose, which closes the failure where a model invents a plausible reference mid-answer to support a sentence it wanted to write.
 
+### `research_synthesise`, free or paid, your choice
+
+Merges two or more completed runs into one evidence base and distils a single report.
+
+This is not `research_compare`. That one diffs what two backends claim and leaves you holding two reports; this one produces a single report where every claim carries the run behind it.
+
+The merge is deterministic and costs nothing: deduplicate by canonical URL, count **independent registrable domains**, classify and profile the sources, and record which run found what.
+
+| Parameter | Type | Notes |
+|---|---|---|
+| `runIds` | `string[]` | Two to six completed runs answering the same question |
+| `distil` | `auto` \| `model` \| `caller` | Who writes the merged report. `auto` uses a model if one is configured |
+
+Two things it will tell you that a merged report normally hides.
+
+**Whether the fan-out was worth paying for.** If most sources were found by more than one run, you bought the same pages several times over. It says so, in a warning, because the alternative is a confident-looking report that quietly cost four times what one run would have.
+
+**Who found what.** Provenance keys on the run, not the backend, so merging four Gemini runs works as well as merging four different backends. A merged report where you cannot tell which run produced which claim is worse than the separate reports, because it launders a weak finding into a strong-looking one.
+
+Support is counted in independent domains and never in how many runs agreed. Runs reading the same page agree for free.
+
+### `research_export`, free
+
+Writes a full report, plus its numbered source registry, into a directory you name.
+
+```
+research_export { runId, dir: "docs/research" }
+```
+
+The markdown carries a front-matter block recording the run id, the question, the backend, the model, the tier, the source count, the tools used, the estimated cost and the completion time. That header is what makes the file attributable once it is sitting in a repo six months later, so keep it if you commit the file.
+
+Reports live in the server's store (`~/.dossier-research-mcp/reports/` by default) whether or not you export them. `research_read` prints the absolute path of the one you are reading.
+
 ### `research_verify_claims`, free or paid, your choice
 
 Tests whether each cited source actually contains the claim attached to it.

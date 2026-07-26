@@ -3,7 +3,7 @@ import type { Config } from '../config.js';
 import type { CreateRunArgs, DeepResearchClient, FollowUpArgs } from '../gemini/client.js';
 import type { CostBand, DurationOptions } from '../gemini/cost.js';
 import { estimateDuration } from '../gemini/cost.js';
-import type { InteractionSnapshot } from '../gemini/types.js';
+import type { InteractionSnapshot, ResearchTier } from '../gemini/types.js';
 import { attemptOnceThenSettle, retry, retryAfterMs } from '../net/retry.js';
 import { compact } from './types.js';
 import type {
@@ -35,6 +35,11 @@ const API = 'https://api.openai.com/v1';
 /** `reasoning.effort`. `xhigh` is OpenAI's own recommendation for deep research. */
 const RESEARCH_EFFORT = { fast: 'high', max: 'xhigh' } as const;
 const MODEL = { fast: 'gpt-5.6-terra', max: 'gpt-5.6-sol' } as const;
+
+/** The model this backend will actually use for a tier, for the run record. */
+export function modelFor(tier: keyof typeof MODEL): string {
+  return MODEL[tier];
+}
 
 export interface OpenAiOptions {
   /** Up to 100 domains; prefix with `-` to block rather than allow. */
@@ -261,6 +266,9 @@ export function openAiProvider(config: Config): ResearchProvider {
     },
     estimate(input: DurationOptions): ProviderEstimate {
       return { cost: openAiCost(input), duration: estimateDuration(input) };
+    },
+    modelFor(tier: ResearchTier): string {
+      return modelFor(tier);
     },
     client(): DeepResearchClient {
       if (!key) throw new Error('OPENAI_API_KEY is not set.');

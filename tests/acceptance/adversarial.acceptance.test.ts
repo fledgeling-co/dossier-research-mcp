@@ -135,7 +135,7 @@ describe('SEC-05: nothing leaks', () => {
   it('survives every hostile call and is still answering', async () => {
     // The point of the whole file: none of the above killed the server.
     const tools = await mcp.listTools();
-    expect(tools).toHaveLength(34);
+    expect(tools).toHaveLength(36);
     const budget = await mcp.callTool('research_budget');
     expect(budget.isError).toBe(false);
   });

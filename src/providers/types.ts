@@ -1,3 +1,4 @@
+import type { ResearchTier } from '../gemini/types.js';
 import type { DeepResearchClient } from '../gemini/client.js';
 import type { CostBand, DurationEstimate, DurationOptions } from '../gemini/cost.js';
 
@@ -90,6 +91,13 @@ export interface ResearchProvider {
 
   /** Cheap, offline, always a band. Feeds the spend gate. */
   estimate(input: DurationOptions): ProviderEstimate;
+  /**
+   * The model this backend will use for a tier, as the backend names it.
+   *
+   * Optional: a backend that does not expose a stable model id should say
+   * nothing rather than report a guess onto the run record.
+   */
+  modelFor?(tier: ResearchTier): string | null;
 
   /**
    * The run client. Throws when credentials are absent, rather than returning

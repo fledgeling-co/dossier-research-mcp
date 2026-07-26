@@ -44,6 +44,15 @@ export const RunRecordSchema = z.object({
    */
   provider: z.enum(['gemini', 'perplexity', 'openai', 'xai', 'local']).default('gemini'),
   /**
+   * The exact model that produced the report, as the backend names it.
+   *
+   * Optional because runs recorded before this field existed have no way to
+   * know, and inventing one would be worse than admitting it. A backend that
+   * silently swaps model behind a tier is a thing that happens, and a report
+   * you cannot attribute is a report you cannot reproduce.
+   */
+  model: z.string().max(120).optional(),
+  /**
    * What artefact this run was asked for. Defaulted for the same reason as
    * `provider`: every record written before shapes existed is a deep run.
    */

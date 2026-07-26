@@ -1,7 +1,7 @@
 # Providers
 
 > [!IMPORTANT]
-> **Dossier v0.2.1 ships with Gemini only.** Every other provider on this page is designed but not implemented, and so are the routing, `research_doctor` and `research_import` described below. The design lives in [the multi-provider plan](../plan/multi-provider-research.md); this page is what it will look like, not what runs today.
+> **All four API backends ship, and each was verified against its live API on 25 July 2026.** Routing, `research_doctor`, `research_import`, the research shapes and cross-backend corroboration landed in 0.3.0. Still unbuilt: browser automation of the Gemini web app, and Dossier acting as an OpenAI-style MCP data source. The design and what remains are in [the multi-provider plan](../plan/multi-provider-research.md).
 
 Dossier is designed to drive several research backends. You don't need all of them. You need the one that answers your question, and this page is about working out which that is.
 

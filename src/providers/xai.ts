@@ -3,7 +3,7 @@ import type { Config } from '../config.js';
 import type { CreateRunArgs, DeepResearchClient, FollowUpArgs } from '../gemini/client.js';
 import type { CostBand, DurationOptions } from '../gemini/cost.js';
 import { estimateDuration } from '../gemini/cost.js';
-import type { InteractionSnapshot } from '../gemini/types.js';
+import type { InteractionSnapshot, ResearchTier } from '../gemini/types.js';
 import { attemptOnceThenSettle, retry, retryAfterMs } from '../net/retry.js';
 import { compact } from './types.js';
 import type {
@@ -30,6 +30,11 @@ import type {
 
 const API = 'https://api.x.ai/v1';
 const MODEL = { fast: 'grok-4.3', max: 'grok-4.5' } as const;
+
+/** The model this backend will actually use for a tier, for the run record. */
+export function modelFor(tier: keyof typeof MODEL): string {
+  return MODEL[tier];
+}
 
 export interface XaiOptions {
   /** Search X as well as the web. */
@@ -292,6 +297,9 @@ export function xaiProvider(config: Config): ResearchProvider {
         cost: xaiCost(input),
         duration: { ...d, lowMinutes: 1, highMinutes: Math.max(4, Math.round(d.highMinutes / 4)) },
       };
+    },
+    modelFor(tier: ResearchTier): string {
+      return modelFor(tier);
     },
     client(): DeepResearchClient {
       if (!key) throw new Error('XAI_API_KEY is not set.');

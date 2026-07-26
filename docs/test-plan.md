@@ -21,7 +21,7 @@ The QA plan's unit of work is a *surface × state* cell. For an MCP server the a
 
 | Axis | Values | Sampling |
 |---|---|---|
-| **Surface** | 34 tools · 6 resources · 4 prompts | 100%, enumerated from `tools/list` so a new tool cannot be missed |
+| **Surface** | 36 tools · 6 resources · 4 prompts | 100%, enumerated from `tools/list` so a new tool cannot be missed |
 | **Run state** | `planning` · `running` · `completed` · `failed` · `cancelled` · `stalled` · absent | every state that changes a tool's answer |
 | **Data shape** | realistic · headingless · unicode/emoji/RTL · huge · empty · malformed · adversarial | seeded via `Store`, per the plan's data-seeding section |
 | **Credentials** | none (hermetic) · api-key · vertex | hermetic here; the paid paths are verified by hand and logged in the README |
@@ -137,6 +137,13 @@ Acceptance criteria are taken from the README's tool contracts and the tool desc
 | **EVID-12** | A verdict on a claim that was never fetched is discarded | `evidence` | ✓ |
 | **EVID-13** | Four caller-supplied empty lenses are reported as a failed review | `evidence` | ✓ |
 | **EVID-14** | A lens that was never applied is named, not counted as one that found nothing | `evidence` | ✓ |
+| **EVID-15** | Merging deduplicates one page reached three different ways into one source | `synthesise` | ✓ |
+| **EVID-16** | Support is counted in independent domains, never in how many runs agreed | `synthesise` | ✓ |
+| **EVID-17** | A fan-out that mostly re-read the same pages is reported as such, with a warning | `synthesise` | ✓ |
+| **EVID-18** | Several runs from the same backend stay distinguishable rather than collapsing | `synthesise` | ✓ |
+| **ROUTE-05** | An ordinary deep run goes to the cheapest capable backend, not to Gemini | `providers` | ✓ |
+| **ROUTE-06** | Capability still forces the backend where only one qualifies | `providers` | ✓ |
+| **ROUTE-07** | Every rejected backend is named with the reason it could not run | `providers` | ✓ |
 | **EVID-06** | A failed quality floor is reported as advisory; nothing is ever withheld | unit: `evidence` | ✓ |
 | **EVID-07** | An unrecognised domain is classified `other`, never guessed into `official` | unit: `evidence` | ✓ |
 | **EVID-08** | A user's own document is never independent corroboration of an external fact | unit: `evidence` | ✓ |
