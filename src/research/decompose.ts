@@ -27,8 +27,43 @@ export const SOURCE_CLASSES = [
 ] as const;
 export type SourceClass = (typeof SOURCE_CLASSES)[number];
 
-/** How hard a task reads: `deep` opens pages, `scan` reads result listings. */
+/**
+ * How hard a task reads: `deep` opens pages, `scan` reads result listings.
+ *
+ * The distinction is a budget, not a preference. A `deep` task is expected to
+ * open two or three sources in full and take notes from the body; a `scan` task
+ * reads titles, snippets and dates and stops. Marking everything `deep` spends
+ * a worker's whole context on the first index it touches, and marking everything
+ * `scan` produces a report assembled entirely from search-result summaries,
+ * which is how a loop cites forty pages nobody read.
+ */
 export type Depth = 'deep' | 'scan';
+
+/**
+ * When a task may run.
+ *
+ * `A` tasks are independent: each targets a different index, none needs another's
+ * output, and they can all be dispatched at once. `B` tasks exist because some
+ * questions only appear after the first sweep, above all "these two sources
+ * disagree, which is right". A `B` task may read the `A` notes and must not
+ * start before they are in.
+ *
+ * Borrowed from the dependency-group structure in daymade's `deep-research`
+ * skill (`github.com/daymade/claude-code-skills`), including its concurrency
+ * limit.
+ */
+export type TaskGroup = 'A' | 'B';
+
+/**
+ * How many tasks to have in flight at once.
+ *
+ * Three, from the same source. The ceiling is not about the server, which does
+ * no searching: it is about the host. Above three concurrent workers, rate
+ * limits on the search backend start returning partial result sets, and a
+ * partial result set is indistinguishable from a thin topic, so the loop
+ * silently records "not much out there" about a subject with plenty out there.
+ */
+export const MAX_CONCURRENT_TASKS = 3;
 
 export interface SearchTask {
   readonly id: string;
@@ -37,6 +72,9 @@ export interface SearchTask {
   readonly objective: string;
   readonly sourceClass: SourceClass;
   readonly depth: Depth;
+  readonly group: TaskGroup;
+  /** Task ids that must have reported before this one starts. Empty for group A. */
+  readonly dependsOn: readonly string[];
   /** Concrete queries to issue, in the dialect the target index expects. */
   readonly queries: readonly string[];
   /** What a good answer to this task looks like, so a worker knows when to stop. */
@@ -169,12 +207,56 @@ export interface DecomposeOptions {
   readonly maxTasks?: number;
   /** Force every task to read pages rather than listings. */
   readonly deep?: boolean;
+  /**
+   * Force every task down to `scan`, whatever it asked for. Beats `deep`.
+   *
+   * Set when the host has no page fetch. It has to live here rather than being
+   * applied by the caller afterwards, because the reconciliation task sets its
+   * own depth and would otherwise keep telling a worker to read pages in full on
+   * a host that cannot open one.
+   */
+  readonly scanOnly?: boolean;
+  /**
+   * Add the group B reconciliation task. Default true.
+   *
+   * Off when there is too little group A for it to have anything to reconcile,
+   * and off in `light` mode, where the whole point is fewer workers.
+   */
+  readonly reconcile?: boolean;
+}
+
+/**
+ * The group B task.
+ *
+ * Its queries cannot be written here, because the thing it searches for is
+ * whatever group A disagreed about, and that is not known until group A has
+ * reported. So it ships with query *shapes* and is dispatched with the group A
+ * registry in hand. This is the one task whose brief is genuinely incomplete at
+ * planning time, and pretending otherwise would produce three plausible queries
+ * about the topic in general, which group A already ran.
+ */
+function reconciliationTask(topic: string, dependsOn: readonly string[]): SearchTask {
+  return {
+    id: 'b1',
+    role: 'a fact-checker who starts only once the first sweep is in, and searches the disagreements rather than the topic',
+    objective: `Resolve the specific points where the group A sources contradict each other, on: ${topic}`,
+    sourceClass: 'general-web',
+    depth: 'deep',
+    group: 'B',
+    dependsOn: [...dependsOn],
+    queries: [
+      `"<the contested claim, quoted from a group A finding>"`,
+      `${topic} "<the contested figure>" correction OR retracted OR updated`,
+      `${topic} "<the two disagreeing sources>" which is right`,
+    ],
+    done: 'Each contradiction either resolved with a source that settles it, or recorded as genuinely open. An unresolved contradiction is a finding, not a failure.',
+  };
 }
 
 export function decompose(question: string, opts: DecomposeOptions): SearchTask[] {
   const topic = topicOf(question);
   const classes = BY_ARCHETYPE[opts.archetype].slice(0, opts.maxTasks ?? 5);
-  return classes.map((sourceClass, i) => {
+  const groupA: SearchTask[] = classes.map((sourceClass, i) => {
     const s = STRATEGIES[sourceClass];
     return {
       id: `t${String(i + 1)}`,
@@ -182,10 +264,20 @@ export function decompose(question: string, opts: DecomposeOptions): SearchTask[
       objective: s.objective(topic),
       sourceClass,
       depth: opts.deep ? 'deep' : s.depth,
+      group: 'A',
+      dependsOn: [],
       queries: s.queries(topic),
       done: s.done,
     };
   });
+  // Two group A tasks cannot contradict each other in any interesting way, so
+  // below three the reconciliation worker is a guaranteed miss and is dropped.
+  const wants = opts.reconcile ?? true;
+  const tasks =
+    !wants || groupA.length < 3
+      ? groupA
+      : [...groupA, reconciliationTask(topic, groupA.map((t) => t.id))];
+  return opts.scanOnly ? tasks.map((t) => ({ ...t, depth: 'scan' as const })) : tasks;
 }
 
 /** Render the task list as the instruction a worker actually executes. */
@@ -193,14 +285,52 @@ export function renderTasks(tasks: readonly SearchTask[]): string {
   return tasks
     .map((t) =>
       [
-        `### ${t.id} · ${t.sourceClass} (${t.depth})`,
+        `### ${t.id} · ${t.sourceClass} (${t.depth}, group ${t.group})`,
         '',
+        t.dependsOn.length > 0
+          ? `**Do not start** until ${t.dependsOn.join(', ')} have reported. You may read their findings first.`
+          : '**Independent.** Nothing else has to finish before this one.',
         `**You are** ${t.role}.`,
         `**Find** ${t.objective}`,
         `**Queries** (adapt them once you see results; these are the dialect this index expects):`,
         ...t.queries.map((q) => `- \`${q}\``),
+        t.depth === 'deep'
+          ? '**Read in full** two or three of the best sources, and take notes from the body rather than the snippet.'
+          : '**Snippets are enough.** Read titles, summaries and dates; do not open every result.',
         `**Done when** ${t.done}`,
       ].join('\n'),
     )
     .join('\n\n');
+}
+
+/**
+ * The dispatch plan: which tasks go now, and which wait.
+ *
+ * Returned as waves rather than as a flat list because the ordering is the
+ * point, and a caller handed a flat list dispatches all of it.
+ */
+export function dispatchWaves(tasks: readonly SearchTask[]): SearchTask[][] {
+  const a = tasks.filter((t) => t.group === 'A');
+  const b = tasks.filter((t) => t.group === 'B');
+  const waves: SearchTask[][] = [];
+  for (let i = 0; i < a.length; i += MAX_CONCURRENT_TASKS) {
+    waves.push(a.slice(i, i + MAX_CONCURRENT_TASKS));
+  }
+  if (b.length > 0) waves.push(b);
+  return waves;
+}
+
+/** Render the dispatch plan as the instruction the lead follows. */
+export function renderDispatch(tasks: readonly SearchTask[]): string {
+  const waves = dispatchWaves(tasks);
+  if (waves.length === 0) return '_No tasks._';
+  return waves
+    .map((wave, i) => {
+      const ids = wave.map((t) => `\`${t.id}\``).join(', ');
+      const last = i === waves.length - 1 && wave.every((t) => t.group === 'B');
+      return last
+        ? `${String(i + 1)}. **After every group A task has reported**, dispatch ${ids}. Hand it the registry from \`research_local_note\`'s reply, so it searches the contradictions rather than the topic again.`
+        : `${String(i + 1)}. Dispatch ${ids} in parallel, and wait for all of them.`;
+    })
+    .join('\n');
 }

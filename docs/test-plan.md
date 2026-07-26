@@ -168,7 +168,17 @@ Acceptance criteria are taken from the README's tool contracts and the tool desc
 | **CLI-05** | The brief reaches the CLI as an argv element, never through a shell | unit: `local-cli`, `local-provider` | ✓ |
 | **CLI-06** | A local run's outcome is readable by a different process than started it | unit: `local-provider` | ✓ |
 | **CLI-07** | A non-zero exit is a failure that keeps the partial output | unit: `local-provider` | ✓ |
-| **CLI-08** | The local backend is never selected automatically, and stays reachable by name | unit: `providers` | ✓ |
+| **CLI-08** | An installed, signed-in CLI is preferred over a paid API backend for a job it can do | unit: `providers` | ✓ |
+| **CLI-12** | A CLI on PATH with no sign-in file is not preferred; the paid backend runs instead | unit: `providers` | ✓ |
+| **CLI-13** | Capability outranks the CLI preference: a date window, X or a plan still routes to the API | unit: `providers` | ✓ |
+| **CLI-14** | The routing reason says a subscription quota is being spent, not an API balance | unit: `providers` | ✓ |
+| **CLI-15** | `DOSSIER_PROVIDERS` overrides in both directions: it can exclude the CLI or make it the only backend | unit: `providers` | ✓ |
+| **BROWSER-01** | A browser binary is identified by version string or install-path provenance, and reported ambiguous when it is neither | unit: `browser-detect` | ✓ |
+| **BROWSER-02** | An MCP server package is probed by presence on disk only; `npx` is never invoked, because that would fetch and execute it | unit: `browser-detect` | ✓ |
+| **BROWSER-03** | Whether an MCP server is registered with a client is always reported unknown; no client config is read | unit: `browser-detect` | ✓ |
+| **BROWSER-04** | Detection never implies permission: every reported tool restates that driving needs `DOSSIER_BROWSER_PROVIDER` | unit: `browser-detect` | ✓ |
+| **BROWSER-05** | No probe reads a browser profile, cookie store or session file | unit: `browser-detect` | ✓ |
+| **BROWSER-06** | Every probe states which kind it is, so a package is never described as an executable | unit: `browser-detect` | ✓ |
 | **IMPORT-01** | An imported report becomes a normal run: reads, greps and profiles identically | `evidence` | ✓ |
 | **IMPORT-02** | Import refuses a url and markdown together, and neither | `evidence` | ✓ |
 | **IMPORT-03** | An import charges nothing against the budget, with or without a utility model | `evidence` | ✓ |
@@ -202,6 +212,32 @@ Acceptance criteria are taken from the README's tool contracts and the tool desc
 | **LOOP-09** | A CommonMark autolink to an ungathered source is refused | unit: `local-loop` | ✓ |
 | **EVID-11** | A model saying "unknown" is not counted as an independent domain | unit: `evidence` | ✓ |
 | **SHAPE-07** | An uncited wide cell is reported, not treated as a missing cell | unit: `shapes` | ✓ |
+| **LOOP-10** | Group A tasks are independent; a group B task depends on all of them | unit: `local-loop` | ✓ |
+| **LOOP-11** | Dispatch waves run at most three at once, and group B lands in its own wave | unit: `local-loop` | ✓ |
+| **LOOP-12** | Reconciliation is suppressed below three group A tasks and in light mode | unit: `local-loop` | ✓ |
+| **LOOP-13** | A group B task reporting before its dependencies is refused | `loop` | ✓ |
+| **LOOP-14** | No web search halts the loop before a session is opened | unit: `local-loop`, `loop` | ✓ |
+| **LOOP-15** | No page fetch forces every task to scan depth and says what that costs | unit: `local-loop`, `loop` | ✓ |
+| **LOOP-16** | Missing subagents or filesystem degrade loudly, never silently | unit: `local-loop` | ✓ |
+| **LOOP-17** | A source past its type's horizon is flagged stale; undated is flagged separately | unit: `local-loop` | ✓ |
+| **LOOP-18** | Staleness horizons differ by source type: a two-year-old paper is fresh, a two-year-old news page is not | unit: `local-loop` | ✓ |
+| **LOOP-19** | A source dated after the as-of horizon is flagged rather than treated as fresh | unit: `local-loop` | ✓ |
+| **LOOP-20** | Every task ran and every one found nothing: confidence N/A, failed checks enumerated, direct contact recommended | unit: `local-loop`, `loop` | ✓ |
+| **LOOP-21** | A run with a silent task is never reported as a black box | unit: `local-loop` | ✓ |
+| **LOOP-22** | A task that searched and found nothing is reported separately from one that never ran | unit: `local-loop` | ✓ |
+| **LOOP-23** | Sources refused after the freeze are shown at draft time and stated to be final | unit: `local-loop` | ✓ |
+| **LOOP-24** | An empty finding list is accepted only with a gaps statement | `loop` | ✓ |
+| **LOOP-25** | A worker may report at most ten findings | `loop` | ✓ |
+| **LOOP-26** | Deep-read notes reach the lead at draft time, so it never reads a search result | unit: `local-loop`, `loop` | ✓ |
+| **LOOP-27** | Light mode lowers the advisory floors rather than failing a proportionate run | unit: `local-loop` | ✓ |
+| **LOOP-28** | A session persisted before groups, modes and staleness reads back with defaults | unit: `local-loop` | ✓ |
+| **LOOP-29** | A task reporting empty with a failed-search outcome is not counted as having found nothing | unit: `local-loop` | ✓ |
+| **LOOP-30** | An empty registry where a task's search failed is not a black box | unit: `local-loop` | ✓ |
+| **LOOP-31** | A failed search is named at draft time with the reason, and stated not to be an established negative | unit: `local-loop`, `loop` | ✓ |
+| **LOOP-32** | `outcome: no-results` still establishes coverage and still reaches the black box | unit: `local-loop`, `loop` | ✓ |
+| **LOOP-33** | A failed-search outcome requires `gaps`, the same as any other empty report | `loop` | ✓ |
+| **LOOP-34** | Findings alongside a failed outcome are kept, and coverage is still incomplete | unit: `local-loop` | ✓ |
+| **LOOP-35** | `outcome: no-results` with a non-empty finding list is refused at the boundary | `loop` | ✓ |
 
 ### The paid project
 

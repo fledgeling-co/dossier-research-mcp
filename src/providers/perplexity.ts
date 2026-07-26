@@ -174,6 +174,7 @@ export function perplexityProvider(config: Config): ResearchProvider {
     structuredOutput: false,
     fileOutput: true,
     maxWallClockMinutes: 30,
+    billedTo: 'api-balance',
     limitations: [
       'No editable plan before spending; only Gemini offers that.',
       'No private-corpus grounding.',

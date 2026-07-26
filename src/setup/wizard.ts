@@ -3,6 +3,7 @@ import { writeFile } from 'node:fs/promises';
 import { homedir, platform } from 'node:os';
 import { join } from 'node:path';
 import * as p from '@clack/prompts';
+import { probeAllBrowserTools } from '../local/browser.js';
 import { probeAllClis, type CliStatus } from '../local/cli.js';
 import {
   BROWSER_DRIVERS,
@@ -329,6 +330,14 @@ async function chooseSettings(): Promise<Record<string, string> | null> {
 
 /** Optional: reading pages that need a login. Offered honestly. */
 async function chooseBrowser(): Promise<string | null | undefined> {
+  // Probed before the question, not after, so nobody is offered an install for
+  // something already sitting on their disk. Offline, and it starts nothing:
+  // presence on disk for the MCP servers, and no browser is touched at all.
+  const present = new Set(
+    (await probeAllBrowserTools()).filter((t) => t.state === 'present').map((t) => t.id),
+  );
+  const already = BROWSER_DRIVERS.filter((d) => d.detectAs && present.has(d.detectAs));
+
   p.note(
     [
       'Dossier reads public pages on its own, so you do not need anything extra',
@@ -339,6 +348,14 @@ async function chooseBrowser(): Promise<string | null | undefined> {
       '',
       'Dossier will never type a password. Signing in is always something you do',
       'yourself, once, by hand.',
+      ...(already.length === 0
+        ? []
+        : [
+            '',
+            `Already on this machine: ${already.map((d) => d.id).join(', ')}.`,
+            'Installed is not connected: you still choose it here, and Dossier still',
+            'drives nothing unless DOSSIER_BROWSER_PROVIDER is set.',
+          ]),
     ].join('\n'),
     'Optional — pages behind a login',
   );
@@ -349,7 +366,11 @@ async function chooseBrowser(): Promise<string | null | undefined> {
 
   const driver = await p.select({
     message: 'Which one?',
-    options: BROWSER_DRIVERS.map((d) => ({ value: d.id, label: d.label, hint: d.note })),
+    options: BROWSER_DRIVERS.map((d) => ({
+      value: d.id,
+      label: d.label,
+      hint: d.detectAs && present.has(d.detectAs) ? `already installed · ${d.note}` : d.note,
+    })),
   });
   if (cancelled(driver)) return null;
 
@@ -405,9 +426,11 @@ export function registrationArgs(answers: Answers): string[] {
   for (const [k, v] of Object.entries(answers.keys)) if (v) env.push('-e', `${k}=${v}`);
   for (const [k, v] of Object.entries(answers.settings)) env.push('-e', `${k}=${v}`);
   if (answers.clis.length > 0) {
-    // Naming the CLI is what lets it be chosen automatically. A $0 backend
-    // never wins a cost tie-break on its own, by design, so it has to be asked
-    // for explicitly.
+    // Naming the CLI pins which backends exist at all. Since 0.5.1 a signed-in
+    // CLI is preferred automatically for jobs it can do, so this line is no
+    // longer what makes it reachable; it is the operator's record of the set
+    // they chose, and `DOSSIER_LOCAL_CLI` picks which CLI when several are on
+    // PATH.
     env.push('-e', `DOSSIER_PROVIDERS=${[...answers.providers, 'local'].join(',')}`);
     env.push('-e', `DOSSIER_LOCAL_CLI=${answers.clis[0] ?? ''}`);
   }

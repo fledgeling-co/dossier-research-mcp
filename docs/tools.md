@@ -278,10 +278,12 @@ The split is the point. **The loop runs in your client, because that is where th
 
 ```mermaid
 flowchart LR
-    S["research_local_start<br/><i>tasks, one per source class</i>"] --> N["you search<br/>research_local_note"]
-    N --> N
+    S["research_local_start<br/><i>capability gate, then<br/>tasks in dependency groups</i>"] --> A["group A workers<br/>search in parallel"]
+    A --> N["research_local_note<br/><i>≤10 findings each</i>"]
+    N --> B["group B<br/>reconciles the disagreements"]
+    B --> N
     N --> D["research_local_draft<br/><b>registry frozen</b>"]
-    D --> W["you draft"]
+    D --> W["the lead drafts"]
     W --> U["research_local_submit<br/><i>cites checked against the registry</i>"]
     U --> R["a normal run"]
 
@@ -301,6 +303,89 @@ flowchart LR
 > That last check is the whole argument for doing this in a server rather than a skill. A prompt can *ask* a model not to reach for a plausible-looking reference mid-sentence to support something it has already written. A server holding the frozen registry can check, and refuse. The invented citation resolves perfectly, so nothing downstream would ever catch it.
 
 A task that never reports is named as a coverage gap rather than averaged away, and a draft that marks nothing as inference gets told so: a synthesised claim reads exactly like a sourced one, and that is how a wrong conclusion built from correct facts survives review.
+
+#### You are the lead, and the lead does not read search results
+
+The single largest thing the loop asks of you. `research_local_start` dispatches one worker per task; each worker does its own searching and hands back a distilled note. **The lead never sees a raw result page.**
+
+Raw listings are the bulk of what a search returns and almost none of it is evidence. A lead that reads them spends its context on snippets and has none left for the report, which is how a run with good sources still produces a shallow synthesis. Ten one-sentence findings per worker is a hard cap in the schema rather than a suggestion: a worker that returns everything it saw has handed the sifting back to the lead, which is the job it was dispatched to do.
+
+The material the lead actually drafts from arrives two ways. The **registry** carries the claim, the URL and the date. **Deep-read notes** carry what a page argued and the caveat buried three paragraphs in, which exists nowhere else. Without the second, telling the lead not to read search results would just force it back to the pages later.
+
+If you have no way to dispatch workers, adopt each role in turn and discard the raw results as you go. The tool says so rather than assuming.
+
+#### Dependency groups, not a flat fan-out
+
+Tasks come back in two groups. **Group A** is independent and source-diverse, dispatched in parallel, at most three at a time. **Group B** is a single reconciliation task that may read what group A found.
+
+`research_local_note` enforces the order. A group B task that reports before its dependencies have is refused, because a reconciliation run early has nothing to reconcile and just searches the topic again. When the last group A task reports, the reply hands over the registry and says to dispatch B against it. Its job is the disagreements, not the subject.
+
+Reconciliation is skipped in `light` mode and when fewer than three group A tasks were planned. There is nothing to reconcile across two sources.
+
+#### The parameters
+
+`research_local_start`:
+
+| Parameter | Type | Notes |
+|---|---|---|
+| `question` | `string` | Required |
+| `archetype` | enum | Defaults to keyword selection over the question |
+| `maxTasks` | `1..7` | How many parallel search tasks to plan. Default 5 |
+| `deep` | `boolean` | Force every task to open pages rather than read result listings |
+| `mode` | `standard` \| `light` | Evidence floors. `standard` expects 12 approved sources across 5 domains, `light` expects 6 across 3 |
+| `asOf` | `YYYY-MM-DD` | The date every claim should be current as of. Defaults to today |
+| `have` | object | What **you** can do: `webSearch`, `webFetch`, `subagents`, `filesystem`. All default true |
+
+`research_local_note`:
+
+| Parameter | Type | Notes |
+|---|---|---|
+| `runId`, `taskId` | `string` | The handle and which task is reporting |
+| `findings` | array, **max 10** | `{ claim, url, quote?, published? }`. May be empty only if `gaps` is set |
+| `gaps` | `string` | What you searched for and did **not** find |
+| `deepReadNotes` | `string` | For a deep task: what the pages actually argued, caveats included. The lead drafts from this |
+| `outcome` | enum, default `ok` | What happened when you searched: `ok`, `no-results`, `rate-limited`, `blocked`, `tool-failed`. See [Nothing found is a result](#nothing-found-is-a-result) |
+
+**`light` is not a worse run, it is a smaller question.** Asking what one library does and asking which of six vector databases to standardise on should not be held to the same source count. Holding the small one to the large floors produces a run that fails its gates for being proportionate, which teaches people to ignore the gates.
+
+#### Capability gates, and degrading out loud
+
+`have` is declared by you, never detected. Dossier is a stdio server and cannot see whether its client has web search; a probe that guessed would be wrong in the direction that matters, because the failure being prevented is a loop that runs cheerfully with no search at all and writes a fluent report from the model's own memory with citations attached.
+
+| Missing | What happens |
+|---|---|
+| `webSearch` | **Halt.** No session is opened. Enable search, or use a paid backend that brings its own |
+| `webFetch` | Every task drops to **scan** depth, including the reconciliation task that asks for deep by default |
+| `subagents` | Sequential: you adopt each role in turn and discard results as you go |
+| `filesystem` | The registry is the only durable record, so report each task as it finishes rather than batching |
+
+Each degradation is printed with what it costs. A fallback nobody is told about is a product failure wearing a success: the run completes, the report looks normal, and the reason it is thin is invisible to the only person who could have fixed it.
+
+#### As-of dates and staleness
+
+Every session carries an as-of date. At freeze time each source is assessed against it and anything stale, undated or dated after the horizon is listed, with a drafting rule that says to downgrade the claims resting on it and to say in the sentence that you did.
+
+Recency is judged by source type rather than by one cutoff. A standard from 2019 is current; a benchmark from 2019 is not. A report that reads as present tense on a four-year-old page is wrong in the way nobody checks.
+
+#### Nothing found is a result
+
+Four outcomes that look alike from outside are kept apart.
+
+- **Silent**: the task never reported. A coverage gap, named as one.
+- **Nothing found**: the task ran, searched, and found nothing. An established negative about the public record. This is `outcome: no-results`.
+- **Search failed**: the task ran and the search did not complete, so nothing was ruled out. `outcome: rate-limited`, `blocked` or `tool-failed`. Printed at draft time as unchecked rather than empty, with a warning against writing it up as a negative.
+- **Refused**: the source arrived after the freeze. Listed, and never revived.
+
+The middle two are the distinction worth having. Absence of evidence and absence of search arrive in the same shape, an empty report, and only the worker knows which one it was. Reporting a throttled search as `no-results` makes the report claim there is no public record of something nobody managed to look for, and no citation check can catch that.
+
+When every task ran **cleanly** and the whole registry is empty, `research_local_draft` returns **the black box** rather than drafting rules: the checks that were made, `Confidence: N/A`, and a recommendation to contact the subject directly. Handing back drafting rules there would be inviting a report about a subject on which nothing was found. A single failed search disqualifies the black box, because it is an assertion about the world and a search that never ran cannot support one.
+
+> [!NOTE]
+> Registry finality is one-way. A source refused after the freeze stays refused for the life of the session, and the refusals are printed at draft time so the gap is visible rather than quietly closed. Start a new session if it matters.
+
+The lead/subagent split, the dependency groups, the output contract, the capability gates, the as-of policy and the light/standard split are adapted from [daymade's deep-research skill](https://github.com/daymade/claude-code-skills). Dossier deliberately keeps its own counter-review rule instead of the skill's: coverage is required and an issue quota is not, because demanding a minimum number of objections rewards inventing them.
+
+The typed `outcome` is adapted from `last30days-skill`'s per-source status, which records what happened to every source and states the rule plainly: a failure state is never evidence that a source had nothing. The [gap analysis](plan/external-skill-gap-analysis.md) records what else was read and what was deliberately left.
 
 ### `research_list`, `research_cancel`, `research_budget`
 

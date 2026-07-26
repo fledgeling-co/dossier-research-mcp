@@ -6,7 +6,14 @@ import type { Config } from '../config.js';
 import type { CreateRunArgs, DeepResearchClient } from '../gemini/client.js';
 import type { CostBand, DurationOptions } from '../gemini/cost.js';
 import type { InteractionSnapshot } from '../gemini/types.js';
-import { adapterFor, CLI_ADAPTERS, probeCli, resolveOnPath, type CliAdapter } from '../local/cli.js';
+import {
+  adapterFor,
+  CLI_ADAPTERS,
+  hasSignInFile,
+  probeCli,
+  resolveOnPath,
+  type CliAdapter,
+} from '../local/cli.js';
 import type { Capabilities, CredentialStatus, ProviderEstimate, ResearchProvider } from './types.js';
 
 /**
@@ -18,14 +25,34 @@ import type { Capabilities, CredentialStatus, ProviderEstimate, ResearchProvider
  * on the April 2026 agent bench while a premium deep-research API scored 75.8%
  * at $10.92 on the same questions.
  *
- * ## Never routed to automatically
+ * ## Preferred when it is installed, signed in and capable
  *
- * It costs $0, so a cost tie-break would pick it every single time, and that is
- * the wrong default for two reasons that have nothing to do with quality: it
- * spends a *different* budget (a subscription quota rather than an API balance),
- * and it executes a third-party binary on the user's machine. Both are things
- * somebody should choose rather than discover. So `local` is opt-in: name it in
- * `provider`, or list it in `DOSSIER_PROVIDERS`.
+ * This was the other way round until 0.5.1. The old rule kept `local` out of
+ * automatic selection entirely, on the grounds that a $0 backend wins every
+ * cost tie-break while spending a subscription quota Dossier cannot meter, and
+ * running a third-party binary on the user's machine. The reasoning was sound
+ * and the default was still wrong: the owner asked for the subscription they
+ * already pay for to be used ahead of an API bill, and a research tool that
+ * quietly bills an API when a capable CLI is sitting on PATH is not serving
+ * them.
+ *
+ * So the router now prefers this backend, honestly:
+ *
+ * - **Capability first, unchanged.** A CLI cannot enforce a date window, reach
+ *   X, filter domains, or offer an editable plan, and the capability filter
+ *   eliminates it from all of those before preference is ever consulted. The
+ *   preference only ever picks between backends that can all do the job.
+ * - **Installed and signed in**, established by file existence alone. A CLI
+ *   nobody has signed into would trade a working paid run for a failing free
+ *   one.
+ * - **Said out loud.** The routing reason states that a subscription quota is
+ *   being spent rather than an API balance, and that Dossier cannot meter it.
+ * - **`DOSSIER_PROVIDERS` overrides in both directions**: list it to force the
+ *   CLI, or omit it to keep the CLI out of automatic selection entirely.
+ *
+ * Identity is still confirmed at spawn, not at routing time. Preference decides
+ * *which* backend; `probeCli` in `createRun` decides whether the binary on PATH
+ * is really the tool it claims to be, and refuses an unidentified one.
  *
  * ## Durability
  *
@@ -143,8 +170,9 @@ export function localProvider(config: Config): ResearchProvider {
     structuredOutput: false,
     fileOutput: true,
     maxWallClockMinutes: 30,
+    billedTo: 'subscription',
     limitations: [
-      'Never chosen automatically: it costs $0, so any cost tie-break would always pick it. Ask for it by name.',
+      'Preferred automatically when installed, signed in and capable of the job. Set DOSSIER_PROVIDERS to keep it out.',
       'Spends your subscription quota rather than an API balance, and Dossier cannot meter that.',
       'No editable plan, no date filter, no domain filter, no follow-up turn.',
       'Runs a third-party binary on this machine, with your brief as an argument.',
@@ -337,11 +365,21 @@ export function localProvider(config: Config): ResearchProvider {
           fix: `Install ${adapter.label}, or unset DOSSIER_LOCAL_CLI to auto-detect`,
         };
       }
-      // Deliberately not `ready`: presence on PATH is not proof of identity or
-      // of a signed-in session, and `research_doctor` is where that is checked.
+      // Deliberately not `ready`: presence on PATH is not proof of identity,
+      // and `research_doctor` is where the version string is checked.
+      //
+      // `signedIn` is the one thing that can be settled synchronously, by
+      // asking whether a session file exists. Routing needs it, because
+      // preferring a CLI nobody has signed into trades a working paid run for a
+      // failing free one. The file is never opened.
+      const signedIn = hasSignInFile(adapter);
       return {
         state: 'configured-unverified',
-        detail: `${adapter.label} is on PATH; run \`research_doctor\` to confirm its identity and sign-in`,
+        detail: signedIn
+          ? `${adapter.label} is on PATH with a sign-in on disk; run \`research_doctor\` to confirm its identity`
+          : `${adapter.label} is on PATH but no sign-in state was found; run \`${adapter.bin}\` once and sign in`,
+        signedIn,
+        ...(signedIn ? {} : { fix: `Run \`${adapter.bin}\` once and sign in, then re-run \`research_doctor\`` }),
       };
     },
     estimate(_input: DurationOptions): ProviderEstimate {

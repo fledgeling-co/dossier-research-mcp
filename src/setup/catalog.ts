@@ -1,3 +1,4 @@
+import type { BrowserToolId } from '../local/browser.js';
 import type { CliId } from '../local/cli.js';
 
 /**
@@ -217,6 +218,15 @@ export interface BrowserDriver {
   readonly label: string;
   readonly install: string;
   readonly note: string;
+  /**
+   * The detectable artefact this driver installs, when there is one.
+   *
+   * Only the two npm-published MCP servers have one. Claude in Chrome is a
+   * browser extension plus a flag on a CLI, and neither leaves anything on disk
+   * that can be confirmed without reading a browser profile, so it stays
+   * absent here rather than being guessed at.
+   */
+  readonly detectAs?: BrowserToolId;
 }
 
 export const BROWSER_DRIVERS: readonly BrowserDriver[] = [
@@ -231,12 +241,14 @@ export const BROWSER_DRIVERS: readonly BrowserDriver[] = [
     label: 'Chrome DevTools MCP — attaches to your signed-in Chrome',
     install: 'claude mcp add chrome-devtools --scope user -- npx chrome-devtools-mcp@latest --autoConnect',
     note: 'Chrome 144 or later. You approve the connection once at chrome://inspect.',
+    detectAs: 'chrome-devtools-mcp',
   },
   {
     id: 'playwright',
     label: 'Playwright MCP — attaches through a browser extension',
     install: 'claude mcp add playwright --scope user -- npx @playwright/mcp@latest --extension',
     note: 'Needs the Playwright extension installed, and you pick which tab it may use.',
+    detectAs: 'playwright-mcp',
   },
 ];
 

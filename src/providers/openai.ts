@@ -112,6 +112,7 @@ export function openAiProvider(config: Config): ResearchProvider {
     structuredOutput: true,
     fileOutput: true,
     maxWallClockMinutes: 45,
+    billedTo: 'api-balance',
     limitations: [
       'No editable plan before spending. The ChatGPT product has one; the API does not.',
       'Never asks clarifying questions: it expects a fully-formed prompt and will not ask for context.',

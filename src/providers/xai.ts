@@ -120,6 +120,7 @@ export function xaiProvider(config: Config): ResearchProvider {
     structuredOutput: true,
     fileOutput: false,
     maxWallClockMinutes: 20,
+    billedTo: 'api-balance',
     limitations: [
       'No editable plan before spending.',
       'The run happens INSIDE the create call: `deferred` is accepted and ignored, so a long investigation can outlive the HTTP timeout. Suits fast, broad questions rather than hour-long ones.',

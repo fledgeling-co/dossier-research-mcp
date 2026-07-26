@@ -173,3 +173,218 @@ describe('LOOP-02..06: findings, freeze, draft, submit', () => {
     expect(result.text).toMatch(/No local research session/);
   });
 });
+
+describe('LOOP-14..15: the loop is honest about what the host can do', () => {
+  it('halts without web search, and opens nothing', async () => {
+    const halted = await mcp.callTool('research_local_start', {
+      question: 'a question nobody can search for',
+      have: { webSearch: false },
+    });
+    expect(halted.text).toMatch(/Halted: no web search/);
+    // No handle, because no session was opened. A halted run that left one
+    // behind would be found later and mistaken for an abandoned run.
+    expect(halted.text).not.toMatch(/`dr_/);
+  });
+
+  it('drops every task to scan depth when there is no page fetch', async () => {
+    const degraded = await mcp.callTool('research_local_start', {
+      question: 'which vector databases support binary quantization',
+      archetype: 'technical',
+      deep: true,
+      have: { webFetch: false },
+    });
+    expect(degraded.text).toMatch(/Running degraded/);
+    expect(degraded.text).toMatch(/snippet/i);
+    // `deep: true` asked for full reads; without a fetch tool it cannot have them.
+    expect(degraded.text).not.toMatch(/\(deep, group/);
+  });
+});
+
+describe('LOOP-13, 24, 25, 26: the subagent output contract', () => {
+  let runId: string;
+
+  beforeAll(async () => {
+    const started = await mcp.callTool('research_local_start', {
+      question: 'what is the regulatory position on binary quantization exports',
+      archetype: 'technical',
+      maxTasks: 5,
+      asOf: '2026-07-26',
+    });
+    runId = handleOf(started.text);
+    expect(started.text).toMatch(/Do not read raw search results yourself/);
+    expect(started.text).toMatch(/in parallel, and wait for all of them/);
+  });
+
+  it('LOOP-25: refuses more than ten findings from one worker', async () => {
+    const result = await mcp.callTool('research_local_note', {
+      runId,
+      taskId: 't1',
+      findings: Array.from({ length: 11 }, (_, i) => ({
+        claim: `A claim number ${String(i)} that is long enough`,
+        url: `https://example.com/${String(i)}`,
+      })),
+    });
+    expect(result.text).toMatch(/10|ten/i);
+  });
+
+  it('LOOP-24: refuses an empty report with no gaps statement, and accepts one with', async () => {
+    const silent = await mcp.callTool('research_local_note', { runId, taskId: 't1', findings: [] });
+    expect(silent.text).toMatch(/gaps/i);
+
+    const stated = await mcp.callTool('research_local_note', {
+      runId,
+      taskId: 't1',
+      findings: [],
+      gaps: 'Searched the vendor docs and the changelogs for an export restriction; there is none.',
+    });
+    expect(stated.text).toMatch(/nothing found/i);
+    expect(stated.text).toMatch(/not a gap in the run/);
+  });
+
+  it('LOOP-13: refuses a reconciliation task that reports before its dependencies', async () => {
+    const early = await mcp.callTool('research_local_note', {
+      runId,
+      taskId: 'b1',
+      findings: [{ claim: 'Something found far too early', url: 'https://example.com/early' }],
+    });
+    expect(early.text).toMatch(/depends on/);
+    expect(early.text).toMatch(/searches the topic again instead of the disagreements/);
+  });
+
+  it('LOOP-26: hands the lead the registry and the deep-read notes, never the search results', async () => {
+    // Everything else in group A reports, which is what unblocks b1.
+    const rest = ['t2', 't3', 't4', 't5'];
+    for (const [i, taskId] of rest.entries()) {
+      const reply = await mcp.callTool('research_local_note', {
+        runId,
+        taskId,
+        findings: [
+          {
+            claim: `Task ${taskId} established something`,
+            url: `https://source-${String(i)}.example/page`,
+            published: '2026-07-01',
+          },
+        ],
+        deepReadNotes: `From ${taskId}: the page concedes its benchmark used a different recall target.`,
+      });
+      if (taskId === rest.at(-1)) {
+        // The last of group A hands over what b1 needs to work against.
+        expect(reply.text).toMatch(/Group A is in\. Dispatch `b1` now/);
+        expect(reply.text).toMatch(/1\. https:\/\/source-0\.example\/page/);
+      }
+    }
+
+    await mcp.callTool('research_local_note', {
+      runId,
+      taskId: 'b1',
+      findings: [],
+      gaps: 'Searched the two disagreeing figures directly; neither source has been corrected.',
+    });
+
+    const frozen = await mcp.callTool('research_local_draft', { runId });
+    expect(frozen.text).toMatch(/Deep-read notes/);
+    expect(frozen.text).toMatch(/different recall target/);
+    // Refused sources are shown and stated to be final.
+    expect(frozen.text).toMatch(/As of 2026-07-26/);
+    // A task that ran and found nothing is not reported as one that never ran.
+    expect(frozen.text).toMatch(/Searched and found nothing: t1, b1/);
+    expect(frozen.text).toMatch(/Every task reported/);
+  });
+});
+
+describe('LOOP-20: an entity with no public footprint', () => {
+  it('reports confidence N/A with the failed checks, rather than drafting anyway', async () => {
+    const started = await mcp.callTool('research_local_start', {
+      question: 'what does Fnordlebeam Pty Ltd of Wagga Wagga actually do',
+      maxTasks: 2,
+      mode: 'light',
+    });
+    const runId = handleOf(started.text);
+    await mcp.callTool('research_local_note', {
+      runId,
+      taskId: 't1',
+      findings: [],
+      gaps: 'Searched the company register, the news archives and the trade press. No entity by that name.',
+    });
+    await mcp.callTool('research_local_note', {
+      runId,
+      taskId: 't2',
+      findings: [],
+      gaps: 'Searched the forums and the review sites. Nothing.',
+    });
+
+    const frozen = await mcp.callTool('research_local_draft', { runId });
+    expect(frozen.text).toMatch(/Unable to verify anything about this subject/);
+    expect(frozen.text).toMatch(/Confidence: N\/A/);
+    expect(frozen.text).toMatch(/Searched the company register/);
+    expect(frozen.text).toMatch(/direct contact/i);
+    // And it does not hand over drafting rules for a report there is no evidence for.
+    expect(frozen.text).not.toMatch(/Drafting rules/);
+  });
+});
+
+describe('LOOP-31..35: a search that failed is not a search that found nothing', () => {
+  let runId: string;
+
+  beforeAll(async () => {
+    const started = await mcp.callTool('research_local_start', {
+      question: 'what does Fnordlebeam Pty Ltd of Wagga Wagga actually do',
+      maxTasks: 2,
+      mode: 'light',
+      asOf: '2026-07-26',
+    });
+    runId = handleOf(started.text);
+  });
+
+  it('LOOP-33: still demands a gaps statement when the search failed', async () => {
+    const silent = await mcp.callTool('research_local_note', {
+      runId,
+      taskId: 't1',
+      findings: [],
+      outcome: 'rate-limited',
+    });
+    expect(silent.text).toMatch(/gaps/i);
+  });
+
+  it('LOOP-35: refuses `no-results` reported alongside findings', async () => {
+    const contradictory = await mcp.callTool('research_local_note', {
+      runId,
+      taskId: 't1',
+      findings: [{ claim: 'The register lists an entity of that name', url: 'https://abr.example/1' }],
+      outcome: 'no-results',
+    });
+    expect(contradictory.text).toMatch(/cannot come with findings/);
+  });
+
+  it('LOOP-31, 32: names the failed search at draft time and does not call the run a black box', async () => {
+    const failed = await mcp.callTool('research_local_note', {
+      runId,
+      taskId: 't1',
+      findings: [],
+      gaps: 'Tried the company register three times. Every attempt came back throttled.',
+      outcome: 'rate-limited',
+    });
+    expect(failed.text).toMatch(/unchecked rather than empty/i);
+    expect(failed.text).toMatch(/must not be written up as an established negative/i);
+
+    await mcp.callTool('research_local_note', {
+      runId,
+      taskId: 't2',
+      findings: [],
+      gaps: 'Searched the forums and the review sites. Nothing.',
+      outcome: 'no-results',
+    });
+
+    const frozen = await mcp.callTool('research_local_draft', { runId });
+    // LOOP-31: the failure is named, with its reason, and fenced off.
+    expect(frozen.text).toMatch(/could not complete their search/i);
+    expect(frozen.text).toMatch(/rate-limited/);
+    expect(frozen.text).toMatch(/never fully queried/);
+    expect(frozen.text).toMatch(/Do not write these up as established negatives/);
+    // LOOP-32: the clean empty search still counts as an established negative.
+    expect(frozen.text).toMatch(/Searched and found nothing: t2/);
+    // LOOP-30/32: an empty registry with a failed search is not the black box.
+    expect(frozen.text).not.toMatch(/Unable to verify anything about this subject/);
+    expect(frozen.text).toMatch(/Drafting rules/);
+  });
+});

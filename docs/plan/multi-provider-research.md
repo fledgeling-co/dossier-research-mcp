@@ -243,9 +243,10 @@ Routing is **advisory by default and always overridable**. `research_plan` retur
 When more than one route qualifies, in order:
 
 1. **Capability**, always. A hard requirement (date range, X, editable plan, a real table) eliminates providers outright. This runs first because no amount of cheapness makes an incapable provider correct.
-2. **Cost**, using the reserved worst case, not the midpoint.
-3. **Measured accuracy** on the closest matching benchmark, with the date shown, because this evidence rots fast **and is thinner than it looks**. Per the Xu & Peng survey there is no literature-review benchmark, no methodology-assessment benchmark, and no evidence that any deep-research system has been formally evaluated on TREC. Published scores are general-reasoning benchmarks standing in for research quality. Treat this tie-break as weak evidence, and never let it override capability.
-4. **Diversity**, if a second run is being commissioned for corroboration: prefer a provider that reads different sources.
+2. **Billing**, added in 0.5.1 at the owner's direction. A backend billed to a subscription the user already pays for beats one billed to a metered API balance, provided it is installed, signed in and survived step 1. In practice that is the CLI backend. The earlier rule was the opposite: `local` was kept out of automatic selection entirely, because a $0 backend wins every cost tie-break while spending a quota Dossier cannot see or meter. Every fact behind that rule still holds. What changed is the judgement about which default serves the person paying, and billing an API when a capable CLI is signed in on the same machine spends real money to preserve an allowance already bought. The routing reason says a subscription quota is being consumed and that Dossier cannot measure it, `DOSSIER_PROVIDERS` overrides in both directions, and sign-in is established by a session file's existence and never by opening one.
+3. **Cost**, using the reserved worst case, not the midpoint.
+4. **Measured accuracy** on the closest matching benchmark, with the date shown, because this evidence rots fast **and is thinner than it looks**. Per the Xu & Peng survey there is no literature-review benchmark, no methodology-assessment benchmark, and no evidence that any deep-research system has been formally evaluated on TREC. Published scores are general-reasoning benchmarks standing in for research quality. Treat this tie-break as weak evidence, and never let it override capability.
+5. **Diversity**, if a second run is being commissioned for corroboration: prefer a provider that reads different sources.
 
 ### What routing will not do
 

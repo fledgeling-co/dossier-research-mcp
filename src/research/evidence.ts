@@ -215,6 +215,107 @@ export function profileEvidence(
   };
 }
 
+// ─────────────────────────────────────────────────────────────── staleness ────
+
+/**
+ * How a source sits against the as-of date.
+ *
+ * `undated` is the common case and the most useful one to surface: a report
+ * whose sources mostly carry no publication date cannot be assessed for recency
+ * at all, and saying so is more honest than quietly treating undated as current.
+ * `after-horizon` means the stated date is later than the as-of date, which is
+ * a transcription error or a source that back-dates, and either way it should
+ * not be averaged into a freshness figure.
+ */
+export type Freshness = 'fresh' | 'ageing' | 'stale' | 'undated' | 'after-horizon';
+
+export interface StalenessVerdict {
+  readonly freshness: Freshness;
+  /** Days between the publication date and the as-of date, when both parse. */
+  readonly ageDays: number | null;
+  readonly why: string;
+}
+
+/**
+ * Per-type staleness horizons, in days.
+ *
+ * The two outer numbers come from daymade's `deep-research` skill: studies over
+ * three years and news over six months on a fast-moving subject. The middle
+ * `ageing` band and the split by source type are Dossier's, because a single
+ * threshold is wrong in both directions at once. A 2019 randomised trial is
+ * ordinary evidence; a 2019 pricing page is fiction.
+ *
+ * Nothing here knows whether the *subject* is fast-moving, and inventing that
+ * judgement from a URL would be a guess dressed as a measurement. So the news
+ * horizon is applied to news unconditionally, which over-flags a slow subject.
+ * Over-flagging is recoverable by reading the flag; under-flagging is not.
+ */
+const HORIZONS: Readonly<Record<SourceType, { readonly ageing: number; readonly stale: number }>> = {
+  academic: { ageing: 730, stale: 1095 },
+  journalism: { ageing: 90, stale: 183 },
+  community: { ageing: 90, stale: 183 },
+  official: { ageing: 183, stale: 548 },
+  'secondary-industry': { ageing: 183, stale: 548 },
+  other: { ageing: 183, stale: 548 },
+};
+
+const DAY_MS = 86_400_000;
+
+/**
+ * Grade one source's age against the run's as-of date.
+ *
+ * Confidence is downgraded, never the source dropped. A stale source is often
+ * the right source: it may be the only thing ever published on the question, or
+ * the original announcement everything since has repeated. What it must not do
+ * is support a present-tense claim without the reader seeing its age.
+ */
+export function assessStaleness(
+  published: string | undefined,
+  asOf: string,
+  type: SourceType,
+): StalenessVerdict {
+  if (!published?.trim()) {
+    return {
+      freshness: 'undated',
+      ageDays: null,
+      why: 'no publication date was recorded, so its age cannot be assessed at all',
+    };
+  }
+  const at = Date.parse(published);
+  const horizon = Date.parse(asOf);
+  if (Number.isNaN(at) || Number.isNaN(horizon)) {
+    return {
+      freshness: 'undated',
+      ageDays: null,
+      why: `the recorded date "${published.slice(0, 40)}" could not be read as a date`,
+    };
+  }
+  const ageDays = Math.round((horizon - at) / DAY_MS);
+  if (ageDays < 0) {
+    return {
+      freshness: 'after-horizon',
+      ageDays,
+      why: 'its stated date is later than the as-of date, which is a transcription error or a back-dated source',
+    };
+  }
+  const h = HORIZONS[type];
+  if (ageDays >= h.stale) {
+    return {
+      freshness: 'stale',
+      ageDays,
+      why: `${String(ageDays)} days old against a ${String(h.stale)}-day horizon for ${type}; downgrade any present-tense claim resting on it`,
+    };
+  }
+  if (ageDays >= h.ageing) {
+    return {
+      freshness: 'ageing',
+      ageDays,
+      why: `${String(ageDays)} days old, past the ${String(h.ageing)}-day mark for ${type}; check whether anything superseded it`,
+    };
+  }
+  return { freshness: 'fresh', ageDays, why: `${String(ageDays)} days old, within the horizon for ${type}` };
+}
+
 export interface RegistryEntry {
   readonly n: number;
   readonly url: string;

@@ -282,6 +282,30 @@ async function anyExists(paths: readonly string[]): Promise<boolean> {
   return false;
 }
 
+/**
+ * Does a sign-in file exist for this tool?
+ *
+ * Existence only, and the file is never opened. Dossier does not need to read a
+ * session token to know a session exists, and a file it never reads is a file
+ * it can never leak or corrupt.
+ *
+ * Sync because routing is sync, and routing is the caller: `probeCli` makes the
+ * same check asynchronously alongside identity confirmation, and this is the
+ * cheap half of it. A tool with no `authPaths` reports `false`, matching
+ * `probeCli`'s rule that a tool which cannot be proven authenticated gets the
+ * weaker answer rather than the flattering one.
+ */
+export function hasSignInFile(adapter: CliAdapter): boolean {
+  return adapter.authPaths.some((p) => {
+    try {
+      accessSync(p, constants.F_OK);
+      return true;
+    } catch {
+      return false;
+    }
+  });
+}
+
 /** Look up an adapter by id. Takes a plain string: the id arrives from env. */
 export function adapterFor(id: string): CliAdapter | null {
   return CLI_ADAPTERS.find((a) => a.id === id) ?? null;

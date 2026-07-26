@@ -50,7 +50,7 @@ This is the part most people will actually use.
 
 **A subscription you already have.** If you pay for Google AI Pro or ChatGPT, run the report in the web app yourself and `research_import` brings it in as a normal Dossier run: same outline-first reading, same citation checking, same store.
 
-Note: the CLI backend is never chosen for you. It costs $0, so a price tie-break would pick it every single time, and it spends a subscription quota Dossier can't see. Ask for it by name with `provider: "local"`, or list it in `DOSSIER_PROVIDERS`.
+Note: a CLI that is installed and signed in is now **preferred** for any deep run it can do, so the subscription you already pay for gets used before an API bill. It is not free in every sense: it spends that subscription's quota, and Dossier can't see or meter how much. Capability still decides first, so a date window, a domain filter, an X search or an editable plan routes to the API backend that can actually enforce it. List only API providers in `DOSSIER_PROVIDERS` if you'd rather keep the CLI out of it.
 
 > [!IMPORTANT]
 > **The API backends cost real money, every single time.** Roughly **$1-3** for a normal Gemini run and **$3-7** for a thorough one, charged whether or not you read the result. That's the whole reason this server exists in the shape it does. None of it is required: the local loop and the import path need no key and no bill.

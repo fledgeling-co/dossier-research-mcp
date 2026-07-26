@@ -5,6 +5,7 @@ import { createUtilityModel, type UtilityModel } from './ai/utility.js';
 import { backendLimitations, describeAuth, loadConfig, type Config } from './config.js';
 import { assertStoreName, resolveCorpusClient, type CorpusClient } from './corpus/files.js';
 import { LocalCorpus } from './corpus/local.js';
+import { probeAllBrowserTools, renderBrowserTools } from './local/browser.js';
 import { probeAllClis } from './local/cli.js';
 import {
   DEFAULT_BASE_AGENT,
@@ -39,14 +40,25 @@ import {
   renderOutline,
 } from './research/report.js';
 import { canonicaliseUrl, crossCheck, type ProviderClaimSet } from './research/corroborate.js';
-import { decompose, renderTasks } from './research/decompose.js';
+import { decompose, renderDispatch, renderTasks } from './research/decompose.js';
 import { describeOverlap, mergeEvidence, renderMergedRegistry, type RunEvidence } from './research/synthesise.js';
 import {
+  assessCapabilities,
+  coverageFailed,
   FindingSchema,
   freezeRegistry,
+  HostCapabilitiesSchema,
+  LoopModeSchema,
   mergeFindings,
+  renderBlackBox,
+  renderCapabilities,
+  renderCoverageFailures,
+  renderDeepNotes,
+  renderRefusals,
   renderRegistry,
+  renderStaleness,
   SessionSchema,
+  TaskOutcomeSchema,
   validateDraft,
   type Session,
 } from './research/local-loop.js';
@@ -1641,7 +1653,20 @@ function registerShapeTools(server: FastMCP, deps: ServerDeps): void {
 
 // ────────────────────────────────────────────────────────── evidence governance ────
 
-/** The four lenses. Each is a separate pass, and each is told to refute. */
+/**
+ * The four lenses. Each is a separate pass, and each is told to refute.
+ *
+ * **Deliberate divergence, kept on purpose.** The daymade `deep-research` skill
+ * (`github.com/daymade/claude-code-skills`), whose task-group and output-contract
+ * thinking Dossier borrowed elsewhere in the loop, requires counter-review to
+ * surface at least three issues and to run again if it finds none. Dossier
+ * rejects that and `docs/plan/multi-provider-research.md` explains why: an issue
+ * quota pays a reviewer to invent objections until the number is reached, which
+ * is the same defect as a citation quota, one layer up. What Dossier requires
+ * instead is *coverage*: every lens must state what it examined, and four lenses
+ * that all examined something and all found nothing is reported as a **failed**
+ * review rather than a clean bill of health. Do not "fix" this into a minimum.
+ */
 const LENSES = [
   {
     name: 'claim validator',
@@ -2485,27 +2510,58 @@ function registerLoopTools(server: FastMCP, deps: ServerDeps): void {
       archetype: ArchetypeSchema.optional(),
       maxTasks: z.number().int().min(1).max(7).default(5).describe('How many parallel search tasks to plan.'),
       deep: z.boolean().default(false).describe('Force every task to open pages rather than read result listings.'),
+      mode: LoopModeSchema.default('standard').describe(
+        'How much evidence to hold this run to. `light` lowers the advisory floors to 6 sources across 3 domains for a single-entity question; `standard` expects 12 across 5. Pick `light` for a narrow factual question rather than failing the gates for being proportionate.',
+      ),
+      asOf: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/)
+        .optional()
+        .describe('The date every claim should be current as of, YYYY-MM-DD. Defaults to today. Sources older than their horizon are flagged at draft time.'),
+      have: HostCapabilitiesSchema.optional().describe(
+        'What YOU can actually do. Say so when anything is missing: a loop that degrades silently produces a thin report for reasons nobody can see.',
+      ),
       label: z.string().max(200).optional(),
     }),
     execute: async (args) => {
+      // The gate runs before anything is opened or written. A halted run should
+      // not leave a session behind for someone to find later and wonder about.
+      const caps = assessCapabilities(args.have ?? HostCapabilitiesSchema.parse({}));
+      if (caps.halt) return renderCapabilities(caps);
+
       const archetype = args.archetype ?? selectArchetype(args.question);
-      const tasks = decompose(args.question, { archetype, maxTasks: args.maxTasks, deep: args.deep });
+      const tasks = decompose(args.question, {
+        archetype,
+        maxTasks: args.maxTasks,
+        // A forced scan beats the caller's `deep`. A worker told to read pages in
+        // full on a host with no fetch tool does it by reading snippets and
+        // calling them full reads, which is the one degradation nobody can see.
+        deep: args.deep,
+        scanOnly: caps.forceScan,
+        reconcile: args.mode === 'standard',
+      });
       const record = await runner.openLoop({
         question: args.question,
         archetype,
         ...(args.label ? { label: args.label } : {}),
       });
+      const asOf = args.asOf ?? new Date().toISOString().slice(0, 10);
       const session: Session = {
         runId: record.id,
         question: args.question,
         createdAt: new Date().toISOString(),
+        asOf,
+        mode: args.mode,
         tasks: tasks.map((t) => ({
           id: t.id,
           sourceClass: t.sourceClass,
-          depth: t.depth,
+          depth: caps.forceScan ? 'scan' : t.depth,
           objective: t.objective,
+          group: t.group,
+          dependsOn: [...t.dependsOn],
           reported: false,
           findings: 0,
+          outcome: 'ok' as const,
         })),
         registry: [],
         rejectedAfterFreeze: [],
@@ -2513,28 +2569,37 @@ function registerLoopTools(server: FastMCP, deps: ServerDeps): void {
       await store.saveSession(record.id, session);
 
       return [
-        `**Local research session open.** Handle: \`${record.id}\` · archetype: ${archetype}`,
+        `**Local research session open.** Handle: \`${record.id}\` · archetype: ${archetype} · mode: ${args.mode} · as of ${asOf}`,
         '',
         `Nothing has been charged and nothing will be: you do the searching, with whatever web search you already have.`,
         '',
-        '## Run these tasks',
+        renderCapabilities(caps),
         '',
-        'Run them in parallel where you can. Each one is a different neighbourhood of the web, not the same search five times.',
+        '## How to run this',
+        '',
+        'You are the lead. **Do not read raw search results yourself.** Dispatch one worker per task, let each worker do its own searching, and take back only its distilled note. Raw result pages are the bulk of what a search returns and almost none of it is evidence; a lead that reads them spends its context on listings and has none left for the report. If you cannot dispatch workers, adopt each role in turn and discard the raw results as you go.',
+        '',
+        renderDispatch(tasks),
+        '',
+        '## The tasks',
         '',
         renderTasks(tasks),
         '',
-        '## Then report back',
-        '',
-        'For each task, as you finish it:',
+        '## What each worker sends back',
         '',
         '```',
-        `research_local_note { runId: "${record.id}", taskId: "t1", findings: [{ claim, url, quote, published }] }`,
+        `research_local_note { runId: "${record.id}", taskId: "t1", findings: [{ claim, url, quote, published }], gaps: "..." }`,
         '```',
         '',
-        'Send the URL you actually read, and the sentence that supports the claim. Findings are deduplicated by URL into one numbered registry, so the same page found by three tasks stays one source rather than becoming three.',
+        '- **At most ten findings**, one sentence each. The cap is the point: a worker that returns everything it saw has moved the sifting to the lead, which is the job it was dispatched to do.',
+        '- **The URL you actually read**, and the sentence that supports the claim. Findings are deduplicated by URL into one numbered registry, so the same page found by three tasks stays one source rather than becoming three.',
+        '- **`published`** wherever the source states it. A source with no date cannot be assessed for recency, and undated is not the same as current.',
+        '- **`gaps`**: what you searched for and did **not** find. This is not filler. A task that establishes there is nothing there has produced a real result, and without the gaps line it is indistinguishable from a task that gave up.',
         '',
         `When every task has reported, call \`research_local_draft { runId: "${record.id}" }\`. That freezes the registry: after it, no new source can be added, including by you.`,
-      ].join('\n');
+      ]
+        .filter((l, i, all) => !(l === '' && all[i - 1] === ''))
+        .join('\n');
     },
   });
 
@@ -2548,11 +2613,49 @@ function registerLoopTools(server: FastMCP, deps: ServerDeps): void {
       destructiveHint: false,
       openWorldHint: false,
     },
-    parameters: z.object({
-      runId: z.string().max(64),
-      taskId: z.string().max(16),
-      findings: z.array(FindingSchema).min(1).max(40),
-    }),
+    parameters: z
+      .object({
+        runId: z.string().max(64),
+        taskId: z.string().max(16),
+        findings: z
+          .array(FindingSchema)
+          .max(10)
+          .describe(
+            'At most ten, one sentence each. The cap is the contract: a worker that returns everything it saw has handed the sifting back to the lead, which is the job it was dispatched to do. May be empty when `gaps` says what was searched and not found.',
+          ),
+        gaps: z
+          .string()
+          .max(4000)
+          .optional()
+          .describe(
+            'What you searched for and did NOT find. Required when you report no findings, because a task that establishes there is nothing there has produced a real result and must not read as one that gave up.',
+          ),
+        deepReadNotes: z
+          .string()
+          .max(20_000)
+          .optional()
+          .describe(
+            'For a deep task: what the pages you opened actually argued, including the caveats. The lead drafts from this and never sees your search results.',
+          ),
+        outcome: TaskOutcomeSchema.default('ok').describe(
+          'What actually happened when you searched. `no-results` means the search RAN and the index had nothing, which is a real finding. Use `rate-limited`, `blocked` (login, paywall or bot check) or `tool-failed` when the search did not complete: an empty result then proves nothing, and reporting it as `no-results` makes the report claim there is no public record of something nobody managed to look for.',
+        ),
+      })
+      // An empty report is legitimate and a silent one is not. Without this the
+      // only way to say "I searched and there is nothing" would be to send no
+      // note at all, which is indistinguishable from a worker that crashed.
+      .refine((v) => v.findings.length > 0 || (v.gaps !== undefined && v.gaps.trim().length > 0), {
+        message: 'Reporting no findings requires `gaps`: say what you searched for and did not find.',
+        path: ['gaps'],
+      })
+      // `no-results` is a claim about the index, and handing over findings
+      // contradicts it. Caught here rather than silently preferring one, because
+      // whichever was meant, the other is wrong and only the worker knows which.
+      .refine((v) => !(v.outcome === 'no-results' && v.findings.length > 0), {
+        message:
+          '`no-results` says the search found nothing, so it cannot come with findings. Use `ok` if the search completed, or a failure outcome if it did not.',
+        path: ['outcome'],
+      }),
     execute: async (args) => {
       // Read, merge and write under one lock. Parallel workers are the whole
       // point of the fan-out, and two of them reporting at once both read the
@@ -2560,12 +2663,25 @@ function registerLoopTools(server: FastMCP, deps: ServerDeps): void {
       // that loses findings silently is worse than one that runs serially.
       const result = await store.admissionLock().run(async () => {
         const session = await requireSession(args.runId);
-        if (!session.tasks.some((t) => t.id === args.taskId)) {
+        const task = session.tasks.find((t) => t.id === args.taskId);
+        if (!task) {
           throw new UserError(
             `No task \`${args.taskId}\` in this session. Its tasks are: ${session.tasks.map((t) => t.id).join(', ')}.`,
           );
         }
-        const merged = mergeFindings(session, args.taskId, args.findings);
+        const waitingOn = task.dependsOn.filter(
+          (d) => !(session.tasks.find((t) => t.id === d)?.reported ?? false),
+        );
+        if (waitingOn.length > 0) {
+          throw new UserError(
+            `\`${args.taskId}\` depends on ${waitingOn.join(', ')}, which have not reported. It reconciles what the first wave found, so running it early searches the topic again instead of the disagreements.`,
+          );
+        }
+        const merged = mergeFindings(session, args.taskId, args.findings, {
+          ...(args.gaps ? { gaps: args.gaps } : {}),
+          ...(args.deepReadNotes ? { notes: args.deepReadNotes } : {}),
+          outcome: args.outcome,
+        });
         await store.saveSession(args.runId, merged.session);
         return merged;
       });
@@ -2580,14 +2696,34 @@ function registerLoopTools(server: FastMCP, deps: ServerDeps): void {
           'This is the rule working, not a bug. A source that appears once drafting has begun cannot be distinguished from one invented to support a sentence already written. Start a new session if these matter.',
         ].join('\n');
       }
+      // A group B task reconciles what group A found, so it needs the registry
+      // to work against. Handing it over the moment the last of group A reports
+      // is what lets the lead dispatch it without reading a search result.
+      const ready = result.session.tasks.filter(
+        (t) => !t.reported && t.dependsOn.every((d) => result.session.tasks.find((x) => x.id === d)?.reported),
+      );
+      const unblocked = ready.filter((t) => t.dependsOn.length > 0);
+
       return [
-        `Recorded ${String(args.findings.length)} finding(s) from \`${args.taskId}\`: **${String(result.added)} new source(s)**, ${String(result.merged)} already in the registry.`,
+        coverageFailed(args.outcome)
+          ? `\`${args.taskId}\` reported **${args.outcome}**, so its source class is **unchecked rather than empty**. It will be named that way at draft time and must not be written up as an established negative. Rerun it if the answer turns on what it would have covered.`
+          : args.findings.length === 0
+            ? `\`${args.taskId}\` reported **nothing found**, with the search recorded. That is a result about the public record, not a gap in the run, and it will be reported as one.`
+            : `Recorded ${String(args.findings.length)} finding(s) from \`${args.taskId}\`: **${String(result.added)} new source(s)**, ${String(result.merged)} already in the registry.`,
         '',
         `Registry now holds **${String(result.session.registry.length)} source(s)** across ${String(new Set(result.session.registry.map((e) => e.domain)).size)} domain(s).`,
         '',
-        outstanding.length === 0
-          ? `Every task has reported. Freeze and draft with \`research_local_draft { runId: "${args.runId}" }\`.`
-          : `Still outstanding: ${outstanding.map((t) => `\`${t.id}\` (${t.sourceClass})`).join(', ')}.`,
+        unblocked.length > 0
+          ? [
+              `**Group A is in. Dispatch ${unblocked.map((t) => `\`${t.id}\``).join(', ')} now**, against what it found:`,
+              '',
+              renderRegistry(result.session),
+              '',
+              'Its job is the disagreements, not the topic. Search the contested claims themselves; a contradiction that stays open is a finding worth reporting.',
+            ].join('\n')
+          : outstanding.length === 0
+            ? `Every task has reported. Freeze and draft with \`research_local_draft { runId: "${args.runId}" }\`.`
+            : `Still outstanding: ${outstanding.map((t) => `\`${t.id}\` (${t.sourceClass})`).join(', ')}.`,
       ].join('\n');
     },
   });
@@ -2608,6 +2744,11 @@ function registerLoopTools(server: FastMCP, deps: ServerDeps): void {
         return result;
       });
 
+      // Nothing public exists and the searching was real. Drafting rules would be
+      // the wrong output: there is nothing to draft from, and the useful answer is
+      // the refusal with its failed checks shown.
+      if (frozen.blackBox) return renderBlackBox(frozen);
+
       return [
         `## Registry frozen for \`${args.runId}\``,
         '',
@@ -2617,7 +2758,19 @@ function registerLoopTools(server: FastMCP, deps: ServerDeps): void {
           ? `> [!WARNING]\n> These tasks never reported: ${frozen.silentTasks.join(', ')}. Their source classes are simply missing from this report, which is a coverage gap rather than an absence of evidence. Say so in the Knowledge Gaps section.`
           : '_Every task reported._',
         '',
+        frozen.nothingFoundTasks.length > 0
+          ? `_Searched and found nothing: ${frozen.nothingFoundTasks.join(', ')}. Different from the line above: these ran. Report each as an established negative rather than as missing coverage._`
+          : '',
+        '',
+        renderCoverageFailures(frozen),
+        '',
+        renderRefusals(frozen.session),
+        '',
+        renderStaleness(frozen),
+        '',
         renderProfile(frozen.profile),
+        '',
+        renderDeepNotes(frozen.session),
         '',
         '## The registry — cite ONLY from this',
         '',
@@ -2629,10 +2782,13 @@ function registerLoopTools(server: FastMCP, deps: ServerDeps): void {
         '2. **Draft from your notes, not from memory of the pages.** If a claim is not in a finding you reported, it is not established.',
         '3. **Mark what you inferred.** Wrap any conclusion you assembled rather than read in `<INFERENCE from="...">…</INFERENCE>`, naming the sources it rests on. Three correct facts multiplied into a wrong number is the failure this catches, and every input to it is sourced.',
         '4. **Not citing a source is fine.** Sources that turned out not to bear on the question should be dropped. A draft citing all of them is padding, not thoroughness.',
-        '5. Structure: Executive Summary (confidence-qualified bullets) · Detailed Findings · Evidence Table · Knowledge Gaps · Recommended Next Steps.',
+        `5. **Downgrade anything resting on a source flagged above as stale or undated**, and say in the sentence that you did. A claim is only current as of ${frozen.session.asOf || 'the date you ran this'}, and a report that reads as present tense on a four-year-old page is wrong in the way nobody checks.`,
+        '6. Structure: Executive Summary (confidence-qualified bullets) · Detailed Findings · Evidence Table · Knowledge Gaps · Recommended Next Steps.',
         '',
         `Then submit it: \`research_local_submit { runId: "${args.runId}", markdown: "..." }\`.`,
-      ].join('\n');
+      ]
+        .filter((l, i, all) => !(l === '' && all[i - 1] === ''))
+        .join('\n');
     },
   });
 
@@ -2984,7 +3140,7 @@ function registerResources(server: FastMCP, deps: ServerDeps): void {
         .boolean()
         .default(true)
         .describe(
-          'Also probe the coding CLIs on this machine. Local, offline and free: it runs `--version` on each and checks for a sign-in file, never reading a credential.',
+          'Also probe the coding CLIs and browser tooling on this machine. Local, offline and free: it runs `--version` on each binary and checks for a sign-in file by existence, never reading a credential, never invoking `npx`, and never starting a browser.',
         ),
     }),
     async execute(args) {
@@ -3054,7 +3210,7 @@ function registerResources(server: FastMCP, deps: ServerDeps): void {
         lines.push(
           ready.length === 0
             ? '_No signed-in CLI found. Any of the above would give you a zero-API-cost research backend._'
-            : `_${String(ready.length)} CLI(s) ready. Use one with \`research_start { provider: "local" }\`, or set \`DOSSIER_LOCAL_CLI\` to choose which. It is never selected automatically: it costs $0, so a cost tie-break would pick it every time, over a subscription quota Dossier cannot meter._`,
+            : `_${String(ready.length)} CLI(s) ready, and a signed-in CLI is now **preferred** for any deep run it can do. That spends your subscription quota rather than an API balance, and Dossier cannot meter that quota. Capability still comes first: a date window, a domain filter, X or an editable plan routes to the API backend that can enforce it. Set \`DOSSIER_LOCAL_CLI\` to choose which CLI, or list only API providers in \`DOSSIER_PROVIDERS\` to keep the CLI out of automatic selection._`,
         );
         if (ambiguous.length > 0) {
           lines.push(
@@ -3062,6 +3218,12 @@ function registerResources(server: FastMCP, deps: ServerDeps): void {
             `_${String(ambiguous.length)} binary(ies) could not be identified. Several vendors ship executables called \`agent\` and \`grok\`; an unidentified one is never run, because handing your brief to a different vendor's tool is a different bill._`,
           );
         }
+
+        // Inventory only. This section exists because Mode A, importing a
+        // share link, needs no automation at all, and someone deciding whether
+        // Mode B is even worth considering should not have to guess what they
+        // already have. Nothing here is started, and the renderer says so.
+        lines.push('', renderBrowserTools(await probeAllBrowserTools()));
       }
       return lines.join('\n');
     },

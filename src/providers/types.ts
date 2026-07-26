@@ -57,6 +57,16 @@ export interface Capabilities {
   /** Can it write results to a file we can download. */
   readonly fileOutput: boolean;
   readonly maxWallClockMinutes: number;
+  /**
+   * Which budget a run draws on.
+   *
+   * Routing input, not trivia. A backend billed to a subscription the user
+   * already pays for is preferred over one billed to a metered API balance,
+   * once capability has decided who is eligible. It is stated as a capability
+   * rather than checked by provider id so the router never has to know which
+   * backend happens to be the CLI one.
+   */
+  readonly billedTo: 'api-balance' | 'subscription';
   /** Anything a caller would be annoyed to discover later. */
   readonly limitations: readonly string[];
 }
@@ -69,6 +79,16 @@ export interface CredentialStatus {
   readonly detail: string;
   /** The one command or variable that would move this to `ready`. */
   readonly fix?: string;
+  /**
+   * A local sign-in exists, established by file existence alone.
+   *
+   * Only a `subscription` backend sets this, and only from checking that a
+   * session file is *there*, never from opening one. Routing needs it because
+   * preferring a CLI that has never been signed into would trade a working
+   * paid run for a failing free one. Absent means "not established", which is
+   * treated exactly like `false`.
+   */
+  readonly signedIn?: boolean;
 }
 
 export interface ProviderEstimate {

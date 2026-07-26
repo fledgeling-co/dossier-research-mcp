@@ -8,6 +8,60 @@ This project follows [semantic versioning](https://semver.org/). Until 1.0 the m
 
 ## [Unreleased]
 
+### Added
+
+- **The free local loop now runs as a lead with workers, and the lead does not read search results.** `research_local_start` returns a dispatch plan rather than a flat task list: one worker per task, each doing its own searching and handing back at most ten one-sentence findings. The cap is in the schema, not in the prose, because a worker that returns everything it saw has moved the sifting to the lead, which is the job it was dispatched to do. The lead drafts from the registry plus the deep-read notes the workers send back, and never goes near a result page.
+
+  This is the change that makes a long run finish. Raw listings are the bulk of what a search returns and almost none of it is evidence; a lead that reads them spends its context on snippets and has none left for the report, which is how a run with good sources still produces a shallow synthesis.
+
+  **Tasks now come back in dependency groups.** Group A is independent and source-diverse and goes out in parallel, at most three at a time. Group B is a single reconciliation task that reads what group A found and searches the disagreements rather than the subject. `research_local_note` refuses a group B report while its dependencies are outstanding, and hands the registry over the moment the last group A task lands. Reconciliation is skipped below three group A tasks and in `light` mode, because there is nothing to reconcile across two sources.
+
+  **`research_local_note` now takes `gaps` and `deepReadNotes`, and an empty `findings` array is legitimate when `gaps` says what was searched and not found.** A task that establishes there is nothing there has produced a real result about the public record, and it used to be indistinguishable from a task that crashed. Draft time now keeps three outcomes apart that used to look alike: a task that never reported (a coverage gap), a task that ran and found nothing (an established negative), and a source refused after the freeze.
+
+  **`have` declares what your client can actually do**, and the loop degrades out loud. No web search halts the run before a session is opened, because a loop that continued would write a fluent report from the model's own memory with citations attached. No page fetch forces every task to scan depth, including the reconciliation task, which asks for a deep read by default and would otherwise keep telling a worker to open pages on a host with no way to open one. No subagents means sequential; no filesystem means report as you go. Each degradation prints what it costs. Capabilities are declared rather than probed because a stdio server cannot see its client's tools, and a guess would be wrong in the direction that matters.
+
+  **`asOf` and `mode`.** Every session carries an as-of date, and at freeze time anything stale, undated or dated after the horizon is listed with a rule to downgrade what rests on it. Recency is judged by source type: a standard from 2019 is current, a benchmark from 2019 is not. `mode: 'light'` lowers the evidence floors to 6 sources across 3 domains for a narrow single-entity question, because holding a small question to the large floors fails it for being proportionate and teaches people to ignore the gates.
+
+  **When every task ran and the registry is still empty, `research_local_draft` returns the failed checks, `Confidence: N/A` and a recommendation to contact the subject directly**, instead of drafting rules. Handing back drafting rules there is an invitation to write a report about a subject on which nothing was found.
+
+  The structure is adapted from [daymade's deep-research skill](https://github.com/daymade/claude-code-skills). Dossier keeps its own counter-review rule rather than the skill's: coverage is required and an issue quota is not, because demanding a minimum number of objections rewards inventing them. Enterprise mode is deliberately not implemented.
+
+- **`research_local_note` now records what actually happened when a task searched, and a failed search no longer counts as an established negative.** The new `outcome` says whether the search completed: `ok`, `no-results` for a clean search of a healthy index that turned up nothing, and `rate-limited`, `blocked` or `tool-failed` for a search that never finished.
+
+  The boolean this replaces was wrong, and had shipped. Any empty report was recorded as having found nothing, so a worker whose search tool was throttled looked identical to one that queried the index properly and established the absence. When every task came back empty, the run rendered the black box: "unable to verify anything about this subject from public sources", `Confidence: N/A`, contact them directly. That is an assertion about the world, and it was being made on the strength of four searches that never ran. It is the exact failure the black box was built to prevent, arriving through the back door.
+
+  Draft time now keeps four outcomes apart rather than three, and the black box requires that every task completed cleanly. A run with a failed search gets a warning naming the task, its source class, and why its absence proves nothing, with an instruction not to write it up as a negative and to rerun it if the answer turns on it. `no-results` alongside a non-empty finding list is refused at the boundary, because whichever was meant the other is wrong and only the worker knows which. A findings-then-throttled task keeps its findings and is still counted as incomplete coverage.
+
+  Adapted from `last30days-skill`'s per-source status vocabulary and its rule that a failure state is never evidence a source had nothing. Ten states collapse to five because Dossier's reporter is a model driving a search tool rather than an HTTP client, and a state nobody can report accurately is a state that gets guessed. `docs/plan/external-skill-gap-analysis.md` records what else was read across two external research skills, what turned out to be already present under another name, and what was declined.
+
+- **`research_doctor` now reports the browser tooling on your machine**, and the setup wizard stops offering you an install for a driver you already have. Playwright, browser-use, `chrome-devtools-mcp` and `@playwright/mcp`, in the same section as the coding CLIs and under the same rule: an unidentified binary is reported `ambiguous` and nothing is run.
+
+  **Detection is not permission**, and every reported entry says so. Mode B automation stays behind `DOSSIER_BROWSER_PROVIDER`, Dossier still has no browser of its own, and it still will never type a password. Finding a driver changes nothing about what runs.
+
+  The four tools get two different probes because they are two different kinds of thing, and two of the rules make the weaker-looking probe the correct one.
+
+  **`npx` is never invoked.** `npx chrome-devtools-mcp@latest --version` on a machine without the package downloads it from the registry and executes it, so a detector that asked would answer its own question by making it true. Presence is established by looking for the package directory and never opening it. A test puts a marker-writing fake `npx` and `npm` on `PATH` during a full probe and fails if either is ever called.
+
+  **Your client's MCP config is never read.** Whether a server is registered with Claude Code, Cursor or VS Code lives in that client's own config file, next to every other server's `env` block, and those blocks routinely hold API keys. Registration is therefore reported `unknown`, permanently, and you are pointed at your client to check.
+
+  Nothing reports whether you are signed in. A coding CLI has a session file whose existence can be checked without opening it; a browser driver has no equivalent, because the session belongs to Chrome and finding it would mean walking a browser profile and its cookie store.
+
+### Changed
+
+- **A coding CLI you have already paid for is now preferred over a metered API balance.** If a supported CLI is installed, signed in, and capable of the job, it runs it. A paid backend runs only when the CLI cannot do the work or is not there.
+
+  This reverses the previous rule, at the project owner's direction. Until now the CLI backend was excluded from automatic selection entirely: it costs $0, so any cost tie-break picks it every time, and it draws on a subscription quota Dossier can neither see nor meter while running a third-party binary on your machine. **Every one of those facts still holds.** What changed is the judgement about which default serves the person paying. Billing an API when a capable CLI is sitting there signed in spends real money to avoid spending an allowance already bought.
+
+  Three things keep it honest.
+
+  **Capability still decides first, and this did not touch it.** A CLI cannot enforce a date window, reach X, filter domains or offer an editable plan, so those jobs still route to the backend that can. Preference only ever chooses between backends that can all do the work.
+
+  **Sign-in is required, and it is established by the existence of a session file, never by opening one.** A CLI on `PATH` that nobody has signed into is now rejected outright with `installed but not signed in, so it cannot run`, rather than quietly winning on price and then failing at spawn.
+
+  **The routing reason says what is being spent.** It states that a subscription quota is going rather than an API balance, and that Dossier cannot meter that quota. The word "free" is never used, and a test enforces its absence.
+
+  `DOSSIER_PROVIDERS` still overrides in both directions: name the CLI to force it, or leave it out of a non-empty list to remove it from the registry entirely. `DOSSIER_LOCAL_CLI` still picks which CLI when several are on `PATH`. Identity is still confirmed at spawn by resolving the binary and checking its version string, not at routing time.
+
 ### Fixed
 
 - **`research_plan` reported the routed backend even when you asked for a specific one.** `research_start` honoured `provider` correctly and the contract fingerprint included it, but the plan's own **Backend** line came from a second routing call that ignored the argument. So asking for Gemini and being shown xAI made the override look broken, in the one tool whose entire job is to tell you what the run will do before it spends. Reported by a user against 0.6.0.

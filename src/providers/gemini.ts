@@ -43,6 +43,7 @@ export function geminiProvider(
     structuredOutput: false,
     fileOutput: false,
     maxWallClockMinutes: 60,
+    billedTo: 'api-balance',
     limitations: [
       'No date filter: a time window is a request in the prompt, not an enforced constraint.',
       'No domain filter: SEO aggregators cannot be excluded.',

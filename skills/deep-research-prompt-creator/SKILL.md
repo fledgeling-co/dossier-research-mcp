@@ -289,6 +289,14 @@ The handoff, in order:
 
 Pass `scope` fields (`jurisdiction`, `timeHorizon`, `decisionContext`) as structured arguments rather than burying them in prose — the server threads them into the scaffold and into its operator notes.
 
+### When there is no API key, or the question does not justify the spend
+
+The same server carries a **free loop that you run with your own web search**: `research_local_start` → `research_local_note` → `research_local_draft` → `research_local_submit`. Nothing is charged, because you do the searching. Reach for it when `research_plan` reports no credentials, when the user does not want to spend, or when the question is narrow enough that a $1 to $7 background run is disproportionate.
+
+It is not the consolation tier. It runs you as a **lead with workers**: `research_local_start` returns a dispatch plan, one worker per source class, and the lead never reads a raw search result. Each worker hands back at most ten one-sentence findings plus what it searched for and did not find. The server holds one deduplicated registry, freezes it before you draft, and refuses a draft that cites anything outside it.
+
+Pass `have` honestly if the client is missing web search, page fetch, subagents or a filesystem. The loop halts rather than writing a report from memory, and it degrades out loud rather than quietly.
+
 If no MCP server is connected, fall back to the normal behaviour: print the prompt in a fenced block for the user to paste, then the Operator Notes.
 
 ## What this skill does not do

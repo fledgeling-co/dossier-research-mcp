@@ -89,6 +89,31 @@ Apple's Safari MCP is real and official: a `--mcp` flag on `safaridriver`, 17 to
 
 ---
 
+## What Dossier can see, and what that does not mean
+
+`research_doctor` reports which of these tools are on your machine, and the setup wizard stops offering you an install for one you already have. Both come from the same probe, in `src/local/browser.ts`.
+
+**Detection is not permission.** Finding a driver changes nothing about what runs. Mode B stays behind `DOSSIER_BROWSER_PROVIDER`, every reported entry says so, and no probe starts a browser, attaches to one, or moves a run any closer to being automated.
+
+The four tools get two different probes, because they are two different kinds of thing.
+
+| Tool | Probe | Why that one |
+|---|---|---|
+| **playwright** | binary on `PATH` | A real executable. Resolve the absolute path, `realpath` it, ask `--version`, and confirm identity by the version string or by npm-namespace provenance in the resolved directory. Unidentified means `ambiguous`, never a guess |
+| **browser-use** | binary on `PATH` | Same, with a longer timeout, because a Python console script pays import cost before it can answer. A timeout reports `ambiguous` and runs nothing further |
+| **chrome-devtools-mcp** | package on disk | Presence only |
+| **@playwright/mcp** | package on disk | Presence only |
+
+Two rules make the package probe look weaker than it could be, and both are deliberate.
+
+**`npx` is never invoked.** `npx chrome-devtools-mcp@latest --version` on a machine that does not have the package downloads it from the registry and executes it. A detector that fetches and runs third-party code to find out whether that code is present has answered its own question by making it true. So presence is established by looking for the package directory where npm would have put it, and that directory is never opened.
+
+**Your client's MCP config is never read.** Whether a server is actually wired into Claude Code, Cursor or VS Code lives in that client's own configuration file, next to every other server's `env` block, and those blocks routinely hold API keys. Reading them to answer a cosmetic question would mean reading your other tools' credentials. So registration is reported `unknown`, permanently, and you are pointed at your client to check.
+
+**Nothing reports whether you are signed in.** A coding CLI keeps a sign-in file of its own, so `src/local/cli.ts` can check that one exists without opening it. A browser driver has no equivalent: the session that matters belongs to Chrome, and finding it would mean walking a browser profile and its cookie store. The "Existing login" column in the table above is a documented property of each driver, not something measured on your machine.
+
+---
+
 ## The Gemini flow, as verified
 
 For anyone implementing or debugging Mode B. Controls read directly off the live DOM:

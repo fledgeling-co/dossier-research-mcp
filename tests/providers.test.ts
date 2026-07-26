@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { loadConfig } from '../src/config.js';
 import { AmbiguousSpendError } from '../src/net/retry.js';
-import { ProviderRegistry } from '../src/providers/registry.js';
+import { ProviderRegistry, routeAmong } from '../src/providers/registry.js';
+import type {
+  Capabilities,
+  CredentialStatus,
+  ProviderId,
+  ResearchProvider,
+} from '../src/providers/types.js';
 import { decodeFilters, encodeFilters, perplexityProvider } from '../src/providers/perplexity.js';
 import { extractCitedUrls } from '../src/research/report.js';
 import { decodeXaiOptions, encodeXaiOptions, xaiProvider } from '../src/providers/xai.js';
@@ -15,19 +21,20 @@ describe('provider detection', () => {
   it('reports every backend, configured or not, so a gap is visible', () => {
     const r = withKeys({ GEMINI_API_KEY: 'g' });
     expect(r.list().map((p) => p.id)).toEqual(['gemini', 'perplexity', 'openai', 'xai', 'local']);
-    expect(r.available().map((p) => p.id)).toEqual(['gemini']);
+    // `local` is filtered out of the availability assertion because it is
+    // detected from a binary on PATH, so including it would make this pass or
+    // fail depending on whether the developer has a coding CLI installed.
+    expect(r.available().map((p) => p.id).filter((id) => id !== 'local')).toEqual(['gemini']);
     // The "could be on" case names the variable that would enable it.
     expect(r.get('xai')?.detect().fix).toMatch(/XAI_API_KEY/);
   });
 
-  it('keeps the local CLI backend out of automatic selection', () => {
-    // It costs $0, so a cost tie-break would pick it every time — over a
-    // subscription quota Dossier cannot meter, by running a third-party binary.
-    // Visible everywhere, chosen nowhere, unless an operator asks for it.
+  it('keeps the local CLI backend listed and reachable by name', () => {
+    // Hermetic mode reports it not-configured, so `available()` cannot be
+    // asserted over here without depending on the developer's own PATH.
+    // CLI-08 covers preference with a scripted provider instead.
     const r = withKeys({ GEMINI_API_KEY: 'g' });
     expect(r.list().map((p) => p.id)).toContain('local');
-    expect(r.available().map((p) => p.id)).not.toContain('local');
-    // Still reachable by name, which is the whole point of the exclusion.
     expect(r.get('local')).not.toBeNull();
     const opted = withKeys({ GEMINI_API_KEY: 'g', DOSSIER_PROVIDERS: 'gemini,local' });
     expect(opted.list().map((p) => p.id)).toContain('local');
@@ -35,7 +42,7 @@ describe('provider detection', () => {
 
   it('never reports a key it cannot see as configured', () => {
     const r = withKeys({});
-    expect(r.available()).toHaveLength(0);
+    expect(r.available().filter((p) => p.id !== 'local')).toHaveLength(0);
     // Scoped to the key-based backends. `local` is detected from a binary on
     // PATH rather than a key, so asserting over it here would make this test
     // pass or fail depending on whether the developer has Claude Code
@@ -59,7 +66,16 @@ describe('provider detection', () => {
 });
 
 describe('routing is capability-first, not price-first', () => {
-  const all = { GEMINI_API_KEY: 'g', PERPLEXITY_API_KEY: 'p', OPENAI_API_KEY: 'o', XAI_API_KEY: 'x' };
+  // The allow-list pins the set to the four API backends. Without it a signed-in
+  // CLI on the developer's PATH joins the routing pool and these assertions
+  // become machine-dependent; the CLI preference has its own suite below.
+  const all = {
+    GEMINI_API_KEY: 'g',
+    PERPLEXITY_API_KEY: 'p',
+    OPENAI_API_KEY: 'o',
+    XAI_API_KEY: 'x',
+    DOSSIER_PROVIDERS: 'gemini,perplexity,openai,xai',
+  };
   const input = { tier: 'fast' as const, tools: ['google_search'] };
 
   it('eliminates backends that cannot do the job before comparing cost', () => {
@@ -138,7 +154,16 @@ describe('provider options survive the provider-neutral prompt field', () => {
 });
 
 describe('capability records are honest about the trade-offs', () => {
-  const all = { GEMINI_API_KEY: 'g', PERPLEXITY_API_KEY: 'p', OPENAI_API_KEY: 'o', XAI_API_KEY: 'x' };
+  // The allow-list pins the set to the four API backends. Without it a signed-in
+  // CLI on the developer's PATH joins the routing pool and these assertions
+  // become machine-dependent; the CLI preference has its own suite below.
+  const all = {
+    GEMINI_API_KEY: 'g',
+    PERPLEXITY_API_KEY: 'p',
+    OPENAI_API_KEY: 'o',
+    XAI_API_KEY: 'x',
+    DOSSIER_PROVIDERS: 'gemini,perplexity,openai,xai',
+  };
 
   it('names limitations on every backend, including the default one', () => {
     for (const p of withKeys(all).list()) {
@@ -546,7 +571,12 @@ describe('routing follows the documented tie-break order', () => {
   // deep run outright, which made three configured backends unreachable without
   // naming them: four consecutive real runs all went to the dearest provider.
   it('sends an ordinary deep run to the cheapest capable backend, not Gemini', () => {
-    const registry = withKeys({ GEMINI_API_KEY: 'g', PERPLEXITY_API_KEY: 'p', XAI_API_KEY: 'x' });
+    const registry = withKeys({
+      GEMINI_API_KEY: 'g',
+      PERPLEXITY_API_KEY: 'p',
+      XAI_API_KEY: 'x',
+      DOSSIER_PROVIDERS: 'gemini,perplexity,xai',
+    });
     const decision = registry.route({ shape: 'deep', estimateInput: { tier: 'fast', tools: [] } });
     expect(decision.provider?.id).not.toBe('gemini');
     expect(decision.reason).toMatch(/cheapest configured backend/);
@@ -573,5 +603,123 @@ describe('routing follows the documented tie-break order', () => {
     const decision = registry.route({ planReview: true, estimateInput: { tier: 'fast', tools: [] } });
     expect(decision.rejected.length).toBeGreaterThan(0);
     for (const r of decision.rejected) expect(r.why).toMatch(/no editable plan/);
+  });
+});
+
+describe('a subscription already paid for beats a metered API balance', () => {
+  // Scripted providers, not the real registry: the CLI backend is detected from
+  // a binary on PATH, so building one from the environment would make these
+  // assertions pass or fail depending on whether the developer has Claude Code
+  // installed. `routeAmong` takes the set as an argument for exactly this.
+  const caps = (over: Partial<Capabilities>): Capabilities => ({
+    shapes: ['deep'],
+    background: true,
+    planReview: false,
+    followUp: false,
+    dateFilter: 'none',
+    domainFilter: 0,
+    corpus: 'none',
+    socialSources: [],
+    structuredOutput: false,
+    fileOutput: false,
+    maxWallClockMinutes: 30,
+    billedTo: 'api-balance',
+    limitations: [],
+    ...over,
+  });
+
+  const provider = (
+    id: ProviderId,
+    highUsd: number,
+    capabilities: Capabilities,
+    status: CredentialStatus,
+  ): ResearchProvider => ({
+    id,
+    label: id.toUpperCase(),
+    capabilities,
+    detect: () => status,
+    estimate: () => ({
+      cost: { lowUsd: 0, highUsd, midUsd: highUsd / 2, basis: 'scripted' },
+      duration: {
+        lowMinutes: 1,
+        highMinutes: 2,
+        factors: [],
+        sources: [],
+        awaitsApproval: false,
+        cappedByApiLimit: false,
+      },
+    }),
+    client: () => {
+      throw new Error('not used');
+    },
+  });
+
+  const signedIn: CredentialStatus = { state: 'configured-unverified', detail: 'on PATH, signed in', signedIn: true };
+  const notSignedIn: CredentialStatus = { state: 'configured-unverified', detail: 'on PATH, no sign-in', signedIn: false };
+  const apiKey: CredentialStatus = { state: 'configured-unverified', detail: 'key present' };
+
+  const cli = (status: CredentialStatus): ResearchProvider =>
+    provider('local', 0, caps({ billedTo: 'subscription' }), status);
+  // Deliberately given every capability the CLI lacks, so any test where the
+  // API backend wins is won on capability rather than on it being the only one
+  // left standing.
+  const paid = provider(
+    'perplexity',
+    4,
+    caps({ shapes: ['deep', 'wide', 'recent'], dateFilter: 'range', domainFilter: 20, socialSources: ['x'] }),
+    apiKey,
+  );
+  const input = { tier: 'fast' as const, tools: [] };
+
+  it('prefers an installed, signed-in CLI over a paid backend for a job it can do', () => {
+    const d = routeAmong([paid, cli(signedIn)], { shape: 'deep', estimateInput: input });
+    expect(d.provider?.id).toBe('local');
+    // The fallback that would really run is named, not a second free entry.
+    expect(d.runnerUp?.id).toBe('perplexity');
+  });
+
+  it('does not prefer a CLI on PATH that nobody has signed into', () => {
+    // A free run that fails is worse than a paid run that works, and the
+    // sign-in check is the only thing standing between the two.
+    const d = routeAmong([paid, cli(notSignedIn)], { shape: 'deep', estimateInput: input });
+    expect(d.provider?.id).toBe('perplexity');
+  });
+
+  it('treats an unstated sign-in as not signed in, never as a pass', () => {
+    const unstated: CredentialStatus = { state: 'configured-unverified', detail: 'on PATH' };
+    const d = routeAmong([paid, cli(unstated)], { shape: 'deep', estimateInput: input });
+    expect(d.provider?.id).toBe('perplexity');
+  });
+
+  it('lets capability outrank the preference on a date window, X, and a plan', () => {
+    const withPlan = provider('gemini', 9, caps({ planReview: true }), apiKey);
+    for (const need of [
+      { dateWindow: true, estimateInput: input },
+      { social: ['x'], estimateInput: input },
+      { shape: 'recent' as const, estimateInput: input },
+      { domains: 10, estimateInput: input },
+    ]) {
+      const d = routeAmong([paid, cli(signedIn)], need);
+      expect(d.provider?.id, JSON.stringify(need)).toBe('perplexity');
+    }
+    const d = routeAmong([withPlan, cli(signedIn)], { planReview: true, estimateInput: input });
+    expect(d.provider?.id).toBe('gemini');
+  });
+
+  it('says a subscription quota is being spent, and never says free', () => {
+    const d = routeAmong([paid, cli(signedIn)], { shape: 'deep', estimateInput: input });
+    expect(d.reason).toMatch(/subscription quota/i);
+    expect(d.reason).toMatch(/rather than an API balance/i);
+    expect(d.reason).toMatch(/cannot meter/i);
+    expect(d.reason).not.toMatch(/\bfree\b/i);
+  });
+
+  it('is overridden in both directions by the operator allow-list', () => {
+    // Omitting the CLI from a non-empty DOSSIER_PROVIDERS keeps it out of the
+    // registry entirely, so routing never sees it.
+    const onlyApi = withKeys({ PERPLEXITY_API_KEY: 'p', DOSSIER_PROVIDERS: 'perplexity' });
+    expect(onlyApi.list().map((p) => p.id)).not.toContain('local');
+    const onlyCli = withKeys({ PERPLEXITY_API_KEY: 'p', DOSSIER_PROVIDERS: 'local' });
+    expect(onlyCli.list().map((p) => p.id)).toEqual(['local']);
   });
 });
