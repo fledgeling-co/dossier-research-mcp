@@ -72,8 +72,34 @@ export function mergeEvidence(runs: readonly RunEvidence[]): MergedEvidence {
   // overlap reads 0% however much the runs actually shared.
   const counts = new Map<string, number>();
   for (const r of runs) counts.set(r.provider, (counts.get(r.provider) ?? 0) + 1);
-  const labelOf = (r: RunEvidence): string =>
-    (counts.get(r.provider) ?? 0) > 1 ? `${r.provider}/${r.runId.replace(/^dr_/, '').slice(0, 6)}` : r.provider;
+
+  // A truncated run id is a label, and a label is only useful while it is
+  // unique. Six characters of a run id was readable and not unique: two runs
+  // whose ids share a six-character prefix produced one label, which is the
+  // exact collapse the comment above exists to prevent, arrived at from the
+  // other direction. Real run ids are 16 hex characters, so a collision is
+  // improbable per merge and not impossible, and the failure is silent and
+  // reports the opposite of the truth.
+  //
+  // So the short form is used only while it is unambiguous, and a provider
+  // whose runs collide falls back to the full id for all of that provider's
+  // runs. Uniform per provider rather than per run, so the labels in one merge
+  // are all the same shape.
+  const shortId = (runId: string): string => runId.replace(/^dr_/, '').slice(0, 6);
+  const collidingProviders = new Set<string>();
+  const seenShort = new Map<string, string>();
+  for (const r of runs) {
+    if ((counts.get(r.provider) ?? 0) <= 1) continue;
+    const key = `${r.provider}/${shortId(r.runId)}`;
+    const owner = seenShort.get(key);
+    if (owner !== undefined && owner !== r.runId) collidingProviders.add(r.provider);
+    else seenShort.set(key, r.runId);
+  }
+  const labelOf = (r: RunEvidence): string => {
+    if ((counts.get(r.provider) ?? 0) <= 1) return r.provider;
+    const suffix = collidingProviders.has(r.provider) ? r.runId.replace(/^dr_/, '') : shortId(r.runId);
+    return `${r.provider}/${suffix}`;
+  };
 
   const byUrl = new Map<string, { url: string; domain: string; citedBy: Set<string> }>();
   const perRun: { runId: string; provider: string; model?: string | undefined; sourceCount: number }[] = [];

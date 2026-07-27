@@ -118,4 +118,44 @@ describe('several runs from the same backend', () => {
   it('says overlap here is about the questions, not about independent agreement', () => {
     expect(describeOverlap(mergeEvidence([a, b]))).toMatch(/same backend, so overlap measures how much the questions differed/);
   });
+
+  // The same defect as the block above, reached from the other side and found
+  // by BENCH-11 building a second consumer of this function. The label was the
+  // first six characters of the run id, so two runs whose ids share a six-
+  // character prefix produced ONE label, and everything the block above proves
+  // silently stopped being true: both runs collapse, every source reads as
+  // unique to the surviving label, and the overlap reads 0%.
+  //
+  // Verified against the pre-fix implementation: `uniqueByProvider` returned a
+  // single entry `gemini/prefix` and `citedByAll` was empty.
+  describe('when two run ids share the short label prefix', () => {
+    const x = { runId: 'dr_prefix0001', provider: 'gemini', markdown: reportCiting(['https://a.org/1', 'https://b.org/1']) };
+    const y = { runId: 'dr_prefix0002', provider: 'gemini', markdown: reportCiting(['https://a.org/1', 'https://c.org/1']) };
+
+    it('falls back to the full run id rather than collapsing the two runs', () => {
+      const merged = mergeEvidence([x, y]);
+      const labels = merged.uniqueByProvider.map((u) => u.provider).sort();
+      expect(labels).toEqual(['gemini/prefix0001', 'gemini/prefix0002']);
+    });
+
+    it('still measures the overlap between them', () => {
+      const merged = mergeEvidence([x, y]);
+      expect(merged.citedByAll).toEqual([1]);
+      expect(merged.overlapRatio).toBeCloseTo(1 / 3);
+    });
+
+    it('keeps the short form for a provider whose runs do not collide', () => {
+      // One colliding provider must not lengthen another's labels: the fallback
+      // is per provider, so a merge is not made unreadable by one bad pair.
+      const p = { runId: 'dr_zzzzzz1111', provider: 'perplexity', markdown: reportCiting(['https://d.org/1']) };
+      const q = { runId: 'dr_yyyyyy2222', provider: 'perplexity', markdown: reportCiting(['https://e.org/1']) };
+      const labels = mergeEvidence([x, y, p, q]).uniqueByProvider.map((u) => u.provider).sort();
+      expect(labels).toEqual([
+        'gemini/prefix0001',
+        'gemini/prefix0002',
+        'perplexity/yyyyyy',
+        'perplexity/zzzzzz',
+      ]);
+    });
+  });
 });
