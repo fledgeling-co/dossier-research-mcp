@@ -8,6 +8,8 @@ This project follows [semantic versioning](https://semver.org/). Until 1.0 the m
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-07-27
+
 ### Fixed
 
 - **Em dashes are gone from every string a user can see.** 146 of them across 13 files, in tool output, error messages and prompts. The 67 in code comments are left alone, because rewriting internal prose mechanically risks mangling meaning for no reader's benefit.
@@ -211,7 +213,8 @@ Four defects that a full hermetic suite passed and one real API call each found.
 
 - First release. Gemini Deep Research wrapped so an agent can drive it safely: durable runs that survive a disconnect, a spend gate that reserves the worst case before the call, and outline-first reading so a 60,000-token report never lands inline.
 
-[Unreleased]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.4.0...v0.5.0
