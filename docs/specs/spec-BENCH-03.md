@@ -1,7 +1,7 @@
 # BENCH-03: Citation integrity scorers
 
 **ID:** BENCH-03
-**Status:** Ready for Work
+**Status:** In Review
 **Created:** 2026-07-27
 **Last updated:** 2026-07-27
 **Brief:** [BENCH-03](../features-to-triage/BENCH-03-citation-integrity.md) · **Design of record:** [benchmark.md](../plan/benchmark.md) · **Prior art:** [benchmark-prior-art.md](../deep-research/benchmark-prior-art.md)
@@ -131,4 +131,4 @@ That separation is what makes a metric added in three months applicable to runs 
 
 ## Plan
 
-[plan-BENCH-03.md](../plans/plan-BENCH-03.md) — Standard tier, 12 steps, 41 acceptance criteria.
+[plan-BENCH-03.md](../plans/plan-BENCH-03.md) — Standard tier, 12 steps, 43 acceptance criteria. Its cross-family plan review returned MATERIAL DEFECTS over fourteen findings, four of them real bugs; the dispositions are in the plan's own gate note.

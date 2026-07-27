@@ -226,6 +226,7 @@ Export from `bench/src/score/index.ts` and a new `bench/src/citations/index.ts`.
 | **INTEG-40** | With every network call failing, collection still returns a complete snapshot |
 | **INTEG-41** | A truncated page body is carried as truncated through collection into the containment verdict |
 | **INTEG-42** | Number and text matching goes through BENCH-09's shared primitives, so the two slices cannot disagree about a thousands separator |
+| **INTEG-43** | An evidence snapshot round-trips through a disk, is Zod-parsed on read, and a malformed one is refused rather than scored against |
 
 ## Verify
 
@@ -236,3 +237,26 @@ Live registry probes are a documented manual step and are **never** in the gate:
 ## Out of scope
 
 No model on the default path. No entailment. No cross-process lock. No reporting or aggregation, which is BENCH-08. No labelled detector corpus or confusion matrix, which is BENCH-10. No syndication detection, which is BENCH-07.
+
+## Plan review gate - 2026-07-27
+
+Codex `gpt-5.6-sol` at `max` effort, read-only, over the plan, the spec, the design of record and the code each names. **Verdict: MATERIAL DEFECTS**, fourteen findings. No downgrade: the lane was available. Twelve accepted, one accepted in part, one rejected on evidence. Four of them were real bugs rather than documentation gaps, and two of those were in the metric algebra.
+
+| Severity | Finding | Disposition |
+|---|---|---|
+| Critical | Necessity was to be computed over the citation matrix; the paper computes it over the factual-support matrix and over relevant statements. Publishing a different quantity under a published name is exactly what adopting a published metric is meant to prevent. | **Accepted.** The paper's own text was fetched and read rather than the summary this plan had been working from. Necessity is now over the support matrix. The relevance restriction cannot be honoured without a judge and is named as a departure on every result. |
+| High | An `unchecked` support cell was being treated as unsupported, so a cited page that would not load lowered citation accuracy exactly as a wrong citation would. Directly contrary to the slice's first rule. | **Accepted, and the most important fix in the review.** The accuracy denominator is now the citations whose support could be decided, a statement is unsupported only once something in its row was decided, and both counts are reported. |
+| High | Table rows become statements while `extractCitedUrls` reads bare URLs, so every row of the evidence table this product asks every report to write would cite its own source, no column of the citation matrix would ever be empty, and uncited sources would be zero for every backend forever. | **Accepted.** Evidence-table, bibliography and bare-link rows are excluded from the citation matrix and their URLs stay in the source universe. |
+| High | `uniquelyCitedSources` was claimed as a lower bound on the source side of every minimum cover, which is false: a single edge gives a cover of one statement and zero sources. | **Accepted.** The claim is removed; it is reported as the plainer companion figure it actually is. |
+| High | Normalising citations before segmenting rewrites a citation whose scheme the renderer will not link into inert prose, losing the address and its attachment. | **Accepted.** Segmentation runs over the raw report, and the trailing-citation pattern covers the tag form directly. |
+| High | The judged oracle was synchronous, so BENCH-10 could not supply a model without breaking the scorer's purity. | **Accepted.** The judged oracle is a lookup over verdicts recorded during collection, so the model call happens beside the fetching and the scorer stays pure and repeatable. A pair nobody judged is `unchecked`. |
+| High | The cache, limiter and single-flight map had no defined lifetime, so a limiter built per report enforces a gap per report and two concurrent cells both miss. | **Accepted.** `citationLookupCoordinator()` builds all three as one unit, injected into every call. Cross-process locking stays explicitly out of scope. |
+| High | The plan promised to write a snapshot and nothing wrote one, so a scorer running later could never find the evidence paired with a paid report. | **Accepted in part.** An atomic snapshot store with a deterministic path from the cell key. The suggestion to add an evidence reference to `CellOkSchema` is **rejected**: that record is BENCH-02's contract and reaching into another slice's schema to carry a field this one wants turns two merges into a conflict for no gain. |
+| High | `verifyCitations` hard-wires its fetcher and discards bodies, so calling it and then fetching the body is two dereferences of every cited page. | **Accepted.** The verdict rule was extracted from `src/research/citations.ts` and exported, and collection makes one request per page. The plan's earlier claim that nothing in `src/` changes was wrong and is corrected here. |
+| High | The truncation inference has a false-negative window, which turns a truncated miss into `unsupported`. | **Accepted in the direction that matters.** Four bytes of slack, so the decoder's held-back character errs toward `unchecked`. The rest of the finding, asking for truncation and response metadata inside `safeFetch`, is **rejected**: the sibling slice already derives this at its adapter, and a second mechanism in `src/` would put two definitions of truncation in one tree. |
+| Medium | Token precedence and the lexical sets were underspecified. | **Accepted** as a documentation gap; the implementation already consumes spans in precedence order, and the tests now pin a percentage, a year, a DOI and a CVE. |
+| Medium | `volume` had no defined fields. | **Accepted.** Defined in full, and its own counting rules are on the type. |
+| Medium | `CITE-01` and `CITE-02` already exist in `docs/test-plan.md` for the product's own citation verification, and the spec, plan and test plan disagreed on the criterion count. | **Accepted.** Renamespaced to `INTEG-nn`, and all three now carry 43. |
+| Low | Reading each scorer's own source proves only that it does not import a filesystem directly. | **Accepted.** The purity test walks the repo-local import graph, with two guards on the walker itself: that it leaves the entry file, and that it would actually notice an impure import. |
+
+Two defects the tests then found on top of the review, both real: a bare-citation-row threshold generous enough to file an ordinary sentence carrying one markdown link as a bibliography entry, because its residue after stripping the link was exactly twelve characters against a limit of twelve, and a test expectation that had miscounted the sentences in its own fixture.
