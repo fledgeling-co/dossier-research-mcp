@@ -8,6 +8,17 @@ This project follows [semantic versioning](https://semver.org/). Until 1.0 the m
 
 ## [Unreleased]
 
+### Changed
+
+- **`research_verify_claims` now says how much weaker its free mode is, with numbers.** The tool has always offered two paths, token containment for nothing or a model judging for a small fee, and it described them as a choice without saying what the choice costs. It costs a great deal. On a 30-case labelled corpus: containment passed **11 of 23 bad citations as supporting**, including every overstatement and four of seven outright contradictions; the judged pass let none through.
+
+  The cause is structural rather than a threshold to tune. A contradiction states the opposite of a page using that page's own numbers and names, so a token check has nothing to see. One case in the corpus asserts the exact reverse of a sentence on the page and every token it carries appears on that page.
+
+  Containment stays the default, because a check that costs money per run gets run once and then never again. What changes is that the price is now a measurement in the tool description and in `docs/tools.md`, rather than an assumption a reader has to make.
+
+  From the same corpus, and about `research_verify_citations` rather than this tool: **22 of 30 pages resolve HTTP 200 and do not support the claim attached to them**, and three of four cookie or login walls are served with HTTP 200. Reading a green link as a sound citation scores identically to answering "supports" to everything.
+
+
 ### Fixed
 
 - **Codex reported "failed to answer" while three other CLIs answered, and a CLI was being run in your project directory.** Two defects, both mine, found together because one hid the other.

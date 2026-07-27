@@ -314,6 +314,21 @@ research_verify_claims { runId, verdicts: [{ n, verdict }] } → the tally
 | `verdicts` | `object[]` | Caller mode step 2: `{ n, verdict, quote?, note? }` |
 | `sample` | `1-25` | Model mode: claims to check. One fetch plus one small model call each |
 
+### The gap between the two, measured
+
+Not a matter of taste. On a 30-case labelled corpus with five verdicts, built by BENCH-10 and shipped in `bench/detector/`:
+
+| | Coverage | Accuracy | Bad citations passed as supporting |
+|---|---|---|---|
+| Token containment | 86.7% | 26.7% | **11 of 23** |
+| Judged | 100% | 80.0% | **0 of 23** |
+
+Containment passed every overstatement and four of seven outright contradictions. **The cause is structural, not a threshold to tune**: a contradiction states the opposite of the page using the page's own numbers and names, so a token check has nothing to see. One corpus case asserts the exact reverse of a sentence on the page and every token it carries is on that page.
+
+Containment remains the default, because a check that costs money per run gets run once and then not at all. But the price of that choice is now a number rather than an assumption, and where being wrong matters, use the judged pass.
+
+**One more figure from the same corpus, which is about `research_verify_citations` rather than this tool.** 22 of 30 pages resolve HTTP 200 and do not support the claim attached to them, and three of four cookie or login walls are served with HTTP 200. Treating a green link as a sound citation scores identically to answering "supports" to everything.
+
 Whoever judges, three things stay server-side: the fetching (SSRF-checked, redirect-validated), the sample, and the tally. **A verdict on a claim that was never fetched is discarded**, because a verdict on a page nobody opened is the same defect as a report citing a source it never read.
 
 > [!IMPORTANT]
