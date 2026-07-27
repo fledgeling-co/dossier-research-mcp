@@ -21,7 +21,7 @@ The QA plan's unit of work is a *surface × state* cell. For an MCP server the a
 
 | Axis | Values | Sampling |
 |---|---|---|
-| **Surface** | 36 tools · 6 resources · 4 prompts | 100%, enumerated from `tools/list` so a new tool cannot be missed |
+| **Surface** | 37 tools · 6 resources · 4 prompts | 100%, enumerated from `tools/list` so a new tool cannot be missed |
 | **Run state** | `planning` · `running` · `completed` · `failed` · `cancelled` · `stalled` · absent | every state that changes a tool's answer |
 | **Data shape** | realistic · headingless · unicode/emoji/RTL · huge · empty · malformed · adversarial | seeded via `Store`, per the plan's data-seeding section |
 | **Credentials** | none (hermetic) · api-key · vertex | hermetic here; the paid paths are verified by hand and logged in the README |

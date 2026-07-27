@@ -12,7 +12,9 @@ Citation verification is **SSRF-safe**. Those URLs came out of a model that was 
 
 Private context goes through **File Search rather than a live endpoint**. Deep Research can call a remote `mcp_server` tool mid-run, so a poisoned page could in principle steer it into calling your tools. Grounding through Google's retrieval layer means there's no live endpoint for a compromised run to reach.
 
-Anything that **sends your data somewhere** says so. `corpus_add_file` is annotated non-read-only and its description states plainly that the file leaves your machine.
+Anything that **sends your data somewhere** says so. `corpus_add_file` is annotated non-read-only and its description states plainly that the file leaves your machine. `research_ground` is the other one, and it defaults to the destination that sends nothing: it writes a finished report into a directory you already granted, needs no key, and opens no connection. Its `destination: "upload"` path puts the report in a File Search store, which sends it to Google, and it has to be asked for by name.
+
+A tool that **writes** local files is held to the same boundary as the one that reads them, one notch tighter. `DOSSIER_LOCAL_CORPUS_DIRS` is operator-set and there is deliberately no tool that adds a directory; `research_ground` writes only into a fixed `dossier-grounding/` subdirectory of the first granted root, under a fixed file name derived from the run id, with `0600` files inside a `0700` directory. The caller names no path at any point, and the run id is shape-checked before it can become one.
 
 Secrets stay out of **logs and fingerprints**. MCP auth headers are excluded from the dedupe hash, so rotating a token doesn't fork the key, and error messages carry no credential material.
 

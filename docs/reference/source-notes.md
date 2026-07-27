@@ -721,7 +721,7 @@ An applied-AI team at a systematic macro hedge fund describing a research agent 
 **Where it says something this repo had not:**
 
 - The teach loop authors a benchmark **expected to fail** first, to prove the bad behaviour reproduces, then fixes until it passes, then confirms the rest of the suite still passes, then opens a pull request. The ordering is the point and is now an admission rule in BENCH-09.
-- Analysis outputs land in the same store as the inputs, so *"any output can serve as an input to a subsequent one"*. Dossier cannot do this without a manual export and upload; BENCH-12 is the gap.
+- Analysis outputs land in the same store as the inputs, so *"any output can serve as an input to a subsequent one"*. Dossier could not do this without a manual export and upload; BENCH-12 closed the gap with `research_ground`. One thing this repo adds that the talk does not address: Bridgewater's framing is that an output becomes *"indistinguishable from"* a human-uploaded series, and indistinguishable is exactly what a research report must not be. A report Dossier produced is the user's own document, so `research_ground` keeps it identifiable, declares it in the header of the run that uses it, and keeps it out of every independence count.
 - The chat agent and the coding agent are separate so that *"coding is a pure implementation detail"* and each gets unpolluted context. The local loop's lead-and-workers split is the same shape, arrived at from the daymade skill rather than from here.
 - *"Your user is better at writing context than you are, most likely."* Said about letting investors contribute to the context repository directly.
 

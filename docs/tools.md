@@ -1,6 +1,6 @@
 # Tool reference
 
-Thirty-four tools, six resources, four prompts. The [README](../README.md) has the short version of what each is for; this is the full contract.
+Thirty-seven tools, six resources, four prompts. The [README](../README.md) has the short version of what each is for; this is the full contract.
 
 Every tool description is also visible to an agent at runtime via `tools/list`, and those descriptions are the spec the [acceptance suite](test-plan.md) tests against.
 
@@ -26,6 +26,7 @@ The panel section prints member by member, free lane separately from paid, with 
 | `archetype` | `enum` | `technical`, `competitive`, `regulatory`, `academic`, `forecasting`. Omit and it picks one |
 | `scope` | `object` | `jurisdiction`, `timeHorizon`, `decisionContext`, `analysisLenses[]`, `exclude[]` |
 | `corpusStores` | `string[]` | File Search stores to ground the run in |
+| `groundedInRunIds` | `string[]` | Completed runs this one builds on, from [`research_ground`](#research_ground-free-by-default). Declared in the report's header, and never counted as corroboration |
 | `collaborativePlanning` | `boolean` | Get a plan back to review before it executes |
 
 > [!TIP]
@@ -253,6 +254,43 @@ research_export { runId, dir: "docs/research" }
 The markdown carries a front-matter block recording the run id, the question, the backend, the model, the tier, the source count, the tools used, the estimated cost and the completion time. That header is what makes the file attributable once it is sitting in a repo six months later, so keep it if you commit the file.
 
 Reports live in the server's store (`~/.dossier-research-mcp/reports/` by default) whether or not you export them. `research_read` prints the absolute path of the one you are reading.
+
+### `research_ground`, free by default
+
+Takes one to six completed runs and makes them available as grounding for the next question, with no export-and-upload round trip. This is how a finished report becomes an input instead of every question starting from nothing.
+
+| Parameter | Type | Notes |
+|---|---|---|
+| `runIds` | `string[]` | One to six completed runs |
+| `destination` | `local` \| `upload` | Defaults to `local`. `upload` sends the report to Google |
+| `storeName` | `string` | Upload only, and required for it. An existing `fileSearchStores/…`; none is ever created for you |
+
+**Local is the default and it is the one that cannot surprise anybody.** It writes the report into a fixed `dossier-grounding/` subdirectory of the first directory the operator granted with `DOSSIER_LOCAL_CORPUS_DIRS`, needs no key, opens no network connection, and `corpus_local_search` finds it afterwards like any other file there. The reply names the root it used.
+
+> [!IMPORTANT]
+> **You cannot choose the directory, the subdirectory or the file name.** Same rule as the local corpus, one step stronger: a file reader an agent can aim is an exfiltration primitive, and a file writer an agent can aim is worse. Files are written `0600` inside a `0700` directory.
+
+> [!WARNING]
+> `destination: "upload"` **sends the report to Google.** It has to be asked for by name, the tool is annotated non-read-only, and it needs a store you already made with `corpus_create`.
+
+Then pass the same ids to `research_start` as `groundedInRunIds`, which is the half that makes the new report honest about what it was built on.
+
+```
+research_ground { runIds: ["dr_abc"] }
+research_start  { question: "Has that changed since?", groundedInRunIds: ["dr_abc"] }
+```
+
+#### A prior report is your own document, and the arithmetic enforces it
+
+A run grounded in earlier Dossier output can **launder a claim**: report A asserts something weakly supported, run B reads A and repeats it, and the assertion now appears in two reports. That looks like accumulation and is amplification.
+
+So a Dossier report is treated exactly as any other document of yours: valid primary evidence about what was previously concluded, never independent evidence that the conclusion was right. Three things follow, and all three are computed rather than asked for:
+
+- A grounded run **declares it in the header** of everything that presents its report. `research_read` leads with it, `research_export` writes it into the front matter and the body, and a grounding document made from an already-grounded run carries the chain, so you can see how far back the echo goes.
+- A prior report cited as `dossier://run/<id>` (or found by its `dossier-run-<id>.md` name) classifies as your own document, so `countsAsCorroboration` is false for it and it never adds a domain to `research_compare`'s support grade or `research_synthesise`'s breadth. A claim in both the grounding report and the new one **counts once**.
+- The prompt carries the rule and **no text from the prior reports**. A locally-grounded report has just been promised never to leave the machine, and a report is around 60,000 tokens besides.
+
+One deliberate exception, said out loud rather than left to be found: `research_evidence`'s **source mix** still lists a prior report among the sources it profiles, because the mix describes what was read and it genuinely was read. It appears there classified as yours.
 
 ### `research_verify_claims`, free or paid, your choice
 
@@ -488,6 +526,8 @@ The operator grants directories with `DOSSIER_LOCAL_CORPUS_DIRS` (colon or comma
 Below the grant it is defence in depth: symlinks are resolved and re-checked against the root, dotfiles and credential and dependency directories are skipped, the walk is bounded in depth and file count, only text formats are read, and the query is a literal rather than a regular expression.
 
 Matches come back badged as yours, with the rule attached: your own documents are the best evidence available about your own position, and never independent corroboration of a fact about the world.
+
+[`research_ground`](#research_ground-free-by-default) writes finished Dossier reports into `dossier-grounding/` under the first granted directory, so they turn up here like any other file. They are your own documents in the sharpest sense, and the same rule governs them.
 
 > [!WARNING]
 > `corpus_add_file` **uploads the file to Google.** It's annotated non-read-only and its description says so plainly. Only add documents you're happy to hand to a third-party API.

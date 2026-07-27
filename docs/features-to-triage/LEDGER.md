@@ -29,5 +29,5 @@ serially, through the orchestrator.
 | BENCH-09 | The seed task corpus | [brief](BENCH-09-seed-corpus.md) | In Review | [spec](../specs/spec-BENCH-09.md) | [plan](../plans/plan-BENCH-09.md) |
 | BENCH-10 | Self-eval of Dossier's own checking | [brief](BENCH-10-self-eval.md) | Untriaged | | |
 | BENCH-11 | Which combination is best | [brief](BENCH-11-combinations.md) | Untriaged | | |
-| BENCH-12 | A finished report is an input to the next one | [brief](BENCH-12-report-as-input.md) | Untriaged | | |
+| BENCH-12 | A finished report is an input to the next one | [brief](BENCH-12-report-as-input.md) | In Review | [spec](../specs/spec-BENCH-12.md) | [plan](../plans/plan-BENCH-12.md) |
 | BENCH-13 | The statistics | [brief](BENCH-13-statistics.md) | Untriaged | | |

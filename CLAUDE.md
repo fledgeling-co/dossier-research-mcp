@@ -64,6 +64,10 @@ src/
     local-loop.ts       the free loop's registry, freeze and draft-time check
     corroborate.ts      independent-domain counting; N-way cross-backend diff
     evidence.ts         source classes, advisory floors, citation registry, search trace
+    grounding.ts        a finished report as an input to the next question: the
+                        canonical `dossier://run/<id>` identifier, the document
+                        written or uploaded, and the declaration a grounded run
+                        carries. Imports nothing from the store, deliberately
     runner.ts           run lifecycle, poller, stall watchdog, budget + concurrency gates
   store/
     store.ts            atomic-write JSON store, JSONL journal, JSONL ledger
@@ -90,7 +94,7 @@ assets/                 icon.svg (master, 1024) + rendered PNGs, banner, social 
 CHANGELOG.md            what changed per release; updated in the same commit as the change
 docs/                   the documentation set; README is the approachable entry point
   setup.md              getting a key, billing, spend caps, install, every env var
-  tools.md              full contract for all 36 tools, 6 resources, 4 prompts
+  tools.md              full contract for all 37 tools, 6 resources, 4 prompts
   how-it-works.md       tier/archetype selection, the utility model, a real session
   security.md           injection, SSRF, data egress
   development.md        toolchain and the two test suites

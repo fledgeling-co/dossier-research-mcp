@@ -20,6 +20,19 @@ This project follows [semantic versioning](https://semver.org/). Until 1.0 the m
 
   I met the trusted-directory error by hand earlier the same day, worked around it in my own test with a scratch repo and the flag, and did not connect it to how the product invokes the same binary. That is the same defect-restated-as-a-precondition pattern this project keeps finding in its own tests.
 
+### Added
+
+- **`research_ground`: a finished report is now an input to the next question.** `research_export` wrote a report to disk and `corpusStores` grounded a run in a File Search store, and nothing connected them, so using what you had just learned meant exporting by hand, uploading by hand and remembering the store name. Dossier's own output was the one kind of evidence it could not easily consume, and a second question on the same subject started from nothing. The idea is Bridgewater's Pocket Analyst, whose analysis outputs land in the same store its inputs came from, so any output can serve as an input to the next one.
+
+  **The default destination is local and needs no key.** It writes the report into a fixed `dossier-grounding/` subdirectory of the first directory the operator granted with `DOSSIER_LOCAL_CORPUS_DIRS`, opens no network connection, and `corpus_local_search` finds it afterwards like any other file there. `destination: "upload"` puts it in a Gemini File Search store instead, which **sends the report to Google**; the description says so, the annotation is non-read-only, and it has to be asked for by name.
+
+  **The caller cannot choose where a local file goes.** No directory, no subdirectory, no file name, and an existing store is required rather than created for the upload path. `DOSSIER_LOCAL_CORPUS_DIRS` is operator-set and there is deliberately no tool that adds one, because a file reader an agent can aim is an exfiltration primitive; a file *writer* an agent can aim is worse, so the same boundary holds. Files are written `0600` inside a `0700` directory, on the same rule that made store files `0600` after the July review.
+
+- **A run grounded in prior Dossier output declares it, and that output never counts as corroboration.** Pass `groundedInRunIds` to `research_plan` / `research_start` and the run records what it was built on, the prompt carries the rule, and `research_read` and `research_export` lead with a header naming the prior runs.
+
+  **The failure being prevented is laundering, not inconvenience.** Report A asserts something weakly supported, run B reads A and repeats it, and the assertion now appears in two reports: that looks like accumulation and is amplification. So a prior report is the requester's own document under the existing circular-verification rule, valid primary evidence about what was previously concluded and never independent evidence that the conclusion was right. `classifySource` recognises one from the reference itself and returns `private-user-owned`, so `countsAsCorroboration` is false for it; `assessSupport` excludes it from the independent-domain count; and `research_synthesise` lists it as a source while adding nothing to the merge's breadth. A claim carried in from a grounding report and repeated in the new one counts once.
+
+  One deliberate exception, named rather than left to be discovered: `research_evidence`'s **source mix** still lists a prior report among the sources it profiles, because the mix describes what was read and the report genuinely was read. It shows up classified as your own document. The advisory floors are advisory and never refuse anything.
 
 ## [0.10.0] - 2026-07-27
 
