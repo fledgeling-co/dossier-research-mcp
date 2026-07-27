@@ -275,6 +275,140 @@ export async function probeAllClis(timeoutMs = 4_000): Promise<CliStatus[]> {
   return Promise.all(CLI_ADAPTERS.map((a) => probeCli(a, timeoutMs)));
 }
 
+/* ------------------------------------------------------- model identity ---- */
+
+/**
+ * Which model is behind this CLI, asked of the CLI itself.
+ *
+ * A product name is not a model. `cursor-agent` serves Cursor's own Composer by
+ * default and can be pointed at Grok 4.5; `grok` serves Grok 4.5. Two CLIs on
+ * one model are one perspective, and a panel that seats both buys one and
+ * reports two, which is the corroboration trap living inside the lane that
+ * exists to prevent it. The only way to know is to ask, so this asks.
+ *
+ * **This is not on the detection path and must never be put there.** Detection
+ * is sync, offline and costs nothing, which is what lets it run on every
+ * routing decision. This spawns the CLI and waits for a model to answer: a few
+ * seconds, and a round trip against the subscription quota that CLI bills to.
+ * It is opt-in behind `research_doctor`'s `probeModels` flag, and the answer is
+ * cached on disk by `src/local/model-cache.ts` so it is asked once rather than
+ * once per detection.
+ */
+export const MODEL_PROBE_PROMPT =
+  'Reply with exactly one line and nothing else, in this exact form: MODEL=<the name of the model writing this reply>. ' +
+  'Do not search the web, do not call tools, do not explain, do not add any other line.';
+
+export type ModelProbeState = 'probed' | 'unreadable' | 'refused' | 'failed';
+
+export interface CliModelProbe {
+  readonly id: CliId;
+  readonly label: string;
+  readonly state: ModelProbeState;
+  /** The model as the CLI named it. Present only when `state` is `probed`. */
+  readonly model?: string;
+  readonly detail: string;
+}
+
+/** A model name is a short string; anything longer is the CLI ignoring the form. */
+const MAX_MODEL_NAME = 120;
+
+/**
+ * Pull `MODEL=...` out of whatever the CLI wrote.
+ *
+ * Exported because the parsing is the fragile half: a CLI that prefaces its
+ * answer with a banner, or wraps it in backticks, is normal, and a parser that
+ * only accepts a bare single line would report every one of them unreadable.
+ *
+ * One rejection is deliberate rather than defensive. A CLI that echoes the
+ * prompt back hands us `MODEL=<the name of the model writing this reply>`, and
+ * caching that placeholder as a model name would make two CLIs that both echoed
+ * look like the same model and silently drop one from the panel. Anything still
+ * carrying the angle brackets is refused.
+ */
+export function parseModelAnswer(raw: string): string | null {
+  const match = /MODEL\s*=\s*(.+)/i.exec(raw);
+  if (!match) return null;
+  // Quotes, backticks and markdown emphasis only. A trailing dot is NOT
+  // stripped: `Grok 4.5` ends in one and trimming it would silently rename the
+  // model to `Grok 4`, which is a different model and would compare unequal to
+  // every other spelling of the same one.
+  const value = (match[1] ?? '').trim().replace(/^["'`*]+|["'`*]+$/g, '').trim();
+  if (!value) return null;
+  if (value.includes('<') || value.includes('>')) return null;
+  return value.slice(0, MAX_MODEL_NAME);
+}
+
+/**
+ * Flatten a model name for comparison.
+ *
+ * `Grok 4.5`, `grok-4.5` and `Grok_4.5` are one model reported three ways, and
+ * a dedupe that compared raw strings would seat all three. Dots survive, so
+ * `4.5` does not become `45` and collide with something else. Deliberately
+ * nothing cleverer: two names that differ by more than punctuation are treated
+ * as two models, because keeping a backend that might be distinct is the safe
+ * direction and dropping one that is not is the expensive one.
+ */
+export function normaliseModelName(model: string): string {
+  return model.toLowerCase().replace(/[^a-z0-9.]+/g, ' ').trim();
+}
+
+/**
+ * Ask one CLI which model it serves.
+ *
+ * Refuses anything short of `ready`. Identity confirmation is the same rule
+ * that governs `createRun`: handing a prompt to an unidentified binary is
+ * handing it to a vendor nobody chose, and that is true of a one-line question
+ * as much as of a research brief. A CLI that is installed but not signed in is
+ * also refused, because prompting it would either fail or open an interactive
+ * login, and neither belongs in an audit command.
+ */
+export async function probeCliModel(adapter: CliAdapter, timeoutMs = 60_000): Promise<CliModelProbe> {
+  const base = { id: adapter.id, label: adapter.label } as const;
+  const status = await probeCli(adapter);
+  if (status.state !== 'ready') {
+    return {
+      ...base,
+      state: 'refused',
+      detail:
+        status.state === 'ambiguous'
+          ? 'not asked: the binary could not be identified, and an unidentified binary is never run'
+          : status.state === 'absent'
+            ? 'not asked: not installed'
+            : 'not asked: installed but not signed in, so a prompt would fail or open a login',
+    };
+  }
+
+  const bin = status.path ?? resolveOnPath(adapter.bin);
+  if (!bin) return { ...base, state: 'failed', detail: 'the binary vanished from PATH between the two checks' };
+
+  let raw: string;
+  try {
+    const { stdout, stderr } = await run(bin, [...adapter.headless(MODEL_PROBE_PROMPT)], {
+      timeout: timeoutMs,
+      maxBuffer: 4_000_000,
+    });
+    raw = `${stdout}\n${stderr}`;
+  } catch (e: unknown) {
+    return {
+      ...base,
+      state: 'failed',
+      detail: `the CLI did not answer within ${String(Math.round(timeoutMs / 1000))}s or exited non-zero: ${
+        e instanceof Error ? e.message.split('\n')[0] : String(e)
+      }`,
+    };
+  }
+
+  const model = parseModelAnswer(raw);
+  if (!model) {
+    return {
+      ...base,
+      state: 'unreadable',
+      detail: 'the CLI answered but not in the MODEL=<name> form, so nothing is cached rather than a guess',
+    };
+  }
+  return { ...base, state: 'probed', model, detail: `reports its model as ${model}` };
+}
+
 async function anyExists(paths: readonly string[]): Promise<boolean> {
   for (const p of paths) {
     if (await access(p).then(() => true).catch(() => false)) return true;

@@ -66,6 +66,18 @@ The free lane is the floor. With no API keys at all you still get every capable 
 
 **Every one of them, not the best one of them.** Each CLI is its own backend with its own id: `local-claude`, `local-codex`, `local-grok`, `local-cursor`, `local-agy`, `local-gemini`. On a machine with Claude Code, Codex and Grok all signed in, the free lane is three members, three runs, three reports and three $0 ledger lines. You are already paying for all three subscriptions, so all three answer. They are ordered strongest first, and a CLI that is installed but not signed in loses its own seat without touching anybody else's.
 
+**One seat per model.** Running four CLIs is only worth it because four models drive four different searches and read different parts of the web. A CLI is not a model, though: Cursor lets you point `cursor-agent` at Grok 4.5, and a lane holding that next to Grok CLI buys one perspective and reports two. So Dossier asks.
+
+```
+research_doctor(probeModels: true)
+```
+
+That asks each identified, signed-in CLI which model it serves and caches the answer with a timestamp. It is off by default because it costs a short model round trip against each of those subscriptions, where ordinary detection is offline and instant. Do it once. After that, two CLIs found to serve the same model take one seat: the earlier one in the preference order joins, and the other is listed under **Not on the panel** with the model they share and how old the reading is.
+
+Until you run it nothing is dropped. An unprobed machine keeps every CLI and the panel says the lane may hold the same model twice, because guessing a model from a binary's name would lose a backend you pay for. On a default install the guess would be wrong anyway: probed on 27 July 2026, `cursor-agent` reports Composer and `grok` reports Grok 4.5.
+
+**A capability is never inherited from the model.** Point Cursor at Grok 4.5 and that CLI still cannot search X. Live X search is a first-party tool attached to xAI's API, not something the model carries with it, so xAI remains the only route to X and a date window still routes to a backend that can enforce one.
+
 Name one of those ids as `provider` and you get that CLI alone. `local` on its own still works and still means a CLI; it resolves to the strongest one available, which is what it always did. In `DOSSIER_PROVIDERS`, `local` is an umbrella for every CLI id at once.
 
 `DOSSIER_LOCAL_CLI` **restricts** the free lane. Set it to a CLI id and the lane holds only that CLI, however many others are signed in. Unset, which is the default, every capable signed-in CLI joins.

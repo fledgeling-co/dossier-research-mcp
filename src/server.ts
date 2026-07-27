@@ -6,7 +6,8 @@ import { backendLimitations, describeAuth, loadConfig, type Config } from './con
 import { assertStoreName, resolveCorpusClient, type CorpusClient } from './corpus/files.js';
 import { LocalCorpus } from './corpus/local.js';
 import { probeAllBrowserTools, renderBrowserTools } from './local/browser.js';
-import { probeAllClis } from './local/cli.js';
+import { CLI_ADAPTERS, probeAllClis, probeCliModel, type CliId } from './local/cli.js';
+import { describeProbeAge, readModelCache, writeModelCache } from './local/model-cache.js';
 import {
   DEFAULT_BASE_AGENT,
   RESEARCH_AGENT_INSTRUCTION,
@@ -41,7 +42,13 @@ import {
   readSection,
   renderOutline,
 } from './research/report.js';
-import { canonicaliseUrl, crossCheck, type ProviderClaimSet } from './research/corroborate.js';
+import {
+  canonicaliseUrl,
+  type ConvergenceCandidate,
+  crossCheck,
+  findConvergence,
+  type ProviderClaimSet,
+} from './research/corroborate.js';
 import { decompose, renderDispatch, renderTasks } from './research/decompose.js';
 import { describeOverlap, mergeEvidence, renderMergedRegistry, type RunEvidence } from './research/synthesise.js';
 import {
@@ -1712,19 +1719,37 @@ function registerShapeTools(server: FastMCP, deps: ServerDeps): void {
         }
 
         const { shared, unique } = crossCheck(sets);
+        // Wording-matching finds almost nothing and its zero used to be rendered
+        // as "these reports do not overlap", which is a confident negative from
+        // a test with no power to find a positive.
+        const convergent = findConvergence(sets);
         const corroborated = shared.filter((s) => s.support === 'corroborated');
         const sameSource = shared.filter((s) => s.support === 'single-source');
         return [
           `## Cross-backend comparison of ${String(sets.length)} run(s)`,
           '',
-          `- Claims more than one backend made: **${String(shared.length)}**`,
+          `- Claims worded near-identically by more than one backend: **${String(shared.length)}**`,
           `- Of those, backed by 3+ independent domains: **${String(corroborated.length)}**`,
           `- Of those, agreeing while citing ONE domain: **${String(sameSource.length)}**, agreement here is not evidence.`,
+          `- Claims that look like the same claim written differently: **${String(convergent.length)}**`,
           '',
-          '### Agreed claims',
+          convergent.length > 0
+            ? [
+                '### Claims several backends appear to have made',
+                '',
+                'Matched on what each claim is *about*, not on how it is written, so this is a candidate list rather than a verdict. The overlap score and the shared terms are both shown; discount any pairing you disagree with.',
+                '',
+                ...convergent.slice(0, 20).map(
+                  (c: ConvergenceCandidate) =>
+                    `- **${c.providers.join(' + ')}** (overlap ${c.overlap.toFixed(2)}, shared: ${c.sharedTokens.slice(0, 6).join(', ')})\n    ${c.claims[0]?.text.slice(0, 300) ?? ''}`,
+                ),
+                '',
+              ].join('\n')
+            : '',
+          '### Claims worded the same way',
           '',
           shared.length === 0
-            ? '_No claim was made by more than one backend. That is itself a finding: these reports do not overlap._'
+            ? `_Nothing matched on wording. That is close to meaningless on its own: this check needs two backends to phrase a claim near-identically, which almost never happens, so a zero here is the usual result and is not evidence that the reports disagree.${convergent.length > 0 ? ` The ${String(convergent.length)} candidate(s) above are what convergence looks like when matched on subject instead._` : ' Nothing matched on subject either, which is the finding worth reading._'}`
             : shared
                 .slice(0, 40)
                 .map(
@@ -3279,6 +3304,62 @@ function registerAgentTools(server: FastMCP, deps: ServerDeps): void {
   });
 }
 
+/**
+ * Which model is behind each CLI, and how old that answer is.
+ *
+ * Split out of the doctor tool because it is the one section that can spend
+ * something. `probeNow` is the whole difference: false renders whatever is
+ * already cached and asks for nothing, true spawns each signed-in CLI with a
+ * one-line question and caches what comes back.
+ *
+ * Every reading carries its age. A model identity is a fact about a
+ * configuration the user can change whenever they like, so an answer printed
+ * without a date invites being trusted for longer than it has earned.
+ */
+async function renderCliModels(storeDir: string, probeNow: boolean, ready: readonly CliId[]): Promise<string[]> {
+  const lines: string[] = ['## Which model each CLI serves', ''];
+  lines.push(
+    '_A product name is not a model. Two CLIs serving the same model read the same web, so seating both on a panel buys ' +
+      'one perspective and reports two. Dossier only ever drops a CLI on an answer the CLI actually gave; it never infers a ' +
+      'model from a binary’s name._',
+    '',
+  );
+
+  if (probeNow && ready.length > 0) {
+    const answers = await Promise.all(ready.map((id) => probeCliModel(CLI_ADAPTERS.find((a) => a.id === id)!)));
+    const probed = new Map<CliId, string>();
+    for (const a of answers) if (a.state === 'probed' && a.model) probed.set(a.id, a.model);
+    await writeModelCache(storeDir, probed);
+    for (const a of answers) {
+      if (a.state !== 'probed') lines.push(`- ⚠ **${a.label}**: ${a.detail}`);
+    }
+  }
+
+  const cached = readModelCache(storeDir);
+  for (const adapter of CLI_ADAPTERS) {
+    const entry = cached.get(adapter.id);
+    if (entry) {
+      lines.push(`- ✅ **${adapter.label}**: \`${entry.model}\`, probed ${describeProbeAge(entry.probedAt)}`);
+    } else if (ready.includes(adapter.id)) {
+      lines.push(`- ⚪ **${adapter.label}**: signed in, never probed`);
+    }
+  }
+
+  const unprobed = ready.filter((id) => !cached.has(id));
+  if (cached.size === 0 && unprobed.length === 0) {
+    lines.push('- No signed-in CLI to ask.');
+  }
+  lines.push(
+    '',
+    probeNow
+      ? '_Cached on disk, so nothing here is asked again until you ask for it. Re-run with `probeModels: true` after you change a CLI’s model._'
+      : unprobed.length > 0
+        ? `_${String(unprobed.length)} signed-in CLI(s) have never been asked. Until they are, a panel keeps all of them and warns that the free lane may hold the same model twice. Run this again with \`probeModels: true\` to ask; it costs one short model round trip on each of those subscriptions._`
+        : '_Run again with `probeModels: true` to refresh these readings._',
+  );
+  return lines;
+}
+
 // ───────────────────────────────────────────────────────────────── resources ────
 function registerResources(server: FastMCP, deps: ServerDeps): void {
   const { config, store, runner } = deps;
@@ -3288,14 +3369,26 @@ function registerResources(server: FastMCP, deps: ServerDeps): void {
   server.addTool({
     name: 'research_doctor',
     description:
-      'Audit every research backend Dossier knows about: what is working, what is configured but unproven, what is broken, and what COULD be on but is not. Spends nothing and makes no network calls. The "could be on" rows are the point: without them you cannot tell that a capability is missing, only that you never used it.',
-    annotations: { title: 'Audit research backends', readOnlyHint: true, openWorldHint: false },
+      'Audit every research backend Dossier knows about: what is working, what is configured but unproven, what is broken, and what COULD be on but is not. Spends no API money and makes no network calls of its own. The "could be on" rows are the point: without them you cannot tell that a capability is missing, only that you never used it. Set `probeModels: true` to additionally ASK each signed-in coding CLI which model it serves; that one costs a short model round trip on each CLI subscription, and the answer is cached so the panel can stop seating two CLIs that turn out to be the same model.',
+    // `readOnlyHint: false` because of `probeModels`. The default call reads and
+    // spawns nothing but `--version`, but the annotation describes the tool and
+    // not one argument value, and a tool that CAN invoke a model is not
+    // read-only. `research_synthesise` carries the same annotation for the same
+    // reason, and mislabelling it the other way tells a caller a paid operation
+    // is free to retry.
+    annotations: { title: 'Audit research backends', readOnlyHint: false, destructiveHint: false, openWorldHint: false },
     parameters: z.object({
       probeLocal: z
         .boolean()
         .default(true)
         .describe(
           'Also probe the coding CLIs and browser tooling on this machine. Local, offline and free: it runs `--version` on each binary and checks for a sign-in file by existence, never reading a credential, never invoking `npx`, and never starting a browser.',
+        ),
+      probeModels: z
+        .boolean()
+        .default(false)
+        .describe(
+          'Ask each identified, signed-in CLI which model it actually serves, and cache the answer on disk. Off by default because it SPENDS a short model round trip against each of those subscriptions and takes a few seconds per CLI, where ordinary detection is offline and instant. Worth doing once: the panel uses it to stop seating two CLIs that serve the same model, which would buy one perspective and report two. Without it the free lane keeps every CLI and says it may hold duplicates.',
         ),
     }),
     async execute(args) {
@@ -3373,6 +3466,15 @@ function registerResources(server: FastMCP, deps: ServerDeps): void {
             `_${String(ambiguous.length)} binary(ies) could not be identified. Several vendors ship executables called \`agent\` and \`grok\`; an unidentified one is never run, because handing your brief to a different vendor's tool is a different bill._`,
           );
         }
+
+        lines.push(
+          '',
+          ...(await renderCliModels(
+            deps.config.storeDir,
+            args.probeModels,
+            ready.map((c) => c.id),
+          )),
+        );
 
         // Inventory only. This section exists because Mode A, importing a
         // share link, needs no automation at all, and someone deciding whether

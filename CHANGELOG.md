@@ -8,6 +8,39 @@ This project follows [semantic versioning](https://semver.org/). Until 1.0 the m
 
 ## [Unreleased]
 
+### Fixed
+
+- **The cross-backend merge reported zero agreement whatever the backends actually agreed on.** Claims were matched by wording: lowercased, punctuation stripped, first 120 characters compared. Five backends never phrase a conclusion identically, so the count was structurally always zero, and the zero was then rendered as "No claim was made by more than one backend. That is itself a finding: these reports do not overlap." That is a confident negative produced by a test with no power to find a positive, which is the failure this whole product argues against, in its own output. Found by an owner reading a real panel result where four of five backends had plainly reached the same four conclusions.
+
+  Convergence is now found by what a claim is *about*. Salient tokens (numbers and content words, lightly stemmed so "fine-tuning" meets "fine-tune", hyphens split so "from-scratch" meets "from scratch") are compared with a Jaccard weighted by how rare each token is across the claim set. Rarity is what makes it work: two backends sharing "0.6B" and "decoder" have said something, two sharing "model" have not, and plain Jaccard cannot tell those apart. On the real claims that prompted this, plain Jaccard scored 0.30 and would have needed a threshold low enough to admit anything; weighted, the true pair scores 0.21 while an unrelated claim never joins at any threshold down to 0.10.
+
+  It is reported as a candidate list, never a verdict, and always with the overlap score and the shared terms visible so a reader can reject a pairing. Raising it to an assertion would trade a false negative for a false positive, and an overstated convergence is the worse of the two: it is the corroboration trap reached by arithmetic instead of by credulity. The wording-match count survives alongside it, renamed to say what it measures.
+
+
+### Fixed
+
+- **The panel's free lane could seat two CLIs serving the same model and report them as two independent backends.** The lane's whole justification is that different models drive different searches and therefore read different parts of the web; that is why running four subscriptions beats running one. Two CLIs on one model are one perspective, so the panel bought one and reported two, and the automatic merge then flagged an overlap the panel had created itself. The corroboration trap, living inside the lane built to prevent it.
+
+  It is a real configuration rather than a hypothetical: Cursor lets you point `cursor-agent` at Grok 4.5, and nothing about a binary's name or version string would ever reveal it.
+
+  **Where two free-lane CLIs are known to serve the same model, one joins.** The survivor is the earlier one in the existing preference order; the other appears under **Not on the panel** with the model they share, both spellings of it, and the age of the reading behind the decision.
+
+  **Known, never guessed.** Dossier will not infer a model from a product name. Probed on the owner's machine on 27 July 2026, `cursor-agent` answers `Composer` and `grok` answers `Grok 4.5`, so on a default install the four CLIs really are four models and a guess would have dropped a paid-for backend for nothing. On a machine that has never been probed, every CLI keeps its seat and the panel says plainly that the lane may hold the same model twice and how to check.
+
+- **A capability is never inherited from a probed model, and the reasoning is now written down where someone would go to change it.** Point Cursor at Grok 4.5 and that member still has no X access: live X search is a first-party tool xAI attaches to its own API, not something the weights carry with them. Capability declarations stay per CLI.
+
+  `socialSources: []` on every CLI backend was confirmed by testing rather than by reasoning, and the finding is recorded in the code so it is not "fixed" back. Asked for a real x.com post URL, both `grok` and `cursor-agent` produced one, which only proves an ordinary web search reached an indexed x.com page. The discriminating test is recency, which only a live firehose can serve: asked for a post from the last three hours, both answered that they could not, and the Grok CLI announced it would sort by recency before failing to.
+
+### Added
+
+- **`research_doctor` takes `probeModels`, off by default, which asks each signed-in CLI which model it actually serves.** It sends one short question to each identified, signed-in CLI and caches the answer under the store directory with a timestamp, so it is asked once rather than on every detection. Every reading is printed with its age, because a model identity is a fact about a setting you can change whenever you like.
+
+  It is opt-in for a reason. Ordinary detection is sync, offline and free, which is what lets it run on every routing decision; this spends a model round trip against each of those CLI subscriptions and takes a few seconds each. It refuses to prompt a binary it could not identify or a CLI nobody has signed into, on the same rule that governs a research run: an unidentified binary is never handed a prompt.
+
+### Changed
+
+- **`research_doctor` is no longer annotated `readOnlyHint: true`.** It can now invoke a model, when `probeModels` is true, and the annotation describes the tool rather than one argument value. A default call still spends nothing and makes no network calls of its own. Clients that auto-approve read-only tools may now prompt for it.
+
 ## [0.8.0] - 2026-07-27
 
 ### Fixed

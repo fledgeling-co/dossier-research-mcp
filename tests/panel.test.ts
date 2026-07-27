@@ -6,6 +6,8 @@ import { loadConfig, type Config } from '../src/config.js';
 import type { CostBand } from '../src/gemini/cost.js';
 import type { CreateRunArgs, DeepResearchClient } from '../src/gemini/client.js';
 import type { InteractionSnapshot } from '../src/gemini/types.js';
+import { normaliseModelName } from '../src/local/cli.js';
+import type { ProbedModel } from '../src/local/model-cache.js';
 import { assemblePanelAmong, ProviderRegistry, sumBands } from '../src/providers/registry.js';
 import type {
   Capabilities,
@@ -318,6 +320,106 @@ describe('panel assembly', () => {
     expect(text).toMatch(/An estimate band, never a quote/);
     expect(text).toMatch(/\*\*Question profile\*\*/);
     expect(text).toMatch(/\*\*Not on the panel\*\*/);
+  });
+
+  /* --------------------------------------- PANEL-25..27: one seat per model */
+
+  /**
+   * A probed-model cache, as `research_doctor --probeModels` would have left it.
+   *
+   * Scripted rather than read from disk for the same reason the providers are:
+   * a dedupe assertion that depended on what the developer happened to have
+   * probed would pass on one machine and fail on the next.
+   */
+  const probedAs = (entries: Record<string, string>, probedAt = Date.now()): ReadonlyMap<ProviderId, ProbedModel> =>
+    new Map(
+      Object.entries(entries).map(([id, model]) => [
+        id as ProviderId,
+        { model, probedAt, normalised: normaliseModelName(model) },
+      ]),
+    );
+
+  const cursorCli = provider('local-cursor', 0, caps({ billedTo: 'subscription' }), signedIn);
+
+  it('PANEL-25: two CLIs on one model take one seat, and the survivor is the earlier in preference order', () => {
+    // The owner's case exactly: Cursor lets you point it at Grok 4.5, and a
+    // lane holding Cursor-as-Grok beside Grok buys one perspective and reports
+    // two. Spelled differently on each side on purpose; a dedupe that only
+    // caught an exact string would miss the real answers.
+    const panel = panelFor(
+      'Who leads this market?',
+      { cliModels: probedAs({ 'local-grok': 'Grok 4.5', 'local-cursor': 'grok-4.5' }) },
+      [cli, grokCli, cursorCli],
+    );
+
+    expect(ids(panel.free)).toEqual(['local-claude', 'local-grok']);
+    const why = panel.rejected.find((r) => r.id === 'local-cursor')?.why ?? '';
+    expect(why).toMatch(/same model/);
+    // Both spellings are named, and so is how old the reading is: a model
+    // identity is a fact about a setting the user can change at any time.
+    expect(why).toMatch(/grok-4\.5/);
+    expect(why).toMatch(/Grok 4\.5/);
+    expect(why).toMatch(/oldest probe reading/);
+    expect(panel.notes.join(' ')).toMatch(/same model/);
+  });
+
+  it('PANEL-25: the survivor is the order, not the id', () => {
+    const reversed = panelFor(
+      'Who leads this market?',
+      { cliModels: probedAs({ 'local-grok': 'Grok 4.5', 'local-cursor': 'Grok 4.5' }) },
+      [cursorCli, grokCli],
+    );
+    expect(ids(reversed.free)).toEqual(['local-cursor']);
+    expect(reversed.rejected.find((r) => r.id === 'local-grok')?.why).toMatch(/same model/);
+  });
+
+  it('PANEL-25: two CLIs probed as different models both keep their seats', () => {
+    // The default install, measured 27 July 2026: cursor-agent reports Composer
+    // and grok reports Grok 4.5. The dedupe must not bite here.
+    const panel = panelFor(
+      'Who leads this market?',
+      { cliModels: probedAs({ 'local-cursor': 'Composer', 'local-grok': 'Grok 4.5' }) },
+      [cursorCli, grokCli],
+    );
+    expect(ids(panel.free)).toEqual(['local-cursor', 'local-grok']);
+    expect(panel.notes.join(' ')).not.toMatch(/same model/);
+  });
+
+  it('PANEL-26: an unprobed machine keeps every CLI and says the lane may hold duplicates', () => {
+    // No cache at all. Guessing from the product name is what would drop a
+    // paid-for backend, and on the default install the guess would be wrong.
+    const panel = panelFor('Who leads this market?', {}, clis);
+    expect(ids(panel.free)).toEqual(['local-claude', 'local-codex', 'local-grok']);
+    expect(panel.rejected.map((r) => r.id)).not.toContain('local-grok');
+
+    const note = panel.notes.join(' ');
+    expect(note).toMatch(/may hold the same model twice/);
+    expect(note).toMatch(/probeModels/);
+    expect(note).toMatch(/research_doctor/);
+  });
+
+  it('PANEL-26: a partly probed lane still warns about the members nobody asked', () => {
+    const panel = panelFor('Who leads this market?', { cliModels: probedAs({ 'local-claude': 'Claude Opus 4.6' }) }, clis);
+    expect(panel.free).toHaveLength(3);
+    expect(panel.notes.join(' ')).toMatch(/2 of 3 CLIs on the free lane have no probed model/);
+  });
+
+  it('PANEL-26: a single-CLI lane is not warned about, because it cannot duplicate anything', () => {
+    expect(panelFor('Who leads this market?', {}, [cli]).notes.join(' ')).not.toMatch(/may hold the same model/);
+  });
+
+  it('PANEL-27: a capability is never inherited from a probed model', () => {
+    // Point Cursor at Grok 4.5 and it is still not xAI. Live X search is a
+    // first-party tool attached to xAI's API, not something the weights carry,
+    // so the CLI stays off a social panel and xAI is still the only way there.
+    const panel = panelFor(
+      'What are people saying on X about this launch?',
+      { social: ['x'], cliModels: probedAs({ 'local-cursor': 'Grok 4.5' }) },
+      [cursorCli, xai],
+    );
+    expect(ids(panel.free)).toEqual([]);
+    expect(panel.rejected.find((r) => r.id === 'local-cursor')?.why).toMatch(/cannot search x/);
+    expect(ids(panel.members)).toEqual(['xai']);
   });
 
   it('PANEL-18: the contract token binds the whole membership, order-independently', () => {

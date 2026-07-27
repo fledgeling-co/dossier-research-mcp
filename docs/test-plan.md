@@ -149,6 +149,10 @@ Acceptance criteria are taken from the README's tool contracts and the tool desc
 | **ROUTE-05** | An ordinary deep run goes to the cheapest capable backend, not to Gemini | `providers` | ✓ |
 | **ROUTE-06** | Capability still forces the backend where only one qualifies | `providers` | ✓ |
 | **ROUTE-07** | Every rejected backend is named with the reason it could not run | `providers` | ✓ |
+| **CORR-10** | Convergence is found by subject, so backends that worded a finding differently group | `corroborate` | ✓ |
+| **CORR-11** | An unrelated claim never joins a convergence group | `corroborate` | ✓ |
+| **CORR-12** | The shared terms are shown, so a reader can reject a pairing | `corroborate` | ✓ |
+| **CORR-13** | One backend repeating itself is never convergence | `corroborate` | ✓ |
 | **EVID-06** | A failed quality floor is reported as advisory; nothing is ever withheld | unit: `evidence` | ✓ |
 | **EVID-07** | An unrecognised domain is classified `other`, never guessed into `official` | unit: `evidence` | ✓ |
 | **EVID-08** | A user's own document is never independent corroboration of an external fact | unit: `evidence` | ✓ |
@@ -180,6 +184,9 @@ Acceptance criteria are taken from the README's tool contracts and the tool desc
 | **CLI-20** | A record and a ledger line written before per-CLI ids, carrying `provider: "local"`, still parse and the id still resolves to a client | unit: `runner`, `providers` | ✓ |
 | **CLI-21** | Two CLIs answering one question at once write separate transcripts, each interaction id naming the CLI that produced it | unit: `local-provider` | ✓ |
 | **CLI-22** | The wizard writes `DOSSIER_LOCAL_CLI` only when the operator picked exactly one CLI, never as a side effect of detection | unit: `setup` | ✓ |
+| **CLI-23** | The model probe refuses anything short of identified-and-signed-in, so a prompt never reaches an unidentified binary | unit: `local-cli` | ✓ |
+| **CLI-24** | `MODEL=` is read out of a noisy answer, and an echoed prompt placeholder is refused rather than cached as a model name | unit: `local-cli` | ✓ |
+| **CLI-25** | The model cache round-trips with its timestamp, merges rather than replacing, and a corrupt file reads back as never-probed | unit: `local-cli` | ✓ |
 | **BROWSER-01** | A browser binary is identified by version string or install-path provenance, and reported ambiguous when it is neither | unit: `browser-detect` | ✓ |
 | **BROWSER-02** | An MCP server package is probed by presence on disk only; `npx` is never invoked, because that would fetch and execute it | unit: `browser-detect` | ✓ |
 | **BROWSER-03** | Whether an MCP server is registered with a client is always reported unknown; no client config is read | unit: `browser-detect` | ✓ |
@@ -269,6 +276,9 @@ Acceptance criteria are taken from the README's tool contracts and the tool desc
 | **PANEL-22** | Three CLIs on one question are three distinct fingerprints and three ledger lines at $0, never one answer deduped | unit: `panel` | ✓ |
 | **PANEL-23** | A free lane wide enough on its own to exceed the concurrency cap is refused whole, exactly as an unaffordable one is | unit: `panel` | ✓ |
 | **PANEL-24** | The ordinary panel, three free members plus two paid, is admitted under the shipped concurrency default | unit: `panel` | ✓ |
+| **PANEL-25** | Two CLIs probed as serving one model seat one: the survivor is the earlier in preference order, and the other is named as excluded with the shared model and the probe's age | unit: `panel` | ✓ |
+| **PANEL-26** | An unprobed machine loses no backend: every CLI keeps its seat and the panel says the lane may hold the same model twice, rather than guessing from a product name | unit: `panel` | ✓ |
+| **PANEL-27** | A capability is never inherited from a probed model: a CLI pointed at Grok still has no X access and stays off a social panel | unit: `panel` | ✓ |
 
 ### The paid project
 

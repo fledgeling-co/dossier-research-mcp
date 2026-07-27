@@ -203,6 +203,20 @@ export function localProvider(config: Config, adapter: CliAdapter): ResearchProv
     dateFilter: 'none',
     domainFilter: 0,
     corpus: 'local',
+    // Empty for every CLI, including the ones whose model is Grok. Measured
+    // rather than assumed, on 27 July 2026: asked for a real x.com post URL,
+    // both `grok` and `cursor-agent` returned one, which proves only that an
+    // ordinary web search reached an indexed x.com page. The discriminating
+    // test is recency, because only a live firehose can serve it. Asked for a
+    // post from the last three hours, both answered CANNOT, and the Grok CLI
+    // announced it would sort by recency before failing to.
+    //
+    // So live X access stays xAI's first-party API and nothing else. The reason
+    // this needs writing down is the panel's model probe: a user can point
+    // Cursor at Grok 4.5, and the tempting inference is that a Grok-backed CLI
+    // inherits Grok's X search. It does not. X search is a tool xAI attaches to
+    // its API, not a property the weights carry, so capability is declared per
+    // CLI here and is never derived from a probed model name.
     socialSources: [],
     structuredOutput: false,
     fileOutput: true,

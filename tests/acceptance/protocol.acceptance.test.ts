@@ -36,6 +36,11 @@ const SPENDING = [
   // will use the utility model to extract and cross-check claims when one is
   // configured. A tool that can invoke a model is not read-only.
   'research_synthesise',
+  // Audits backends for nothing, until `probeModels: true` asks each signed-in
+  // CLI which model it serves. That is a model round trip against a
+  // subscription, so the same rule applies: the annotation describes the tool
+  // and not one argument value.
+  'research_doctor',
 ];
 // Imports store a run but buy nothing: whatever produced the report was billed
 // wherever it ran. Not read-only (it writes), not spending.

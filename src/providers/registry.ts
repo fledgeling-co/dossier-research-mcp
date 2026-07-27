@@ -1,6 +1,7 @@
 import type { Config } from '../config.js';
 import type { DeepResearchClient } from '../gemini/client.js';
 import type { CostBand, DurationOptions } from '../gemini/cost.js';
+import { describeProbeAge, readModelCache, type ProbedModel } from '../local/model-cache.js';
 import type { ProfileSignal, QuestionProfile } from '../research/profile.js';
 import { geminiProvider } from './gemini.js';
 import { localProviders } from './local.js';
@@ -48,6 +49,16 @@ export class ProviderRegistry {
    * asked for it; naming one backend is how you get a panel of one.
    */
   private readonly allowListInForce: boolean;
+  /**
+   * Where the probed-model cache lives.
+   *
+   * Held rather than the whole config so the registry keeps depending on one
+   * fact about the environment instead of all of them. Read on each panel
+   * assembly rather than once in the constructor: a `research_doctor` probe
+   * during the server's life should take effect on the next panel, not on the
+   * next restart.
+   */
+  private readonly storeDir: string;
 
   constructor(config: Config, resolveGeminiClient: () => DeepResearchClient | null) {
     const built = [
@@ -66,6 +77,20 @@ export class ProviderRegistry {
     // not silently become a place Dossier can spend money.
     this.allowListInForce = config.enabledProviders.length > 0;
     this.all = this.allowListInForce ? built.filter((p) => allows(config.enabledProviders, p.id)) : built;
+    this.storeDir = config.storeDir;
+  }
+
+  /**
+   * The probed model behind each CLI backend, keyed by provider id.
+   *
+   * Empty on a machine that has never opted into the probe, which is the point:
+   * the free lane keeps every member when nothing is known, and only dedupes on
+   * an answer a CLI actually gave.
+   */
+  private probedModels(): ReadonlyMap<ProviderId, ProbedModel> {
+    const byProvider = new Map<ProviderId, ProbedModel>();
+    for (const [cli, entry] of readModelCache(this.storeDir)) byProvider.set(`local-${cli}`, entry);
+    return byProvider;
   }
 
   list(): readonly ResearchProvider[] {
@@ -144,6 +169,7 @@ export class ProviderRegistry {
     return assemblePanelAmong(configured, {
       ...need,
       allowList: this.allowListInForce,
+      cliModels: this.probedModels(),
     });
   }
 }
@@ -404,6 +430,17 @@ export interface PanelNeed extends RoutingNeed {
    * rule that naming one provider yields a panel of one.
    */
   readonly allowList?: boolean;
+  /**
+   * The model each CLI backend was probed as serving, keyed by provider id.
+   *
+   * Passed in rather than read here, for the same reason the provider set is:
+   * the cache lives on disk under the store directory, and a membership
+   * assertion that depended on what the developer happened to have probed would
+   * pass on one machine and fail on the next.
+   *
+   * A missing entry means "never asked", never "different from the others".
+   */
+  readonly cliModels?: ReadonlyMap<ProviderId, ProbedModel>;
 }
 
 const ZERO_BAND: CostBand = { lowUsd: 0, highUsd: 0, midUsd: 0, basis: 'no members' };
@@ -482,6 +519,14 @@ export function assemblePanelAmong(
   free.sort(byCost);
   paid.sort(byCost);
 
+  // Two CLIs serving one model are one perspective. Done after the sort, so
+  // "the survivor is the earlier one in the preference order" is a property of
+  // the order already established rather than a second ranking.
+  const deduped = dedupeFreeLaneByModel(free, need.cliModels);
+  rejected.push(...deduped.dropped);
+  notes.push(...deduped.notes);
+  const freeFinal = deduped.kept;
+
   // "Never xAI alone" on a legal question, from the design and from xAI's own
   // documentation, which describes the product as suited to finding things
   // rather than concluding them. Refusing beats running: a legal answer from
@@ -489,7 +534,7 @@ export function assemblePanelAmong(
   // than no answer, and the operator can still force it by name.
   const legal = need.profile.signals.includes('legal');
   let paidFinal = paid;
-  if (legal && need.allowList !== true && free.length === 0 && paid.length === 1 && paid[0]!.provider.id === 'xai') {
+  if (legal && need.allowList !== true && freeFinal.length === 0 && paid.length === 1 && paid[0]!.provider.id === 'xai') {
     rejected.push({
       id: 'xai',
       why: 'this question is legal or regulatory, and xAI must not be the only backend concluding on one',
@@ -502,7 +547,7 @@ export function assemblePanelAmong(
     paidFinal = [];
   }
 
-  const members = [...free, ...paidFinal];
+  const members = [...freeFinal, ...paidFinal];
   const total = sumBands(members.map((m) => m.cost));
 
   if (members.length === 0 && notes.length === 0) {
@@ -515,7 +560,106 @@ export function assemblePanelAmong(
 
   const crawl = recommendCrawl(need.profile);
 
-  return { members, free, paid: paidFinal, total, rejected, notes, crawl, profile: need.profile };
+  return { members, free: freeFinal, paid: paidFinal, total, rejected, notes, crawl, profile: need.profile };
+}
+
+interface FreeLaneDedupe {
+  readonly kept: PanelMember[];
+  readonly dropped: { id: ProviderId; why: string }[];
+  readonly notes: string[];
+}
+
+/**
+ * One seat per model on the free lane.
+ *
+ * The lane's entire justification is that different models drive different
+ * searches and therefore read different parts of the web. That is what makes
+ * four CLIs worth running instead of one. If two of them serve the *same*
+ * model, they are not independent: the panel buys one perspective and reports
+ * four, which is the corroboration trap living inside the lane built to prevent
+ * it, and the automatic merge would then count the overlap it caused itself.
+ *
+ * On a default install the problem does not bite. Probed on this machine on
+ * 27 July 2026, `cursor-agent` answers `Composer` and `grok` answers
+ * `Grok 4.5`, so the CLIs really are distinct models. It bites when someone
+ * points Cursor at Grok 4.5, which Cursor lets them do, and nothing about the
+ * binary's name or version would ever reveal it.
+ *
+ * Three rules keep this from doing harm.
+ *
+ * **It only acts on a probed answer.** A machine that has never opted into
+ * `research_doctor`'s `probeModels` has an empty cache, and an empty cache
+ * keeps every member and says the lane may hold duplicates. Inferring a model
+ * from a product name would drop a paid-for backend on the strength of a guess,
+ * and the guess would be wrong on the default install described above.
+ *
+ * **The survivor is the earlier one in the preference order**, which the caller
+ * has already applied to the lane. Cheapest-first is meaningless here because
+ * every member costs $0, so the offered order is the whole ranking.
+ *
+ * **A capability is never inherited from the model.** This is the half that is
+ * easy to get wrong later. If a user points Cursor at Grok 4.5, that Cursor
+ * member still has no X access: live X search is xAI's own first-party tool
+ * attached to their API, not something the weights carry around. Capability
+ * declarations stay per-CLI in `src/providers/local.ts` and are read from the
+ * provider, never derived from a probed model name. This function reads
+ * `capabilities` for nothing and must keep reading it for nothing.
+ */
+function dedupeFreeLaneByModel(
+  free: readonly PanelMember[],
+  models: ReadonlyMap<ProviderId, ProbedModel> | undefined,
+): FreeLaneDedupe {
+  const kept: PanelMember[] = [];
+  const dropped: { id: ProviderId; why: string }[] = [];
+  const notes: string[] = [];
+  const seen = new Map<string, { member: PanelMember; probe: ProbedModel }>();
+  let unprobed = 0;
+
+  for (const member of free) {
+    const probe = models?.get(member.provider.id);
+    if (!probe) {
+      unprobed += 1;
+      kept.push(member);
+      continue;
+    }
+    const incumbent = seen.get(probe.normalised);
+    if (!incumbent) {
+      seen.set(probe.normalised, { member, probe });
+      kept.push(member);
+      continue;
+    }
+    // Both spellings, when they differ. The two CLIs named the same model two
+    // ways, and printing only one of them reads as a claim about the other
+    // backend that the other backend never made.
+    const named =
+      probe.model === incumbent.probe.model ? probe.model : `${probe.model} and ${incumbent.probe.model}`;
+    // The older of the two readings, because the decision is only as current as
+    // its weakest input.
+    const oldest = Math.min(probe.probedAt, incumbent.probe.probedAt);
+    dropped.push({
+      id: member.provider.id,
+      why:
+        `serves the same model as ${incumbent.member.provider.label} (${named}), ` +
+        `so seating both would buy one perspective and report two; oldest probe reading ${describeProbeAge(oldest)}`,
+    });
+  }
+
+  if (dropped.length > 0) {
+    notes.push(
+      `${String(dropped.length)} CLI(s) left the free lane because another CLI already on it serves the same model. ` +
+        'Two CLIs on one model read the same web, and counting that as two backends is the overlap this panel exists to avoid. ' +
+        'Point them at different models, or name one with the `provider` argument to run it on its own.',
+    );
+  }
+  if (free.length > 1 && unprobed > 0) {
+    notes.push(
+      `${String(unprobed)} of ${String(free.length)} CLIs on the free lane have no probed model, so the lane may hold the same model twice ` +
+        'and its members may not be as independent as their count suggests. Nothing is dropped on a guess. ' +
+        'Run `research_doctor` with `probeModels: true` to ask each signed-in CLI which model it serves; the answer is cached.',
+    );
+  }
+
+  return { kept, dropped, notes };
 }
 
 /**
