@@ -130,4 +130,42 @@ The capture pass and the judged pass are manual CLI steps, like BENCH-09's fail-
 
 ## Progress
 
-*(Filled in as the work lands.)*
+**Delivered 27 to 28 July 2026.** `bench/detector/` holds 30 support cases and 18 registry cases; `bench/src/detector/` holds the loader, the projections, the arithmetic, the arms, the report and the two manual passes. `npm run bench:detector` scores it offline. Full method and results in [`docs/bench/detector-eval.md`](../bench/detector-eval.md).
+
+### What it found
+
+**The free path is weaker than the docs implied.** Token containment answered `supports` for **11 of the 23 citations a reader would call bad**: all six whose claim was stronger than the page supported, four of the seven the page contradicts outright, and one the page never addresses. Five-class accuracy over the cases it answered is 30.8% against 23.3% for a detector that answers `supports` to everything.
+
+The cause is structural rather than tunable, which is why it is reported rather than fixed. A contradiction and an overstatement both use the page's own numbers and names, so a check asking whether those tokens appear has nothing to look at. `semver-prerelease-higher-precedence` asserts the exact opposite of a sentence on the page, and every token it carries is on that page.
+
+**The judged mode is much better.** Over the same 30 cases: 80.0% five-class, 96.2% binary, **zero** bad citations waved through, recall 1.00 on `contradicts` and on `unreadable`. Paired: both right on 5, only the judged mode right on 19, only containment right on 3, both wrong on 3. Containment stays the default because the governing rule forbids a model in the scoring loop, and the price of that choice is now a number.
+
+**Link checking is blind here by construction, and that is now a count.** 22 of 30 cited pages resolve with HTTP 200 and do not support their claim. Three of the four walls are served with HTTP 200, and no status code can see any of them. In the binary view, treating a resolving link as a sound citation scores **identically to answering `supports` to everything**.
+
+**The registry family scored 18 of 18**, including all six cases whose correct answer is `unchecked`. Zero were scored `absent`.
+
+### Every acceptance criterion
+
+| # | Where it is met |
+|---|---|
+| AC-1 | `bench/detector/support` (5 verdicts) and `bench/detector/registry` (4) |
+| AC-2 | `rfc6265-samesite`, `semver-prerelease-higher-precedence`, `consent-wall-quarterly-figures`; asserted by `balance.test.ts` |
+| AC-3 | `confusion.ts`, rendered per arm by `report.ts` |
+| AC-4 | `armGap` over identical cases; the gap is printed case by case |
+| AC-5 | `balance.test.ts` runs the degenerate arm over the corpus that ships |
+| AC-6 | `why` is `z.string().min(40)` in `schema.ts` |
+| AC-7 | six `unchecked` cases across six failure modes; `uncheckedScoredAbsent` asserted zero |
+| AC-8 | the loader recomputes every digest and fails the load on a mismatch |
+| AC-9 | `liveButUnsound`, printed as a count and a share |
+
+### Three things worth carrying forward
+
+**The corpus is a snapshot with a shelf life, and it is stamped.** Every fixture records its origin, its date and its SHA-256. That is what makes the eval reproducible and what the prior art says a live-web one can never be. It also means a re-capture is a deliberate act with a visible diff.
+
+**One case had to be edited after capture and says so.** The live ScienceDirect 403 echoes the requesting IP address and a Cloudflare reference number back at the caller. Both were removed and the fixture is marked `constructed` with the reason, rather than committing somebody's IP address to a public repository or quietly redacting a page still labelled `captured`.
+
+**The judged arm was run through a coding CLI, not the product's own utility model.** It spends a subscription already paid for rather than a metered balance, which is the routing rule the product itself follows and how BENCH-09 fail-checked 27 tasks for nothing. The number therefore measures a model of that class answering the product's own question, with the product's own prompt and page cap. The evidence file records which model answered and on what date.
+
+### Verification
+
+`npm run gate` twice, plus the stdio smoke against `dist/index.js`. The wiring is proved by `cli.test.ts`, which spawns the real entry point over its real argv rather than importing a handler: a module with passing tests that nothing calls is a defect this repo has already shipped once.
