@@ -706,3 +706,23 @@ One more finding worth keeping: "Estimated economic value of task is more correl
 All vendor marketing, read for completeness. Genuinely useful items: a **2021 European Science Editing study** (1,653 manuscripts, `doi.org/10.3897/ese.2021.e51999`) reporting an 80% rejection rate with weak reporting implicated in 66% of reviewer rejections; a **2024 JMIR** analysis reporting reference-hallucination rates of **28.6% for GPT-4 and 39.6% for GPT-3.5** on systematic-review citations; and **SANRA** (Baethge et al. 2019) as the narrative-review analogue to PRISMA.
 
 The transferable finding, attributed to Elicit: **"Repeated searches can return different paper sets, complicating search documentation."** AI-assisted search is not reproducible by default, which matters for any research tool claiming a documented method. Everything else on those pages is unbenchmarked product claims.
+
+## Bridgewater, "How Bridgewater Built Pat, The AI Pocket Analyst Tool" (talk transcript, read 27 July 2026)
+
+An applied-AI team at a systematic macro hedge fund describing a research agent deployed to hundreds of investors. Useful here because it is a production system under adversarial cost pressure rather than a demo, and because four of its stated principles were arrived at independently in this repo. Convergent evidence is worth recording precisely because it is easy to mistake for influence later.
+
+**Where it agrees with decisions already made here:**
+
+- *"We enforce correctness in the architecture ... this is regular Python code and so the agents cannot forget to validate. They are forced to validate."* The same rule as this repo's "the host searches; the server enforces": a prompt can ask a model not to invent a citation, a server holding a frozen registry can refuse the draft.
+- *"95% of the time the code that comes out is exactly the same for two different agents ... something much more dependable than vibes-based or LLM-as-judge evals."* Independent support for the benchmark's governing rule that no model sits in the scoring loop.
+- *"We don't really believe in generic powerful agents ... take often very narrow workflows and then benchmark them very heavily."* The archetype tables are this.
+- *"We teach the chat agent not just context ... instead we have step-by-step guides on how to handle certain types of analyses. It feels much more like a product at that point."* Also the archetypes, and the reason they are override tables rather than one long prompt.
+
+**Where it says something this repo had not:**
+
+- The teach loop authors a benchmark **expected to fail** first, to prove the bad behaviour reproduces, then fixes until it passes, then confirms the rest of the suite still passes, then opens a pull request. The ordering is the point and is now an admission rule in BENCH-09.
+- Analysis outputs land in the same store as the inputs, so *"any output can serve as an input to a subsequent one"*. Dossier cannot do this without a manual export and upload; BENCH-12 is the gap.
+- The chat agent and the coding agent are separate so that *"coding is a pure implementation detail"* and each gets unpolluted context. The local loop's lead-and-workers split is the same shape, arrived at from the daymade skill rather than from here.
+- *"Your user is better at writing context than you are, most likely."* Said about letting investors contribute to the context repository directly.
+
+**What it does not establish.** It is a vendor talk about an internal tool with no published benchmark, no baseline anyone else can run, and self-reported numbers (four times faster codegen, 95% reproducibility) that nobody outside the firm can check. Treat the architecture as worth borrowing and the figures as unverified.

@@ -27,6 +27,9 @@ A hundred hand-built gold sets is the long pole, and a thin suite produces confi
 - Every gold fact carries the primary source it came from, so a disputed score can be adjudicated against the source rather than against the author's memory.
 - `asOf` and `reverifiedAt` are both set, honestly.
 - No task whose answer a frontier model already knows without searching, or the benchmark measures recall of training data rather than research.
+- **A new task must be shown to fail before it is admitted.** Run it against at least one backend and confirm it does not already pass. A task that is green the day it is written is testing nothing, and a suite of them reports a score that cannot move.
+
+  Borrowed from Bridgewater's Pocket Analyst, whose teach loop authors a benchmark *expected to fail* to prove the bad behaviour reproduces, fixes until it passes, then confirms the rest of the suite still passes. The order is the load-bearing part: a fix validated only by a test written after it is a fix validated by its own author.
 
 ## Acceptance
 

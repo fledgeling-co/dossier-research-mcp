@@ -1,6 +1,6 @@
 # Orchestrator: the Dossier benchmark
 
-**Started** 27 July 2026 · **Integration branch** `main` · **Fleet size** 11 items, up to 8 concurrent
+**Started** 27 July 2026 · **Integration branch** `main` · **Fleet size** 12 items, up to 8 concurrent
 
 This file is the memory, not the transcript. A fresh session resumes the whole fleet from here alone. If context is compacted, re-read this file, `CLAUDE.md` and `docs/plan/benchmark.md` before doing anything else.
 
@@ -59,6 +59,7 @@ BENCH-09 is hand-authoring work and is the long pole in wall-clock terms. It sta
 | BENCH-09 | The seed task corpus | 01 | Blocked | | |
 | BENCH-10 | Self-eval of Dossier's own checking | 01, 03 | Blocked | | |
 | BENCH-11 | Which combination is best | 02, scorers | Blocked | | |
+| BENCH-12 | A finished report is an input to the next one | none | Queued | | |
 
 ## Context contract
 
@@ -88,3 +89,4 @@ Merges are serialized by the orchestrator, one branch at a time, so conflicts in
 - **27 Jul, pre-triage** — All ten ids claimed in one ledger write rather than allocated serially, since the briefs already carry stable ids. Removes the shared write instead of queueing behind it.
 - **27 Jul, wave 1 started** — BENCH-01 dispatched to an Opus runner. Nothing else can start until it merges.
 - **27 Jul, BENCH-11 added** — Combination scoring. It costs nothing extra to run: BENCH-02 stores every cell raw, so all 2^N subsets are evaluated by merging reports already paid for. This is the payoff from separating the run from the scoring, and it is what will replace the 27 July routing retune that currently rests on a single observation of 4% overlap.
+- **27 Jul, BENCH-12 added** — Not a benchmark slice. A finished report cannot currently ground the next run without a manual export and upload, so Dossier's own output is the one evidence it cannot easily consume. From Bridgewater's Pocket Analyst, whose outputs land in the same store as its inputs. Carries a hard constraint: a prior report is a user's own document, valid primary evidence about what was concluded and never independent evidence the conclusion was right.
