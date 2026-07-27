@@ -15,7 +15,7 @@ serially, through the orchestrator.
 | BENCH-01 | Task format, gold-set schema and loader | [brief](BENCH-01-task-format.md) | In Review | [spec](../specs/spec-BENCH-01.md) | [plan](../plans/plan-BENCH-01.md) |
 | BENCH-02 | The run harness | [brief](BENCH-02-run-harness.md) | In Review | [spec](../specs/spec-BENCH-02.md) | [plan](../plans/plan-BENCH-02.md) |
 | BENCH-03 | Citation integrity scorers | [brief](BENCH-03-citation-integrity.md) | Untriaged | | |
-| BENCH-04 | Accuracy and relevance scorers | [brief](BENCH-04-accuracy-relevance.md) | Untriaged | | |
+| BENCH-04 | Accuracy and relevance scorers | [brief](BENCH-04-accuracy-relevance.md) | Ready for Plan | [spec](../specs/spec-BENCH-04.md) | |
 | BENCH-05 | Due weight, viewpoint coverage | [brief](BENCH-05-due-weight.md) | Untriaged | | |
 | BENCH-06 | Calibration and refusal correctness | [brief](BENCH-06-calibration-refusal.md) | In Review | [spec](../specs/spec-BENCH-06.md) | [plan](../plans/plan-BENCH-06.md) |
 | BENCH-07 | Source quality and syndication | [brief](BENCH-07-source-quality.md) | Untriaged | | |
