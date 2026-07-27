@@ -1,0 +1,84 @@
+id: cvss-scores-july-2026
+category: enumeration
+topic: nvd-cvss-grid
+question: >-
+  For each of CVE-2026-53488, CVE-2026-41579, CVE-2026-54500, CVE-2026-54502 and
+  CVE-2026-54592, give the CVSS v3.1 base score and the CVSS v4.0 base score
+  that the National Vulnerability Database publishes for it. Where the database
+  carries no score under one of those two versions of the metric, say so
+  explicitly rather than converting the other one or estimating.
+asOf: 2026-07-01
+reverifiedAt: 2026-07-27
+
+requiredTerms: [CVSS, NVD]
+
+enumeration:
+  entities: [CVE-2026-53488, CVE-2026-41579, CVE-2026-54500, CVE-2026-54502, CVE-2026-54592]
+  fields: [cvss-v3.1-base-score, cvss-v4.0-base-score]
+  unknownCells:
+    - { entity: CVE-2026-41579, field: cvss-v4.0-base-score }
+    - { entity: CVE-2026-54500, field: cvss-v4.0-base-score }
+    - { entity: CVE-2026-54592, field: cvss-v4.0-base-score }
+    - { entity: CVE-2026-54502, field: cvss-v3.1-base-score }
+
+goldFacts:
+  - id: c53488-v31
+    kind: number
+    value: 8.8
+    unit: CVSS v3.1 base score
+    tolerance: { kind: exact }
+    cell: { entity: CVE-2026-53488, field: cvss-v3.1-base-score }
+    source:
+      url: https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=CVE-2026-53488
+      quote: '"baseScore":8.8,"baseSeverity":"HIGH"'
+      locator: cvssMetricV31[0]
+  - id: c53488-v40
+    kind: number
+    value: 9.4
+    unit: CVSS v4.0 base score
+    tolerance: { kind: exact }
+    cell: { entity: CVE-2026-53488, field: cvss-v4.0-base-score }
+    source:
+      url: https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=CVE-2026-53488
+      quote: '"baseScore":9.4,"baseSeverity":"CRITICAL"'
+      locator: cvssMetricV40[0]
+  - id: c41579-v31
+    kind: number
+    value: 3.3
+    unit: CVSS v3.1 base score
+    tolerance: { kind: exact }
+    cell: { entity: CVE-2026-41579, field: cvss-v3.1-base-score }
+    source:
+      url: https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=CVE-2026-41579
+      quote: '"baseScore":3.3'
+      locator: cvssMetricV31[0]
+  - id: c54500-v31
+    kind: number
+    value: 5.3
+    unit: CVSS v3.1 base score
+    tolerance: { kind: exact }
+    cell: { entity: CVE-2026-54500, field: cvss-v3.1-base-score }
+    source:
+      url: https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=CVE-2026-54500
+      quote: '"baseScore":5.3'
+      locator: cvssMetricV31[0]
+  - id: c54502-v40
+    kind: number
+    value: 6.3
+    unit: CVSS v4.0 base score
+    tolerance: { kind: exact }
+    cell: { entity: CVE-2026-54502, field: cvss-v4.0-base-score }
+    source:
+      url: https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=CVE-2026-54502
+      quote: '"baseScore":6.3'
+      locator: cvssMetricV40[0]
+  - id: c54592-v31
+    kind: number
+    value: 7.5
+    unit: CVSS v3.1 base score
+    tolerance: { kind: exact }
+    cell: { entity: CVE-2026-54592, field: cvss-v3.1-base-score }
+    source:
+      url: https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=CVE-2026-54592
+      quote: '"baseScore":7.5'
+      locator: cvssMetricV31[0]

@@ -1,0 +1,31 @@
+id: runc-setupptmx-cve
+category: technical
+topic: container-runtime-cves
+question: >-
+  A July 2026 advisory for runc described a flaw in setupPtmx during container
+  rootfs setup, fixed in 1.3.6 and in the 1.4.0 and 1.5.0 release candidates.
+  Give the CVE identifier and the CVSS v3.1 base score published for it in the
+  National Vulnerability Database.
+asOf: 2026-07-01
+reverifiedAt: 2026-07-27
+
+requiredTerms: [runc, CVE]
+
+goldFacts:
+  - id: cve-id
+    kind: identifier
+    value: CVE-2026-41579
+    source:
+      url: https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=CVE-2026-41579
+      quote: '"id":"CVE-2026-41579"'
+      locator: vulnerabilities[0].cve.id
+  - id: cvss-v31-base
+    label: CVSS v3.1 base score
+    kind: number
+    value: 3.3
+    unit: CVSS v3.1 base score
+    tolerance: { kind: exact }
+    source:
+      url: https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=CVE-2026-41579
+      quote: '"baseScore":3.3,"baseSeverity":"LOW"'
+      locator: cvssMetricV31[0]

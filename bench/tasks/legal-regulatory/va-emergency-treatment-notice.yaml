@@ -1,0 +1,40 @@
+id: va-emergency-treatment-notice
+category: legal-regulatory
+topic: federal-register-july-2026
+question: >-
+  A Department of Veterans Affairs final rule titled "Expansion of VA Process
+  for 72-Hour Notification of Emergency Treatment" was published in the Federal
+  Register in July 2026. Give its Federal Register document number, its Federal
+  Register citation, its publication date and its effective date.
+asOf: 2026-07-10
+reverifiedAt: 2026-07-27
+
+requiredTerms: [Federal Register, Veterans Affairs]
+
+goldFacts:
+  - id: document-number
+    label: Federal Register document number
+    kind: identifier
+    value: '2026-13971'
+    source:
+      url: https://www.federalregister.gov/api/v1/documents/2026-13971.json
+      quote: '"document_number":"2026-13971"'
+  - id: citation
+    label: Federal Register citation
+    kind: identifier
+    value: 91 FR 42670
+    source:
+      url: https://www.federalregister.gov/api/v1/documents/2026-13971.json
+      quote: '"citation":"91 FR 42670"'
+  - id: publication-date
+    kind: date
+    value: 2026-07-10
+    source:
+      url: https://www.federalregister.gov/api/v1/documents/2026-13971.json
+      quote: '"publication_date":"2026-07-10"'
+  - id: effective-date
+    kind: date
+    value: 2026-08-10
+    source:
+      url: https://www.federalregister.gov/api/v1/documents/2026-13971.json
+      quote: '"effective_on":"2026-08-10"'

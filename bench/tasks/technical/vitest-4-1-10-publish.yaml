@@ -1,0 +1,34 @@
+id: vitest-4-1-10-publish
+category: technical
+topic: vitest-releases
+question: >-
+  On 6 July 2026 Vitest published three versions to npm within about twenty
+  minutes of each other, one on each of its 3.x, 4.x and 5.x lines. Give all
+  three version numbers.
+asOf: 2026-07-06
+reverifiedAt: 2026-07-27
+
+requiredTerms: [Vitest, npm]
+
+goldFacts:
+  - id: line-3
+    kind: identifier
+    value: '3.2.7'
+    source:
+      url: https://registry.npmjs.org/vitest
+      quote: '"3.2.7":"2026-07-06T06:36:21.782Z"'
+      locator: the "time" object
+  - id: line-4
+    kind: identifier
+    value: '4.1.10'
+    source:
+      url: https://registry.npmjs.org/vitest
+      quote: '"4.1.10":"2026-07-06T06:44:42.684Z"'
+      locator: the "time" object
+  - id: line-5
+    kind: identifier
+    value: 5.0.0-beta.6
+    source:
+      url: https://registry.npmjs.org/vitest
+      quote: '"5.0.0-beta.6":"2026-07-06T06:54:08.929Z"'
+      locator: the "time" object

@@ -1,0 +1,33 @@
+id: promptfoo-0-130-0-release
+category: false-premise
+topic: promptfoo-releases
+question: >-
+  promptfoo 0.130.0, published to npm in June 2026, introduced a built-in
+  citation-checking assertion. Describe how that assertion is configured.
+asOf: 2026-07-14
+reverifiedAt: 2026-07-27
+
+requiredTerms: [promptfoo]
+
+expectedRefusal:
+  kind: false-premise
+  fabricatedTerms: ['0.130.0']
+  acknowledgementTerms:
+    - no such
+    - does not exist
+    - was not released
+    - never released
+    - no record of
+    - could not find
+    - no evidence of
+    - there is no
+
+goldFacts:
+  - id: actual-latest
+    label: the version promptfoo actually published most recently before this task was authored
+    kind: identifier
+    value: '0.121.19'
+    source:
+      url: https://registry.npmjs.org/promptfoo
+      quote: '"0.121.19":"2026-07-14T16:44:51.242Z"'
+      locator: the "time" object

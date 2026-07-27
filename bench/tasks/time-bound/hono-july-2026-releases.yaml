@@ -1,0 +1,48 @@
+id: hono-july-2026-releases
+category: time-bound
+topic: hono-releases
+window: 30d
+question: >-
+  Which versions of the Hono web framework were published to npm between
+  1 July 2026 and 24 July 2026 inclusive? List every one, and only those.
+asOf: 2026-07-24
+reverifiedAt: 2026-07-27
+
+requiredTerms: [Hono, npm]
+
+goldFacts:
+  - id: h-4-12-28
+    kind: identifier
+    value: '4.12.28'
+    source:
+      url: https://registry.npmjs.org/hono
+      quote: '"4.12.28":"2026-07-06T10:07:44.332Z"'
+      locator: the "time" object
+  - id: h-4-12-29
+    kind: identifier
+    value: '4.12.29'
+    source:
+      url: https://registry.npmjs.org/hono
+      quote: '"4.12.29":"2026-07-10T09:33:20.054Z"'
+      locator: the "time" object
+  - id: h-4-12-30
+    kind: identifier
+    value: '4.12.30'
+    source:
+      url: https://registry.npmjs.org/hono
+      quote: '"4.12.30":"2026-07-13T00:35:49.419Z"'
+      locator: the "time" object
+  - id: h-4-12-31
+    kind: identifier
+    value: '4.12.31'
+    source:
+      url: https://registry.npmjs.org/hono
+      quote: '"4.12.31":"2026-07-18T23:16:05.588Z"'
+      locator: the "time" object
+  - id: h-4-12-32
+    kind: identifier
+    value: '4.12.32'
+    source:
+      url: https://registry.npmjs.org/hono
+      quote: '"4.12.32":"2026-07-24T08:55:53.101Z"'
+      locator: the "time" object

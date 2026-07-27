@@ -1,0 +1,26 @@
+id: ncomms-schlafen-crispr
+category: primary-literature
+topic: nature-communications-july-2026
+question: >-
+  A paper reporting that prokaryotic Schlafen proteins cleave tRNAs during type
+  III CRISPR immunity was published in Nature Communications in July 2026. Give
+  its DOI and its publication date.
+asOf: 2026-07-02
+reverifiedAt: 2026-07-27
+
+requiredTerms: [CRISPR, DOI]
+
+goldFacts:
+  - id: doi
+    kind: identifier
+    value: 10.1038/s41467-026-74880-6
+    aliases: ['https://doi.org/10.1038/s41467-026-74880-6']
+    source:
+      url: https://api.crossref.org/works/10.1038/s41467-026-74880-6
+      quote: '"DOI":"10.1038/s41467-026-74880-6"'
+  - id: published
+    kind: date
+    value: 2026-07-02
+    source:
+      url: https://api.crossref.org/works/10.1038/s41467-026-74880-6
+      quote: '"published":{"date-parts":[[2026,7,2]]}'

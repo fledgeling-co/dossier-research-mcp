@@ -1,0 +1,63 @@
+id: federal-register-july-2026-grid
+category: enumeration
+topic: federal-register-july-2026
+question: >-
+  For each of Federal Register documents 2026-14043, 2026-14109, 2026-14072 and
+  2026-14315, give the Federal Register citation and the effective date that the
+  Federal Register's own document record carries. Where the record carries no
+  effective date, say so rather than inferring one from the rule text.
+asOf: 2026-07-16
+reverifiedAt: 2026-07-27
+
+requiredTerms: [Federal Register]
+
+enumeration:
+  entities: ['2026-14043', '2026-14109', '2026-14072', '2026-14315']
+  fields: [federal-register-citation, effective-date]
+  unknownCells:
+    - { entity: '2026-14072', field: effective-date }
+    - { entity: '2026-14315', field: effective-date }
+
+goldFacts:
+  - id: d14043-citation
+    kind: identifier
+    value: 91 FR 42845
+    cell: { entity: '2026-14043', field: federal-register-citation }
+    source:
+      url: https://www.federalregister.gov/api/v1/documents/2026-14043.json
+      quote: '"citation":"91 FR 42845"'
+  - id: d14043-effective
+    kind: date
+    value: 2026-07-13
+    cell: { entity: '2026-14043', field: effective-date }
+    source:
+      url: https://www.federalregister.gov/api/v1/documents/2026-14043.json
+      quote: '"effective_on":"2026-07-13"'
+  - id: d14109-citation
+    kind: identifier
+    value: 91 FR 43033
+    cell: { entity: '2026-14109', field: federal-register-citation }
+    source:
+      url: https://www.federalregister.gov/api/v1/documents/2026-14109.json
+      quote: '"citation":"91 FR 43033"'
+  - id: d14109-effective
+    kind: date
+    value: 2026-08-18
+    cell: { entity: '2026-14109', field: effective-date }
+    source:
+      url: https://www.federalregister.gov/api/v1/documents/2026-14109.json
+      quote: '"effective_on":"2026-08-18"'
+  - id: d14072-citation
+    kind: identifier
+    value: 91 FR 42870
+    cell: { entity: '2026-14072', field: federal-register-citation }
+    source:
+      url: https://www.federalregister.gov/api/v1/documents/2026-14072.json
+      quote: '"citation":"91 FR 42870"'
+  - id: d14315-citation
+    kind: identifier
+    value: 91 FR 43543
+    cell: { entity: '2026-14315', field: federal-register-citation }
+    source:
+      url: https://www.federalregister.gov/api/v1/documents/2026-14315.json
+      quote: '"citation":"91 FR 43543"'

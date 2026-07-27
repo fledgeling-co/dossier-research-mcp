@@ -1,0 +1,46 @@
+id: deeptrace-gemini-citation-accuracy
+category: contested
+topic: deeptrace-paper
+question: >-
+  The DeepTRACE paper (arXiv 2509.04499) audits deep-research systems for
+  citation reliability. What citation accuracy does it report for Gemini's
+  deep-research configuration, and is that figure stated consistently throughout
+  the paper?
+asOf: 2025-09-02
+reverifiedAt: 2026-07-27
+
+requiredTerms: [DeepTRACE, citation accuracy, Gemini]
+
+conflictingFigures:
+  - quantity: DeepTRACE citation accuracy reported for Gemini (Deep Research)
+    values:
+      - id: table-figure
+        label: the figure in Table 1
+        kind: number
+        value: 50.3
+        unit: percent
+        tolerance: { kind: exact }
+        source:
+          url: https://arxiv.org/html/2509.04499v1
+          quote: '50.3'
+          locator: Table 1, the Gemini (DR) row, %Citation Accuracy column
+      - id: prose-figure
+        label: the figure in the Results prose
+        kind: number
+        value: 40.3
+        unit: percent
+        tolerance: { kind: exact }
+        source:
+          url: https://arxiv.org/html/2509.04499v1
+          quote: 'only 40.3% citation accuracy (problematic)'
+          locator: Results section, the paragraph discussing Gemini (DR)
+
+goldFacts:
+  - id: paper-title
+    label: the paper the figures come from
+    kind: name
+    value: 'DeepTRACE: Auditing Deep Research AI Systems for Tracking Reliability Across Citations and Evidence'
+    aliases: [DeepTRACE]
+    source:
+      url: https://arxiv.org/abs/2509.04499
+      quote: 'DeepTRACE: Auditing Deep Research AI Systems for Tracking Reliability Across Citations and Evidence'

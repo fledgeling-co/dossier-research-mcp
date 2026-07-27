@@ -1,0 +1,37 @@
+id: undici-three-line-releases
+category: technical
+topic: undici-releases
+question: >-
+  On 24 July 2026 the undici project published a new release on its 8.x line to
+  npm and, within about twenty minutes, maintenance releases on its 7.x and 6.x
+  lines. Give all three version numbers.
+asOf: 2026-07-24
+reverifiedAt: 2026-07-27
+
+requiredTerms: [undici, npm]
+
+goldFacts:
+  - id: line-8
+    label: 8.x release
+    kind: identifier
+    value: '8.9.0'
+    source:
+      url: https://registry.npmjs.org/undici
+      quote: '"8.9.0":"2026-07-24T12:32:49.710Z"'
+      locator: the "time" object
+  - id: line-7
+    label: 7.x release
+    kind: identifier
+    value: '7.29.0'
+    source:
+      url: https://registry.npmjs.org/undici
+      quote: '"7.29.0":"2026-07-24T12:52:58.701Z"'
+      locator: the "time" object
+  - id: line-6
+    label: 6.x release
+    kind: identifier
+    value: '6.28.0'
+    source:
+      url: https://registry.npmjs.org/undici
+      quote: '"6.28.0":"2026-07-24T12:55:27.721Z"'
+      locator: the "time" object

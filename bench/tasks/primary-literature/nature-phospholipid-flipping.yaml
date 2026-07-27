@@ -1,0 +1,40 @@
+id: nature-phospholipid-flipping
+category: primary-literature
+topic: nature-july-2026
+question: >-
+  A research article titled "Heat-triggered phospholipid flipping stabilizes
+  plasma membrane fluidity" was published in Nature in July 2026. Give its DOI,
+  its publication date, the Nature volume it appears in, and its page range.
+asOf: 2026-07-01
+reverifiedAt: 2026-07-27
+
+requiredTerms: [Nature, DOI]
+
+goldFacts:
+  - id: doi
+    kind: identifier
+    value: 10.1038/s41586-026-10726-x
+    aliases: ['https://doi.org/10.1038/s41586-026-10726-x']
+    source:
+      url: https://api.crossref.org/works/10.1038/s41586-026-10726-x
+      quote: '"DOI":"10.1038/s41586-026-10726-x"'
+  - id: published
+    kind: date
+    value: 2026-07-01
+    source:
+      url: https://api.crossref.org/works/10.1038/s41586-026-10726-x
+      quote: '"published":{"date-parts":[[2026,7,1]]}'
+  - id: volume
+    kind: number
+    value: 655
+    unit: dimensionless
+    tolerance: { kind: exact }
+    source:
+      url: https://api.crossref.org/works/10.1038/s41586-026-10726-x
+      quote: '"volume":"655"'
+  - id: pages
+    kind: identifier
+    value: 1060-1069
+    source:
+      url: https://api.crossref.org/works/10.1038/s41586-026-10726-x
+      quote: '"page":"1060-1069"'

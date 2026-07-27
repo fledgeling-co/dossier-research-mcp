@@ -1,0 +1,42 @@
+id: promptfoo-june-2026-releases
+category: time-bound
+topic: promptfoo-releases
+window: 30d
+question: >-
+  Which versions of the promptfoo evaluation harness were published to npm
+  during June 2026? List every one, and only those; do not include versions
+  published in May or July.
+asOf: 2026-06-30
+reverifiedAt: 2026-07-27
+
+requiredTerms: [promptfoo, npm]
+
+goldFacts:
+  - id: p-0-121-14
+    kind: identifier
+    value: '0.121.14'
+    source:
+      url: https://registry.npmjs.org/promptfoo
+      quote: '"0.121.14":"2026-06-02T13:59:19.126Z"'
+      locator: the "time" object
+  - id: p-0-121-15
+    kind: identifier
+    value: '0.121.15'
+    source:
+      url: https://registry.npmjs.org/promptfoo
+      quote: '"0.121.15":"2026-06-05T14:31:09.171Z"'
+      locator: the "time" object
+  - id: p-0-121-16
+    kind: identifier
+    value: '0.121.16'
+    source:
+      url: https://registry.npmjs.org/promptfoo
+      quote: '"0.121.16":"2026-06-16T15:21:36.243Z"'
+      locator: the "time" object
+  - id: p-0-121-17
+    kind: identifier
+    value: '0.121.17'
+    source:
+      url: https://registry.npmjs.org/promptfoo
+      quote: '"0.121.17":"2026-06-16T17:10:37.282Z"'
+      locator: the "time" object

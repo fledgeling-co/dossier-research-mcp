@@ -1,0 +1,42 @@
+id: containerd-label-propagation-cve
+category: technical
+topic: container-runtime-cves
+question: >-
+  In July 2026 an advisory was published for containerd, covering the CRI
+  plugin propagating labels from an image config (the Dockerfile LABEL
+  instruction) onto a container without validation, fixed in 1.7.33, 2.3.2,
+  2.2.5, 2.1.9 and 2.0.10. Give the CVE identifier, the date NVD published the
+  record, and the CVSS v3.1 base score NVD itself assigned.
+asOf: 2026-07-01
+reverifiedAt: 2026-07-27
+
+requiredTerms: [containerd, CVE, CVSS]
+driftTerms: [Kubernetes CVE-2025]
+
+goldFacts:
+  - id: cve-id
+    label: CVE identifier
+    kind: identifier
+    value: CVE-2026-53488
+    source:
+      url: https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=CVE-2026-53488
+      quote: '"id":"CVE-2026-53488"'
+      locator: vulnerabilities[0].cve.id
+  - id: published
+    label: NVD publication date
+    kind: date
+    value: 2026-07-01
+    source:
+      url: https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=CVE-2026-53488
+      quote: '"published":"2026-07-01T02:17:00.467"'
+      locator: vulnerabilities[0].cve.published
+  - id: cvss-v31-base
+    label: CVSS v3.1 base score
+    kind: number
+    value: 8.8
+    unit: CVSS v3.1 base score
+    tolerance: { kind: exact }
+    source:
+      url: https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=CVE-2026-53488
+      quote: '"baseScore":8.8,"baseSeverity":"HIGH"'
+      locator: cvssMetricV31[0], source nvd@nist.gov, type Primary

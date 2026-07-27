@@ -1,0 +1,33 @@
+id: unrar-recvol5-cve
+category: technical
+topic: archive-parser-cves
+question: >-
+  A vulnerability published on 1 July 2026 describes an out-of-bounds heap
+  write in the RAR5 recovery-volume (.rev) parser used by WinRAR and UnRAR,
+  in RecVolumes5::ReadHeader in recvol5.cpp, where the RecItems vector is sized
+  only when the first .rev file in a set is processed. Give the CVE identifier
+  and the CVSS v3.1 base score recorded for it in the National Vulnerability
+  Database.
+asOf: 2026-07-01
+reverifiedAt: 2026-07-27
+
+requiredTerms: [WinRAR, CVE]
+
+goldFacts:
+  - id: cve-id
+    kind: identifier
+    value: CVE-2026-14191
+    source:
+      url: https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=CVE-2026-14191
+      quote: '"id":"CVE-2026-14191"'
+      locator: vulnerabilities[0].cve.id
+  - id: cvss-v31-base
+    label: CVSS v3.1 base score
+    kind: number
+    value: 7.8
+    unit: CVSS v3.1 base score
+    tolerance: { kind: exact }
+    source:
+      url: https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=CVE-2026-14191
+      quote: '"baseScore":7.8,"baseSeverity":"HIGH"'
+      locator: cvssMetricV31[0]

@@ -1,0 +1,41 @@
+id: fcc-ng911-rule-2026
+category: legal-regulatory
+topic: federal-register-july-2026
+question: >-
+  The Federal Communications Commission published a final rule in the Federal
+  Register on 10 July 2026 titled "Facilitating Implementation of Next
+  Generation 911 Services (NG911); Improving 911 Reliability". Give its Federal
+  Register document number, its Federal Register citation, its publication date
+  and its effective date.
+asOf: 2026-07-10
+reverifiedAt: 2026-07-27
+
+requiredTerms: [Federal Register, FCC]
+
+goldFacts:
+  - id: document-number
+    label: Federal Register document number
+    kind: identifier
+    value: '2026-13998'
+    source:
+      url: https://www.federalregister.gov/api/v1/documents/2026-13998.json
+      quote: '"document_number":"2026-13998"'
+  - id: citation
+    label: Federal Register citation
+    kind: identifier
+    value: 91 FR 42794
+    source:
+      url: https://www.federalregister.gov/api/v1/documents/2026-13998.json
+      quote: '"citation":"91 FR 42794"'
+  - id: publication-date
+    kind: date
+    value: 2026-07-10
+    source:
+      url: https://www.federalregister.gov/api/v1/documents/2026-13998.json
+      quote: '"publication_date":"2026-07-10"'
+  - id: effective-date
+    kind: date
+    value: 2026-08-10
+    source:
+      url: https://www.federalregister.gov/api/v1/documents/2026-13998.json
+      quote: '"effective_on":"2026-08-10"'

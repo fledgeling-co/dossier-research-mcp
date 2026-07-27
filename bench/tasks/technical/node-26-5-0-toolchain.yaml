@@ -1,0 +1,47 @@
+id: node-26-5-0-toolchain
+category: technical
+topic: nodejs-releases
+question: >-
+  Node.js shipped exactly one release on its 26.x Current line during July 2026.
+  Give the version number, the release date, the V8 engine version that release
+  bundles, and the npm version that ships with it.
+asOf: 2026-07-08
+reverifiedAt: 2026-07-27
+
+requiredTerms: [Node.js, V8, npm]
+driftTerms: [Deno, Bun]
+
+goldFacts:
+  - id: version
+    label: Node.js version
+    kind: identifier
+    value: v26.5.0
+    aliases: ['26.5.0', 'Node.js 26.5.0', 'Node 26.5.0']
+    source:
+      url: https://nodejs.org/dist/index.json
+      quote: '"version":"v26.5.0","date":"2026-07-08"'
+      locator: the v26.5.0 entry, first element of the array
+  - id: release-date
+    label: release date
+    kind: date
+    value: 2026-07-08
+    source:
+      url: https://nodejs.org/dist/index.json
+      quote: '"version":"v26.5.0","date":"2026-07-08"'
+      locator: the v26.5.0 entry, "date" field
+  - id: v8-version
+    label: bundled V8
+    kind: identifier
+    value: '14.6.202.34'
+    source:
+      url: https://nodejs.org/dist/index.json
+      quote: '"npm":"11.17.0","v8":"14.6.202.34"'
+      locator: the v26.5.0 entry, "v8" field
+  - id: npm-version
+    label: bundled npm
+    kind: identifier
+    value: '11.17.0'
+    source:
+      url: https://nodejs.org/dist/index.json
+      quote: '"npm":"11.17.0","v8":"14.6.202.34"'
+      locator: the v26.5.0 entry, "npm" field

@@ -1,0 +1,40 @@
+id: pnas-synuclein-pmo-chimeras
+category: primary-literature
+topic: pnas-july-2026
+question: >-
+  A PNAS paper on targeted alpha-synuclein mRNA degradation by PMO-based
+  RNA-degrading chimeras appeared in July 2026. Give its DOI, its publication
+  date, and the PNAS volume and issue it appears in.
+asOf: 2026-07-14
+reverifiedAt: 2026-07-27
+
+requiredTerms: [PNAS, DOI]
+
+goldFacts:
+  - id: doi
+    kind: identifier
+    value: 10.1073/pnas.2526461123
+    aliases: ['https://doi.org/10.1073/pnas.2526461123']
+    source:
+      url: https://api.crossref.org/works/10.1073/pnas.2526461123
+      quote: '"DOI":"10.1073/pnas.2526461123"'
+  - id: published
+    kind: date
+    value: 2026-07-14
+    source:
+      url: https://api.crossref.org/works/10.1073/pnas.2526461123
+      quote: '"published":{"date-parts":[[2026,7,14]]}'
+  - id: volume
+    kind: number
+    value: 123
+    unit: dimensionless
+    tolerance: { kind: exact }
+    source:
+      url: https://api.crossref.org/works/10.1073/pnas.2526461123
+      quote: '"volume":"123"'
+  - id: issue
+    kind: identifier
+    value: '29'
+    source:
+      url: https://api.crossref.org/works/10.1073/pnas.2526461123
+      quote: '"issue":"29"'

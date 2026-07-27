@@ -1,0 +1,40 @@
+id: natural-resource-damages-rule
+category: legal-regulatory
+topic: federal-register-july-2026
+question: >-
+  A final rule titled "Natural Resource Damages for Hazardous Substances" was
+  published in the Federal Register in July 2026. Give its Federal Register
+  document number, its Federal Register citation, its publication date and its
+  effective date.
+asOf: 2026-07-13
+reverifiedAt: 2026-07-27
+
+requiredTerms: [Federal Register, natural resource damages]
+
+goldFacts:
+  - id: document-number
+    label: Federal Register document number
+    kind: identifier
+    value: '2026-14052'
+    source:
+      url: https://www.federalregister.gov/api/v1/documents/2026-14052.json
+      quote: '"document_number":"2026-14052"'
+  - id: citation
+    label: Federal Register citation
+    kind: identifier
+    value: 91 FR 42870
+    source:
+      url: https://www.federalregister.gov/api/v1/documents/2026-14052.json
+      quote: '"citation":"91 FR 42870"'
+  - id: publication-date
+    kind: date
+    value: 2026-07-13
+    source:
+      url: https://www.federalregister.gov/api/v1/documents/2026-14052.json
+      quote: '"publication_date":"2026-07-13"'
+  - id: effective-date
+    kind: date
+    value: 2026-08-12
+    source:
+      url: https://www.federalregister.gov/api/v1/documents/2026-14052.json
+      quote: '"effective_on":"2026-08-12"'
