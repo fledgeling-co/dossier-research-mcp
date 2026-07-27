@@ -55,12 +55,12 @@ BENCH-09 is hand-authoring work and is the long pole in wall-clock terms. It sta
 | BENCH-05 | Due weight, viewpoint coverage | 01 | **Merged** | `ai/bench-05` | 11 defects found and fixed |
 | BENCH-06 | Calibration and refusal correctness | 01 | **Merged** | `ai/bench-06` | 954 tests; took recency, found a product bug |
 | BENCH-07 | Source quality and syndication | 01 | **Merged** | `ai/bench-07` | syndication, 12 critic defects |
-| BENCH-08 | Reporting and comparison | 02, scorers | **Running** | | |
+| BENCH-08 | Reporting and comparison | 02, scorers | **Merged** | `ai/bench-08` | 1863 tests; found its own defect twice |
 | BENCH-09 | The seed task corpus | 01 | **Merged** | `ai/bench-09` | 1001 tests; 7 admitted, 20 quarantined, $0 spent |
 | BENCH-10 | Self-eval of Dossier's own checking | 01, 03 | **Running** | | |
 | BENCH-11 | Which combination is best | 02, scorers | **Running** | | |
 | BENCH-12 | A finished report is an input to the next one | none | **Merged** | `ai/bench-12` | 1717 tests; ships `research_ground` |
-| BENCH-13 | The statistics | 02, 08 | Blocked | | |
+| BENCH-13 | The statistics | 02, 08 | Ready | | |
 
 ## Context contract
 
@@ -158,3 +158,12 @@ Seven concurrent runners exhausted the account binding. Four then ran for hours 
 What actually bounds the cost is not the concurrency number, it is **committing early**. The first failure took four worktrees with zero commits between them and cost hours of re-derivation. The second took three worktrees holding 11, 9 and 5 commits and cost minutes. Every runner prompt now says so, and the difference between the two waves is the whole argument.
 
 - **28 Jul, wave 3 resumed** — BENCH-08, 10 and 11, all three killed by capacity mid-flight and all three cheap to resume. BENCH-08 reported two review findings before dying, one of which is that its own matrix can print a confident-looking spread from single runs. That is the exact failure the slice exists to prevent, found in its own output, and it has been told to recover both findings before continuing.
+- **28 Jul, BENCH-08 merged** — 1863 tests green. **The failure it exists to prevent appeared twice in its own output, and the second instance was only caught on review.**
+
+  Two-stage aggregation, repetitions within a task then tasks within a category, has a hole: a backend run *once* per task across six tasks still produces a genuine six-task spread, so a naive "does this figure have a spread" check would have ranked a set of single runs. Fixed by carrying the repetition count up from stage one and testing it over the **weakest** task rather than the average. Then the same defect reappeared in rendering: with the ranking correctly withheld, the matrix still printed `74.5% [68.3%-80.8%] (n=6)`, which reads as run-to-run variance and is not.
+
+  Two more worth naming. **Total spend was a median times a count rather than a sum**, wrong whenever cell costs differ and the one number nobody should have to check. And a malformed `--as-of` like `2026-02-31` parsed happily into 3 March, silently moving every staleness answer.
+
+  **A real pipeline gap, needing an owner:** recency is permanently unavailable and says so on every report. The durability axis BENCH-06 built needs a publication date per source, and neither the cell store nor BENCH-03's `PageEvidence` records one; `PageEvidence` carries when a page was *checked*, which is not the same thing. Approximating from fetch time would grade every source fresh. Closing it means recording a publication date at evidence-collection time, which is BENCH-02 or BENCH-03 territory rather than a reporting fix.
+
+  BENCH-13 is unblocked by this merge.
