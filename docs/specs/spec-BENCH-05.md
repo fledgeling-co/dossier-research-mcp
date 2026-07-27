@@ -113,7 +113,7 @@ Implementation plan: [`docs/plans/plan-BENCH-05.md`](../plans/plan-BENCH-05.md) 
 - `bench/src/score/due-weight/text.ts` — normalisation and literal, boundary-respecting term matching, plus the proximity primitives.
 - `bench/src/score/due-weight/numbers.ts` — numeric-mention extraction and tolerance comparison.
 - `bench/src/score/due-weight/index.ts` — the three metrics, the per-task result, and the suite aggregate.
-- Four test files, 89 tests, traced to `DUEWT-01` through `DUEWT-25` in `docs/test-plan.md`.
+- Four test files, 97 tests, traced to `DUEWT-01` through `DUEWT-32` in `docs/test-plan.md`.
 - `docs/bench/due-weight.md`, plus the CHANGELOG entry, the ledger row, and the two new paths in `CLAUDE.md`.
 
 **The acceptance criteria, and how each is discharged:**
@@ -131,6 +131,15 @@ Implementation plan: [`docs/plans/plan-BENCH-05.md`](../plans/plan-BENCH-05.md) 
 4. *Medium.* Word boundaries indexed UTF-16 code units, so a lone surrogate read as a non-letter and a term matched inside a word joined by a supplementary-plane character. Boundaries are now whole code points.
 5. *Low, accepted with a measurement rather than churn.* Repeated full-report scans. Measured: a 256k-character report, which is about the size this product returns, normalises in 15ms, yields 2,000 numeric mentions in 3ms, and takes under 1ms for the cue sweep.
 
+**A second adversarial review, in family, found two more Criticals that the first did not.** It was launched as a redundancy while the Codex lane looked dead, and it earned its place. Both findings defeated the acceptance criterion, and neither was visible to the fixture as written:
+
+1. *Critical.* The guard recognised a fringe claim **only by the exact wording the gold set records**, which is private to the task author. A real backend never emits it, so one that cited the fringe source and paraphrased the claim scored a perfect 1.0. Dissent recall has always had two doors, URL or term, and the guard had one; the asymmetry was the hole. A claim is now raised by its term **or** by a citation of its source. The reviewer's sharper point is recorded rather than softened: the original fixture proved the criterion partly by handing the hedging backend the gold set's own string.
+2. *Critical.* **One debunking sentence laundered every fringe claim inside the proximity window** — six documented claims presented as live controversies scored 1.0. This had been seen earlier in the branch as a red test and worked around by moving the fixture's claims apart, which is the defect restated as a test precondition, and the reviewer said so. A cue is now attributed to the claim it **follows**, because a report states a claim and then dismisses it. That also resolves what had made the first attempt fail: a report dismissing four claims in sequence keeps credit for all four, where nearest-in-either-direction gave it one.
+
+Four more from the same review, each reproduced: one number stated twice satisfied two gold values with overlapping tolerances, because matching was over mentions rather than distinct values and reports repeat a figure constantly; an empty report scored 1.0 overall on a fringe-only corpus; `50%-60%` read as fifty and minus sixty; and the `COVID-19` rule added earlier silently deleted the right-hand figure of every magnitude-suffixed range, contradicting this item's own documentation. Plus NFC composition folding, bidi controls, URL and clock-time masking, spaced two-letter magnitudes, a dead export and a NaN guard.
+
+**Two constants were untested in the strict sense.** Widening `UNIT_PROXIMITY_CHARS` from 24 to 5000, and pinning `NumericMention.index` to 0, both left the suite green. Each now fails a named test.
+
 **Two defects found before the reviewer, by asking what a degenerate input scores.** A single stated number could satisfy two gold values whose tolerances overlap, scoring a one-sided report as having disclosed a disagreement it never mentioned; assignment is now a maximum bipartite matching, and the guard test was checked in both directions, failing against the greedy implementation and passing against the matching one. And a guard score of 1.0 turned out to be ambiguous, because a report that says nothing at all earns it; the summary now reports `guardExercised` and says so in words when the guard passed without anything putting it to the question.
 
 **One change was tried and reverted on evidence.** Attributing each rejection cue to the single nearest claim closes a narrow hole where one cue credits two claims. It also breaks the common case: a report dismissing four claims in sequence has each cue sitting nearer the *next* claim's mention than its own, so three of four score as false balance. Trading a narrow false negative for a broad false positive against honest reports is the wrong way round. The leniency stays, is stated in the output, and is pinned by a test so it cannot change unnoticed.
@@ -138,7 +147,7 @@ Implementation plan: [`docs/plans/plan-BENCH-05.md`](../plans/plan-BENCH-05.md) 
 **Three claims corrected against measurement rather than left standing.** `canonicaliseUrl` preserves the URL scheme, which the spec had assumed it folded, so the `http`/`https` fold is this scorer's own layer and is documented as such rather than changing product behaviour to make the benchmark's numbers nicer. The plan's floating-point example was wrong: `1.2 * 1e9` is exact and `1.07 * 1e9` is not. And the plan's local date-rejection rule could not work, because a date and a numeric range are the same shape at the hyphen.
 
 **Gates (actually run, on the final tree):**
-- `npm run gate` exit 0, **twice consecutively**: typecheck, lint, lint:source, lint:docs, test:all, build. 36 test files, 942 passed, 2 skipped, identical both runs.
+- `npm run gate` exit 0, **twice consecutively**: typecheck, lint, lint:source, lint:docs, test:all, build. 36 test files, 950 passed, 2 skipped, identical both runs.
 - stdio smoke against `dist/index.js`: initialize ok, `tools/list` returns 36 tools, zero non-JSON lines on stdout. A regression check, since this item adds no MCP surface.
 - Real-Node out-of-transform run via `tsx` across the `bench/` to `src/` import edge: the hedger scores 1/0/0, the honest backend 1/1/1, the guard-less corpus withholds its overall, and the synonym limit is present in the output.
 - `npm pack --dry-run`: zero `bench/` and zero `dist/bench/` entries.
