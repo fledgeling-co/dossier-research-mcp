@@ -488,6 +488,13 @@ The matrix is task times backend times repetition, and the money is spent one ce
 | **DUEWT-23** | A fringe claim the report never raised is excluded from the guard's denominator, so surfacing one of twenty as contested scores zero rather than nineteen twentieths | unit: `due-weight-hedging` | ✓ |
 | **DUEWT-24** | A written-out date, a hyphenated token such as COVID-19, and a fraction yield no figures, while a range and a leading-dot decimal still do | unit: `due-weight-numbers` | ✓ |
 | **DUEWT-25** | A word boundary is decided on whole code points, so a term is not matched inside a word joined by a supplementary-plane letter | unit: `due-weight-text` | ✓ |
+| **DUEWT-26** | One debunking sentence does not launder six fringe claims presented as live, and a report dismissing several claims in sequence is still credited for all of them | unit: `due-weight-hedging` | ✓ |
+| **DUEWT-27** | A report that cites the fringe source and paraphrases the claim is seen by the guard, and is credited when it dismisses that source | unit: `due-weight-hedging` | ✓ |
+| **DUEWT-28** | One number stated twice does not satisfy two gold values whose tolerances overlap | unit: `due-weight` | ✓ |
+| **DUEWT-29** | The unit window and the disagreement window are both measured from where the figure actually sits, so widening either constant fails a test | unit: `due-weight` | ✓ |
+| **DUEWT-30** | The overall is withheld when the guard is the only measured metric and nothing exercised it, so an empty report cannot score one | unit: `due-weight-hedging` | ✓ |
+| **DUEWT-31** | A term whose accents compose differently still matches, and a bidi control is dropped like a zero-width space | unit: `due-weight-text` | ✓ |
+| **DUEWT-32** | A percentage range, a magnitude-suffixed range and a spaced two-letter magnitude all read correctly, and digits inside a URL or a clock time are not figures | unit: `due-weight-numbers` | ✓ |
 
 ### The paid project
 

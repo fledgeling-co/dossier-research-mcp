@@ -79,7 +79,7 @@ const NUMERIC_CORE = /(?:\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?|\.\d+)(?:e[-
 const ATTACHED_MAGNITUDE = /^(thousand|trillion|billion|million|bn|mn|tn|k|m|b|t)(?![\p{L}\p{N}])/u;
 
 /** Magnitude written as a whole word after a space. Words only, for the reason above. */
-const SPACED_MAGNITUDE = /^ (thousand|million|billion|trillion)(?![\p{L}\p{N}])/u;
+const SPACED_MAGNITUDE = /^ (thousand|million|billion|trillion|bn|mn|tn)(?![\p{L}\p{N}])/u;
 
 const MAGNITUDE_PLACES: Readonly<Record<string, number>> = {
   thousand: 3,
@@ -107,8 +107,22 @@ const VERSION_TAIL = /^\.\d/;
 const AMBIGUOUS_GROUP_TAIL = /^,\d/;
 /** `1/3` — a fraction or a path component, not the figure one. */
 const FRACTION_TAIL = /^\/\d/;
-const WORD_CHAR = /[\p{L}\p{N}]/u;
 const LETTER = /\p{L}/u;
+/** Where a minus sign can legitimately begin a number. */
+const OPENS_A_NUMBER = /[\s([{<"']/u;
+/** The magnitude words, longest first, for looking backwards from a hyphen. */
+const MAGNITUDE_TAIL = /(thousand|trillion|billion|million|bn|mn|tn|k|m|b|t)$/;
+
+/**
+ * Whether the letters immediately before `at` spell a magnitude.
+ *
+ * `$1.15bn-1.2bn` is a range of two figures; `COVID-19` is one token. Both are
+ * letters then a hyphen then digits, and only the letters tell them apart.
+ */
+function endsWithMagnitude(text: string, at: number): boolean {
+  const run = /[\p{L}]+$/u.exec(text.slice(Math.max(0, at - 12), at));
+  return run !== null && MAGNITUDE_TAIL.test(run[0]);
+}
 const STARTS_WORD = /^[\p{L}\p{N}]/u;
 const PERCENT_TAIL = /^ ?%/;
 
@@ -125,8 +139,22 @@ export interface NumericMention {
 }
 
 /** Replace every date-shaped run with the same number of `#`, so offsets survive. */
+/**
+ * A URL, and a clock time.
+ *
+ * Digits inside a URL are an identifier, not a figure the report stated: a
+ * citation carrying `?rev=1150000000` would otherwise credit a report for
+ * naming a number that appears nowhere in its prose. A time of day is the same
+ * class as a date and was left behind when dates were masked, so
+ * `2026-07-27T10:30:00Z` was yielding the figure 30.
+ */
+const NOISE_SHAPES = /https?:\/\/[^\s<>"')\]]+|(?<!\d)\d{1,2}:\d{2}(?::\d{2})?/g;
+
+/** Replace date, URL and time runs with the same number of `#`, so offsets survive. */
 export function maskDateShapes(text: string): string {
-  return text.replace(DATE_SHAPES, (run) => '#'.repeat(run.length));
+  return text
+    .replace(NOISE_SHAPES, (run) => '#'.repeat(run.length))
+    .replace(DATE_SHAPES, (run) => '#'.repeat(run.length));
 }
 
 /**
@@ -179,18 +207,22 @@ export function extractNumericMentions(text: string): NumericMention[] {
     let spanStart = start;
     if (before === '-' || before === '+') {
       const beforeSign = masked[start - 2];
-      if (beforeSign === undefined || !WORD_CHAR.test(beforeSign)) {
-        // At a boundary, so a genuine sign.
+      if (beforeSign === undefined || OPENS_A_NUMBER.test(beforeSign)) {
+        // Only at a real opening is a hyphen a minus sign. Anything else before
+        // it means it separates two things: `50%-60%` used to read as fifty and
+        // MINUS sixty, inventing a negative figure and losing a real one.
         negative = before === '-';
         spanStart = start - 1;
-      } else if (LETTER.test(beforeSign)) {
+      } else if (LETTER.test(beforeSign) && !endsWithMagnitude(masked, start - 1)) {
         // A letter then a hyphen then digits is one hyphenated token: `COVID-19`,
-        // `F-16`, `GPT-4`. The digits name the thing, they are not a figure about
-        // it, and feeding them to the conflict matcher invents evidence.
+        // `F-16`, `GPT-4`. The digits name the thing rather than measure it.
+        // Unless those letters are a magnitude, in which case this is a range of
+        // figures: `$1.15bn-1.2bn` must not lose its right-hand side, which is
+        // what this rule did when it was first written.
         continue;
       }
-      // Otherwise a digit preceded the hyphen, so this is a range such as
-      // `1150-1200` and the number on the right is real and unsigned.
+      // Otherwise it separates two figures, as in a range, and the number on the
+      // right is real and unsigned.
     } else if (before !== undefined && REJECT_BEFORE.test(before)) {
       continue;
     }

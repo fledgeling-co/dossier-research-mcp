@@ -62,7 +62,26 @@ const TYPOGRAPHIC_FOLDS = new Map<string, string>([
  * outright rather than folded to a space, because turning them into whitespace
  * would split a word in two and lose the match this fold exists to keep.
  */
-const INVISIBLE = new Set(['­', '​', '‌', '‍', '﻿']);
+const INVISIBLE = new Set([
+  '\u00ad', // soft hyphen
+  '\u200b', // zero-width space
+  '\u200c', // zero-width non-joiner
+  '\u200d', // zero-width joiner
+  '\ufeff', // byte-order mark
+  // Bidi controls. Same class as the zero-width set: invisible, and dropped
+  // rather than folded to a space, because a space would split a word in two.
+  '\u200e',
+  '\u200f',
+  '\u202a',
+  '\u202b',
+  '\u202c',
+  '\u202d',
+  '\u202e',
+  '\u2066',
+  '\u2067',
+  '\u2068',
+  '\u2069',
+]);
 
 const WHITESPACE = /\s/u;
 const WORD_CHAR = /[\p{L}\p{N}]/u;
@@ -78,7 +97,12 @@ const WORD_CHAR = /[\p{L}\p{N}]/u;
 export function normaliseForMatch(text: string): string {
   let out = '';
   let lastWasSpace = false;
-  for (const ch of text) {
+  // Compose first. `Gödel` typed on one machine and `Go\u0308del` copied from a web
+  // page are the same word and, without this, never match: an out-of-family
+  // reviewer demonstrated the miss. NFKC would also fold `ﬁ` and fullwidth
+  // digits, and is deliberately not used, because it additionally rewrites
+  // characters that change what a figure says.
+  for (const ch of text.normalize('NFC')) {
     if (INVISIBLE.has(ch)) continue;
     if (WHITESPACE.test(ch)) {
       if (!lastWasSpace) {
@@ -155,18 +179,6 @@ export function findTermPositions(normalisedText: string, term: string): number[
 /** Whether a term occurs at all. */
 export function containsTerm(normalisedText: string, term: string): boolean {
   return findTermPositions(normalisedText, term).length > 0;
-}
-
-/** Every position where any of the terms occurs, ascending and deduplicated. */
-export function findAnyTermPositions(
-  normalisedText: string,
-  terms: readonly string[],
-): number[] {
-  const all = new Set<number>();
-  for (const t of terms) {
-    for (const p of findTermPositions(normalisedText, t)) all.add(p);
-  }
-  return [...all].sort((a, b) => a - b);
 }
 
 /**

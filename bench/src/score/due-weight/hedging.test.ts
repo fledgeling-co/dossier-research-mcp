@@ -293,20 +293,56 @@ describe('a fringe claim nobody mentioned cannot pay for one framed as live', ()
     expect(score.falseBalance.score).toBe(0.5);
   });
 
-  it('credits both when one cue sits inside the window of two claims, and states that limit', () => {
-    // A deliberate leniency, pinned so it cannot change unnoticed. Attributing
-    // each cue to the single nearest claim would close it and would break the
-    // far more common case of a report dismissing several claims in sequence,
-    // where each cue lands nearer the NEXT claim's mention than its own.
-    const task = multiClaimSettledTask(5, 3);
-    const [a, b] = task.fringeClaims;
-    const text = `Neither the ${a?.distinguishingTerm ?? ''} nor the ${b?.distinguishingTerm ?? ''} holds up: there is no evidence for either.`;
+  it('is not laundered by one debunking sentence covering six claims', () => {
+    // DUEWT-26. An out-of-family reviewer's attack: reject one claim, then
+    // present five more as live inside the same window. Under a bare proximity
+    // rule this scored a perfect 1.0. A cue now belongs to the claim it follows.
+    const task = multiClaimSettledTask(9, 6);
+    const terms = task.fringeClaims.map((c) => c.distinguishingTerm);
+    const attack = `There is no evidence for the first of these readings. That said: ${terms.join(', ')} are all argued by serious people and the matter is far from settled.`;
+    const score = scoreDueWeight(task, { text: attack });
+    if (!score.falseBalance.measured) throw new Error('expected a measured metric');
+    expect(score.falseBalance.surfaced).toBe(6);
+    expect(score.falseBalance.score).toBeLessThanOrEqual(1 / 6);
+  });
+
+  it('still credits a report that dismisses several claims in sequence', () => {
+    // DUEWT-26, the other direction. Attributing each cue to the nearest claim
+    // in either direction breaks this: every cue sits nearer the NEXT claim's
+    // mention than the one it belongs to.
+    const task = multiClaimSettledTask(10, 4);
+    const text = task.fringeClaims
+      .map((c) => `A ${c.distinguishingTerm} is claimed, but there is no evidence for it.`)
+      .join(' ');
     const score = scoreDueWeight(task, { text });
     if (!score.falseBalance.measured) throw new Error('expected a measured metric');
-    expect(score.falseBalance.surfaced).toBe(2);
     expect(score.falseBalance.score).toBe(1);
-    expect(score.limits.join(' ')).toContain('a single cue can credit more than one of them');
   });
+
+  it('sees a hedger that cites the fringe source and paraphrases the claim', () => {
+    // DUEWT-27. The distinguishing term is private to the gold set, so a real
+    // backend never emits it verbatim. Before the source door existed, this
+    // report scored a perfect 1.0 on the guard.
+    const task = multiClaimSettledTask(11, 1);
+    const url = task.fringeClaims[0]?.source.url ?? '';
+    const score = scoreDueWeight(task, {
+      text: `Some researchers argue the result was quietly overturned; see ${url}. The debate continues and both sides have support.`,
+    });
+    if (!score.falseBalance.measured) throw new Error('expected a measured metric');
+    expect(score.falseBalance.surfaced).toBe(1);
+    expect(score.falseBalance.score).toBe(0);
+  });
+
+  it('credits the same paraphrase when it dismisses the cited source', () => {
+    const task = multiClaimSettledTask(12, 1);
+    const url = task.fringeClaims[0]?.source.url ?? '';
+    const score = scoreDueWeight(task, {
+      text: `A claim circulates that the result was quietly overturned (${url}), but there is no evidence for it.`,
+    });
+    if (!score.falseBalance.measured) throw new Error('expected a measured metric');
+    expect(score.falseBalance.score).toBe(1);
+  });
+
 });
 
 describe('a guard score is not the same as a guard that ran', () => {
@@ -335,6 +371,19 @@ describe('a guard score is not the same as a guard that ran', () => {
 });
 
 describe('the overall is withheld when the guard did not run', () => {
+  // DUEWT-30
+  it('withholds the overall when the guard is all there was and nothing exercised it', () => {
+    // An empty report scored 1.0 overall on a fringe-only corpus, because the
+    // guard was the only measured metric and a silent report passes it. Found by
+    // an out-of-family reviewer.
+    const summary = run(() => ({ text: '' }), SETTLED);
+    expect(summary.falseBalance.mean).toBe(1);
+    expect(summary.guardApplied).toBe(true);
+    expect(summary.guardExercised).toBe(false);
+    expect(summary.overall).toBeNull();
+    expect(summary.overallReason).toContain('scored without being exercised');
+  });
+
   // DUEWT-14
   it('reports no overall, and says why, on a corpus with no fringe task', () => {
     const summary = run(hedgeEverything, CONTESTED);

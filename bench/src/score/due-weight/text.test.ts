@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   PROXIMITY_CHARS,
   containsTerm,
-  findAnyTermPositions,
   findNearbyCue,
   findTermPositions,
   nearestDistance,
@@ -51,6 +50,22 @@ describe('normaliseForMatch', () => {
   it('is idempotent, so normalising a term twice cannot change it', () => {
     const once = normaliseForMatch('A  “Term”\nwith  spacing');
     expect(normaliseForMatch(once)).toBe(once);
+  });
+});
+
+describe('composition folding', () => {
+  it('matches a term whose accents are composed differently, which never matched before', () => {
+    const composed = 'G\u00f6del';
+    const decomposed = 'Go\u0308del';
+    expect(composed).not.toBe(decomposed);
+    expect(normaliseForMatch(composed)).toBe(normaliseForMatch(decomposed));
+    expect(containsTerm(normaliseForMatch(`the ${decomposed} result`), composed)).toBe(true);
+    expect(containsTerm(normaliseForMatch(`the ${composed} result`), decomposed)).toBe(true);
+  });
+
+  it('drops a bidi control the way it drops a zero-width space', () => {
+    expect(containsTerm(normaliseForMatch('over\u200estated'), 'overstated')).toBe(true);
+    expect(containsTerm(normaliseForMatch('\u202boverstated\u202c'), 'overstated')).toBe(true);
   });
 });
 
@@ -115,13 +130,6 @@ describe('findTermPositions', () => {
   it('containsTerm agrees with findTermPositions', () => {
     expect(containsTerm(text, 'overstated by a factor of two')).toBe(true);
     expect(containsTerm(text, 'exaggerated twofold')).toBe(false);
-  });
-});
-
-describe('findAnyTermPositions', () => {
-  it('merges, deduplicates and sorts across terms', () => {
-    const text = normaliseForMatch('beta alpha beta');
-    expect(findAnyTermPositions(text, ['beta', 'alpha', 'beta'])).toEqual([0, 5, 11]);
   });
 });
 

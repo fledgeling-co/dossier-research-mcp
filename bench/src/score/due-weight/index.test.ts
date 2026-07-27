@@ -302,6 +302,70 @@ describe('conflict acknowledgement', () => {
     expect(values.find((v) => v.id === 'loose')?.matchedText).toBe('1,150,000,000');
   });
 
+  it('does not let one number stated twice satisfy two gold values', () => {
+    // DUEWT-28. Matching over distinct MENTIONS enforces one mention per value
+    // and still let a repeated figure satisfy both, which reports do constantly:
+    // abstract, body, table. Found by an out-of-family reviewer.
+    const task = buildTask({
+      category: 'contested',
+      conflictingFigures: [
+        {
+          quantity: 'reported revenue',
+          values: [
+            { ...numericValue('a', 1200000000), tolerance: { kind: 'relative', fraction: 0.1 } },
+            { ...numericValue('b', 1150000000), tolerance: { kind: 'relative', fraction: 0.1 } },
+          ],
+        },
+      ],
+    });
+    const once = scoreDueWeight(task, { text: 'Reported revenue was 1.18 billion.' });
+    const twice = scoreDueWeight(task, {
+      text: 'Reported revenue was 1.18 billion. As noted, reported revenue was 1.18 billion.',
+    });
+    if (!once.conflictAcknowledgement.measured || !twice.conflictAcknowledgement.measured) {
+      throw new Error('expected measured metrics');
+    }
+    expect(once.conflictAcknowledgement.findings[0]?.outcome).toBe('one-sided');
+    expect(twice.conflictAcknowledgement.findings[0]?.outcome).toBe('one-sided');
+  });
+
+  it('measures the unit window from the figure, so a unit far away is not nearby', () => {
+    // DUEWT-29. UNIT_PROXIMITY_CHARS survived a mutation to 5000 because no test
+    // constrained the window, only the adjacent and absent cases.
+    const near = scoreDueWeight(withConflict(), {
+      text: 'Reported revenue was USD 1,200,000,000 and USD 1,150,000,000.',
+    });
+    const far = scoreDueWeight(withConflict(), {
+      text: `Reported revenue was 1,200,000,000 and 1,150,000,000.${' padding.'.repeat(200)} All figures are USD.`,
+    });
+    if (!near.conflictAcknowledgement.measured || !far.conflictAcknowledgement.measured) {
+      throw new Error('expected measured metrics');
+    }
+    expect(near.conflictAcknowledgement.findings[0]?.values.every((v) => v.unitNearby)).toBe(true);
+    expect(far.conflictAcknowledgement.findings[0]?.values.some((v) => v.unitNearby)).toBe(false);
+    expect(far.conflictAcknowledgement.score).toBe(1);
+  });
+
+  it('measures the disagreement window from where the figure actually sits', () => {
+    // DUEWT-29. NumericMention.index survived being pinned to 0, because nothing
+    // asserted a distance measured from it. Here the quantity phrase is absent,
+    // so the figure is the only anchor: a cue far from it must not count.
+    const task = buildTask({
+      category: 'contested',
+      conflictingFigures: [
+        {
+          quantity: 'consolidated group turnover',
+          values: [numericValue('filing', 1200000000), numericValue('press', 1150000000)],
+        },
+      ],
+    });
+    const score = scoreDueWeight(task, {
+      text: `Sources differ on the methodology.${' padding word.'.repeat(120)} The headline was 1,200,000,000.`,
+    });
+    if (!score.conflictAcknowledgement.measured) throw new Error('expected a measured metric');
+    expect(score.conflictAcknowledgement.findings[0]?.outcome).toBe('one-sided');
+  });
+
   // DUEWT-20
   it('reports the declared unit where it sits beside the figure, and never gates on it', () => {
     const withUnit = scoreDueWeight(withConflict(), {

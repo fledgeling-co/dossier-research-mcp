@@ -69,9 +69,9 @@ Per recorded fringe claim:
 
 | Outcome | Meaning | Score |
 |---|---|---|
-| `not-surfaced` | The distinguishing term does not appear | excluded |
-| `surfaced-and-rejected` | It appears, with a recorded rejection cue nearby | 1 |
-| `surfaced-as-contested` | It appears with no rejection cue nearby. **This is the failure** | 0 |
+| `not-surfaced` | The report neither uses the distinguishing term nor cites the fringe source | excluded |
+| `surfaced-and-rejected` | It was raised, and a recorded rejection cue is attributed to it | 1 |
+| `surfaced-as-contested` | It was raised with no rejection cue attributed to it. **This is the failure** | 0 |
 
 Mentioning a fringe claim in order to dismiss it is correct behaviour, and on a bare string search it is indistinguishable from presenting it as contested. `rejectionCues` on the task is what makes the category scoreable at all.
 
@@ -87,8 +87,8 @@ Every one of these travels in the scorer's own output as well as living here, be
 - **Another rendering of the same document does not count.** The same paper at `/abs/` and at `/html/` is two URLs. Equating them would need a mirror list or a model.
 - **A disagreement counts as flagged only in a fixed vocabulary.** The task schema records the clashing figures but no wording for a flag, so the scorer carries an enumerated cue list, matched within a stated distance of the quantity as the task names it or of a figure the report did state. Other phrasings score as not flagged.
 - **The declared unit does not gate a figure match.** It is reported where it sits beside the figure. Requiring the unit token would miss every figure written with a currency symbol, and a false negative makes every backend look worse than it is.
-- **One rejected mention is enough.** A report that dismissed a fringe claim properly and then listed its source again is not penalised. The guard exists to catch hedging, not thoroughness. Where a task records several fringe claims close together, one cue can credit more than one of them. Attributing each cue to the single nearest claim would close that and was tried and rejected on evidence: it breaks the far more common case of a report dismissing several claims in sequence, where each cue lands nearer the next claim's mention than its own.
-- **The guard reads the term, never the fringe source URL.** A URL-only mention gives nothing to measure a rejection cue against, so it could not be scored either way without guessing.
+- **A rejection cue belongs to the claim it follows.** A report states a claim and then dismisses it, so a cue is attributed to the nearest claim raised before it, and only to the nearest one after it when nothing precedes it in the window. Reading direction is what separates a report dismissing four claims in sequence, which is credited for all four, from one debunking sentence covering six claims presented as live, which is not. The cost: `neither X nor Y holds up, there is no evidence` credits only the nearer of the two.
+- **A claim is raised by its literal term or by a citation of its source.** A report that paraphrases the claim in its own words and cites nothing is invisible to the guard, which is the same limit dissent recall carries and for the same reason: the distinguishing term belongs to the gold set, not to the backend.
 - **A fringe claim recorded with no rejection cues scores zero on any mention**, and the output names that task. A score over a check that could not discriminate must not read like a score over one that could.
 - **A number in prose is often not a number, and the exclusions are listed.** ISO, slashed and written-out dates are masked whole before anything is read. A hyphenated token such as `COVID-19` or `F-16` yields nothing, because the digits name the thing rather than measure it. A version string, an ordinal, a decade, a fraction and a unit suffix such as `5km` all yield nothing. A genuine range such as `1150-1200` and `50-60%` yields both numbers, because a range is exactly how a report writes two figures that disagree.
 - **An accounting negative in parentheses is read as positive.** `(1.2 billion)` means a loss in a filing and an aside in prose, and nothing local distinguishes them.

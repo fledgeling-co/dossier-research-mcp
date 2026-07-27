@@ -150,7 +150,7 @@ export const DUE_WEIGHT_LIMITS = {
     'A conflicting figure is matched on its value under the tolerance the task declares. The declared unit is reported where it appears near the figure and does not gate the match, because requiring the unit token would miss a figure written with a currency symbol.',
   rejectionProximity: `A fringe claim counts as rejected when one of its recorded rejection cues appears within ${String(PROXIMITY_CHARS)} characters of a mention of its distinguishing term, One rejected mention is enough, so a report that dismissed the claim and then listed its source again is not penalised. Where a task records several fringe claims close together, a single cue can credit more than one of them, so a report that dismisses one claim and entertains another inside the same window is scored as rejecting both.`,
   fringeTermOnly:
-    'The false-balance guard reads the distinguishing term only, never the fringe source URL. A URL-only mention gives nothing to measure a rejection cue against, so it could not be scored either way without guessing.',
+    'A fringe claim counts as raised when the report uses its literal distinguishing term or cites its source. A report that paraphrases the claim in its own words and cites nothing is invisible to the guard, the same limit dissent recall carries and for the same reason.',
   guardNotExercised:
     'The false-balance guard scored without being exercised: no report in this set raised any recorded fringe claim, so nothing put the guard to the question. That is the correct outcome for a backend that did not hedge, and it is also what a backend that answered nothing produces, so read it beside dissent recall rather than on its own.',
   harmonicOverall:
@@ -346,8 +346,24 @@ function assignMentions(
   values: ConflictingFigure['values'],
   mentions: readonly NumericMention[],
 ): (NumericMention | null)[] {
+  // Candidates are distinct NUMBERS, not distinct mentions. Matching over
+  // mentions enforces one mention per value and still lets one number satisfy
+  // two values whenever a report repeats it, which reports do constantly:
+  // abstract, body, table. `Revenue was 1.18 billion. As noted, revenue was 1.18
+  // billion.` scored `both-figures` against gold of 1.2bn and 1.15bn, both at
+  // ten percent, disclosing a disagreement the report never made. Found by an
+  // out-of-family reviewer against the earlier mention-based matching.
+  const firstByValue = new Map<number, number>();
+  for (let i = 0; i < mentions.length; i += 1) {
+    const m = mentions[i];
+    if (m !== undefined && !firstByValue.has(m.value)) firstByValue.set(m.value, i);
+  }
+  const distinct = [...firstByValue.values()].sort((a, b) => a - b);
   const candidates = values.map((value) =>
-    mentions.flatMap((m, i) => (matchesTolerance(m.value, value.value, value.tolerance) ? [i] : [])),
+    distinct.filter((i) => {
+      const m = mentions[i];
+      return m !== undefined && matchesTolerance(m.value, value.value, value.tolerance);
+    }),
   );
   const holderOfMention = new Map<number, number>();
 
@@ -448,36 +464,83 @@ function scoreConflicts(
 }
 
 /**
+ * Attribute each rejection cue to the claim it is actually about.
+ *
+ * A cue belongs to the claim it **follows**: a report states a claim and then
+ * dismisses it. So a cue is attributed to the nearest raised claim before it,
+ * and only to the nearest one after it when nothing precedes it in the window.
+ *
+ * The bare proximity rule this replaces was defeated by one sentence. An
+ * out-of-family reviewer demonstrated it: `There is no evidence for the first of
+ * these readings. That said, fringe readings 0 to 5 are all argued by serious
+ * people` scored a perfect 1.0 while presenting six documented fringe claims as
+ * live controversies, because one cue sat within the window of all six.
+ *
+ * Attributing to the nearest claim in *either* direction was tried first and is
+ * worse than both: a report dismissing four claims in sequence has each cue
+ * sitting nearer the NEXT claim's mention than the one it belongs to, so three
+ * of four score as false balance. Reading direction is what separates the two
+ * cases, and it is free.
+ */
+function attributeCue(
+  cueAt: number,
+  ownMentions: readonly number[],
+  otherMentions: readonly number[],
+): boolean {
+  const before = (xs: readonly number[]): number | null => {
+    let best: number | null = null;
+    for (const x of xs) if (x <= cueAt && cueAt - x <= PROXIMITY_CHARS) best = x;
+    return best;
+  };
+  const after = (xs: readonly number[]): number | null => {
+    for (const x of xs) if (x > cueAt && x - cueAt <= PROXIMITY_CHARS) return x;
+    return null;
+  };
+
+  const ownBefore = before(ownMentions);
+  const otherBefore = before(otherMentions);
+  if (ownBefore !== null) return otherBefore === null || ownBefore >= otherBefore;
+  if (otherBefore !== null) return false;
+
+  const ownAfter = after(ownMentions);
+  const otherAfter = after(otherMentions);
+  if (ownAfter === null) return false;
+  return otherAfter === null || ownAfter <= otherAfter;
+}
+
+/**
  * Was this fringe claim raised in order to be dismissed, or presented as live?
  *
- * A recorded rejection cue within the window of any mention counts. One rejected
- * mention is enough, so a report that dismissed the claim and then listed its
- * source again is not penalised: the guard exists to catch hedging, not
- * thoroughness.
- *
- * A stricter rule was tried and rejected on evidence. Attributing each cue to
- * the single nearest claim closes a narrow hole, where a report dismissing one
- * claim and entertaining another in the same paragraph is credited for both, and
- * it breaks the common case badly: a report that dismisses four claims in
- * sequence has each cue sitting nearer to the *next* claim's mention than to the
- * one it belongs to, so three of the four are scored as false balance. Trading a
- * narrow false negative for a broad false positive against honest reports is the
- * wrong way round, so the leniency stays and is stated in the output instead.
+ * A claim counts as raised when the report uses its distinguishing term **or
+ * cites its source**. The second door matters and was missing: the task author's
+ * distinguishing term is private to the gold set, so a backend that cites the
+ * fringe source and paraphrases the claim in its own words was invisible to the
+ * guard and scored a perfect 1.0. Dissent recall has had both doors from the
+ * start, and the asymmetry was the hole. Found by an out-of-family reviewer.
  */
-function scoreOneFringe(claim: FringeClaim, normalised: string): FringeFinding {
-  const mentions = findTermPositions(normalised, claim.distinguishingTerm);
-  if (mentions.length === 0) {
+function scoreOneFringe(
+  claim: FringeClaim,
+  normalised: string,
+  ownMentions: readonly number[],
+  otherMentions: readonly number[],
+): FringeFinding {
+  if (ownMentions.length === 0) {
     return { distinguishingTerm: claim.distinguishingTerm, outcome: 'not-surfaced', score: 1 };
   }
-  const matchedCue = findNearbyCue(normalised, mentions, claim.rejectionCues, PROXIMITY_CHARS);
-  if (matchedCue !== null) {
-    return {
-      distinguishingTerm: claim.distinguishingTerm,
-      outcome: 'surfaced-and-rejected',
-      score: 1,
-      matchedCue,
-    };
+
+  for (const cue of claim.rejectionCues) {
+    for (const at of findTermPositions(normalised, cue)) {
+      if (attributeCue(at, ownMentions, otherMentions)) {
+        return {
+          distinguishingTerm: claim.distinguishingTerm,
+          outcome: 'surfaced-and-rejected',
+          score: 1,
+          matchedCue: cue,
+        };
+      }
+    }
   }
+
   return {
     distinguishingTerm: claim.distinguishingTerm,
     outcome: 'surfaced-as-contested',
@@ -485,7 +548,11 @@ function scoreOneFringe(claim: FringeClaim, normalised: string): FringeFinding {
   };
 }
 
-function scoreFalseBalance(task: BenchTask, normalised: string): Measured<FalseBalanceGuard> {
+function scoreFalseBalance(
+  task: BenchTask,
+  normalised: string,
+  citedIdentities: ReadonlySet<string>,
+): Measured<FalseBalanceGuard> {
   if (!task.applicableMetrics.falseBalance) {
     return { measured: false, reason: 'the task records no fringeClaims' };
   }
@@ -496,7 +563,25 @@ function scoreFalseBalance(task: BenchTask, normalised: string): Measured<FalseB
     };
   }
 
-  const findings = task.fringeClaims.map((c) => scoreOneFringe(c, normalised));
+  const anchorsPerClaim = task.fringeClaims.map((c) => {
+    const positions = [...findTermPositions(normalised, c.distinguishingTerm)];
+    // The source counts as raising the claim, so a paraphrase that cites it is
+    // not invisible. The URL is looked for in the normalised text rather than
+    // taken from the citation list, because a rejection cue has to be measured
+    // against a position and a citation list carries none.
+    if (citesUrl(citedIdentities, c.source.url)) {
+      positions.push(...findTermPositions(normalised, c.source.url));
+    }
+    return [...new Set(positions)].sort((a, b) => a - b);
+  });
+  const findings = task.fringeClaims.map((c, i) =>
+    scoreOneFringe(
+      c,
+      normalised,
+      anchorsPerClaim[i] ?? [],
+      anchorsPerClaim.flatMap((m, j) => (j === i ? [] : m)).sort((a, b) => a - b),
+    ),
+  );
   const raised = findings.filter((f) => f.outcome !== 'not-surfaced');
 
   // **The denominator is the claims the report actually raised, not every claim
@@ -533,7 +618,7 @@ export function scoreDueWeight(task: BenchTask, report: ScoredReport): DueWeight
 
   const dissentRecall = scoreDissent(task, normalised, citedCanonical);
   const conflictAcknowledgement = scoreConflicts(task, normalised, mentions);
-  const falseBalance = scoreFalseBalance(task, normalised);
+  const falseBalance = scoreFalseBalance(task, normalised, citedCanonical);
 
   const limits: string[] = [];
   if (dissentRecall.measured) {
@@ -601,6 +686,10 @@ function meanOf(values: readonly number[]): MetricMean {
 }
 
 function harmonicMean(values: readonly number[]): number {
+  // Unreachable today, because every caller has at least one measured metric.
+  // Left explicit rather than relying on that: `0 / 0` is NaN, and a NaN score
+  // propagates silently through every comparison downstream.
+  if (values.length === 0) return 0;
   if (values.some((v) => v <= 0)) return 0;
   return values.length / values.reduce((sum, v) => sum + 1 / v, 0);
 }
@@ -659,6 +748,25 @@ export function aggregateDueWeight(scores: readonly DueWeightScore[]): DueWeight
       overall: null,
       overallReason:
         'Withheld: no task in this set recorded a fringe claim, so the false-balance guard did not run. Dissent recall and conflict acknowledgement reward hedging on their own, so an overall computed without the counterweight would rank a backend that calls every question contested above one that does not. Add a settled-with-fringe task to make the overall meaningful.',
+      guardApplied,
+      guardExercised,
+      limits,
+    };
+  }
+
+  // A guard that scored without being exercised is the only thing measured here,
+  // so the number says nothing about the backend: an empty report scored 1.0
+  // overall on a fringe-only corpus, which an out-of-family reviewer found. The
+  // withholding rule that already covers a missing guard covers this too.
+  if (!guardExercised && parts.length < 2) {
+    return {
+      tasks: scores.length,
+      dissentRecall,
+      conflictAcknowledgement,
+      falseBalance,
+      overall: null,
+      overallReason:
+        'Withheld: the false-balance guard is the only metric this set could measure, and no report raised any recorded fringe claim, so it scored without being exercised. A report that said nothing at all would score the same. Add a contested task, or a report that engages with the question, for the overall to mean anything.',
       guardApplied,
       guardExercised,
       limits,
