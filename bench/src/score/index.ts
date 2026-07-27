@@ -166,3 +166,53 @@ export type {
  * to describe a value this module handed it.
  */
 export type { ClassifiedSource, EvidenceProfile } from '../../../src/research/evidence.js';
+/**
+ * BENCH-03, citation integrity. `identifiers.ts` finds the five kinds a registry
+ * can answer for, `containment.ts` asks whether a page contains what a statement
+ * asserts, `matrix.ts` carries the published statement-by-source algebra, and
+ * `citations.ts` assembles them over an evidence snapshot that
+ * `bench/src/citations/` collected earlier. Every one of them is pure.
+ */
+export {
+  IDENTIFIER_KINDS,
+  extractIdentifiers,
+  hasTraversalSegment,
+  isbnChecksumValid,
+  normaliseIsbn,
+  stripArxivVersion,
+} from './identifiers.js';
+export type { ExtractedIdentifier, IdentifierKind } from './identifiers.js';
+
+export { TOKEN_CLASSES, anchorHonesty, checkableTokens, containment } from './containment.js';
+export type {
+  AnchorResult,
+  AnchorVerdict,
+  CheckableToken,
+  ContainmentResult,
+  SourceEvidence,
+  SupportVerdict,
+  TokenClass,
+} from './containment.js';
+
+export { matrixMetrics, segmentStatements, sourceUniverse } from './matrix.js';
+export type { MatrixInput, MatrixMetrics, PairBudget, Statement, SupportCell } from './matrix.js';
+
+export {
+  MAX_SUPPORT_PAIRS,
+  containmentOracle,
+  judgedOracle,
+  scoreCitationIntegrity,
+} from './citations.js';
+export type {
+  AnchorTally,
+  CitationEvidenceView,
+  CitationIntegrityResult,
+  CitationIntegrityScored,
+  CitationIntegrityUnmeasurable,
+  CitationVolume,
+  RegistryTally,
+  ResolvabilityTally,
+  ScoreCitationOptions,
+  SupportOracle,
+  UnavailableDimension,
+} from './citations.js';

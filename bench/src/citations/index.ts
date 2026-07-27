@@ -1,0 +1,48 @@
+/**
+ * Citation evidence collection, in one import.
+ *
+ * The impure half of BENCH-03: the part that reaches registries and cited
+ * pages. `bench/src/score/citations.ts` is the pure half and never sees a
+ * network. The split is what makes a stored report score the same twice.
+ */
+export {
+  DiskRegistryCache,
+  MemoryRegistryCache,
+  RateLimiter,
+  SingleFlight,
+  cacheKey,
+  defaultCacheDir,
+  realSleeper,
+} from './cache.js';
+export type { RegistryCache, Sleeper } from './cache.js';
+
+export { collectAnchors, collectCitationEvidence } from './collect.js';
+export type { CollectOptions } from './collect.js';
+
+export {
+  CitationEvidenceSchema,
+  EVIDENCE_VERSION,
+  MAX_PAGE_TEXT_CHARS,
+  PageEvidenceSchema,
+  RegistryAnswerSchema,
+  emptyEvidence,
+  pagesByUrl,
+  parseEvidence,
+  registryByIdentifier,
+} from './evidence.js';
+export type { CitationEvidence, PageEvidence, RegistryAnswer } from './evidence.js';
+
+export { MAX_PAGE_BYTES, MAX_REGISTRY_BYTES, fetchPage, fetchRegistry } from './fetch.js';
+
+export { REGISTRY_GAP_MS, REGISTRY_IDS, crossrefGapMs, isRefusal, plan } from './registries.js';
+export type {
+  RegistryId,
+  RegistryOptions,
+  RegistryPlan,
+  RegistryRefusal,
+  RegistryResponse,
+  RegistryStatus,
+  RegistryStep,
+  RegistryTransport,
+  StepOutcome,
+} from './registries.js';
