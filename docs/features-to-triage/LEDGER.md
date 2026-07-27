@@ -12,7 +12,7 @@ serially, through the orchestrator.
 
 | ID | Title | Brief | Status | Spec | Plan |
 |---|---|---|---|---|---|
-| BENCH-01 | Task format, gold-set schema and loader | [brief](BENCH-01-task-format.md) | Untriaged | | |
+| BENCH-01 | Task format, gold-set schema and loader | [brief](BENCH-01-task-format.md) | Ready for Plan | [spec](../specs/spec-BENCH-01.md) | |
 | BENCH-02 | The run harness | [brief](BENCH-02-run-harness.md) | Untriaged | | |
 | BENCH-03 | Citation integrity scorers | [brief](BENCH-03-citation-integrity.md) | Untriaged | | |
 | BENCH-04 | Accuracy and relevance scorers | [brief](BENCH-04-accuracy-relevance.md) | Untriaged | | |
@@ -22,3 +22,4 @@ serially, through the orchestrator.
 | BENCH-08 | Reporting and comparison | [brief](BENCH-08-reporting.md) | Untriaged | | |
 | BENCH-09 | The seed task corpus | [brief](BENCH-09-seed-corpus.md) | Untriaged | | |
 | BENCH-10 | Self-eval of Dossier's own checking | [brief](BENCH-10-self-eval.md) | Untriaged | | |
+| BENCH-11 | Which combination is best | [brief](BENCH-11-combinations.md) | Untriaged | | |

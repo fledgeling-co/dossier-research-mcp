@@ -1,6 +1,6 @@
 # Benchmark briefs, awaiting triage
 
-Ten slices of one thing: a benchmark that measures what every research backend is good and bad at, what Dossier's own free loop achieves with no backend at all, and whether Dossier's citation checking actually catches a bad citation.
+Eleven slices of one thing: a benchmark that measures what every research backend is good and bad at, what Dossier's own free loop achieves with no backend at all, and whether Dossier's citation checking actually catches a bad citation.
 
 The design they implement is [`../plan/benchmark.md`](../plan/benchmark.md). Read it first; it carries the reasoning these briefs assume.
 
@@ -24,3 +24,4 @@ The cost is paid once, in task authoring. A task is only admitted if its correct
 | BENCH-08 reporting | 02, and whichever scorers exist |
 | BENCH-09 seed corpus | 01 |
 | BENCH-10 self-eval of Dossier's checking | 01, 03 |
+| BENCH-11 best combination | 02, and the scorers |

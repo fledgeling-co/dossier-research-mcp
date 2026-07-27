@@ -1,6 +1,6 @@
 # Orchestrator: the Dossier benchmark
 
-**Started** 27 July 2026 · **Integration branch** `main` · **Fleet size** 10 items, up to 8 concurrent
+**Started** 27 July 2026 · **Integration branch** `main` · **Fleet size** 11 items, up to 8 concurrent
 
 This file is the memory, not the transcript. A fresh session resumes the whole fleet from here alone. If context is compacted, re-read this file, `CLAUDE.md` and `docs/plan/benchmark.md` before doing anything else.
 
@@ -13,6 +13,7 @@ A benchmark that measures three separate things:
 1. **Each research backend on its own.** Every CLI, every API. What each is good and bad at, per category.
 2. **Dossier with no backend at all**, running the free local loop over ordinary web search. The honest control: if the keyless loop scores close to a paid backend, that is the finding.
 3. **Dossier's own checking.** Whether `research_verify_citations` and `research_verify_claims` actually catch a bad citation. A detector eval, scored as a confusion matrix.
+4. **Which combination of them is worth its price.** Backends, methods and lanes are scored in every subset, and the answer is a Pareto frontier per category rather than one global winner.
 
 The design is `docs/plan/benchmark.md`. The briefs are `docs/features-to-triage/BENCH-*.md`.
 
@@ -39,7 +40,7 @@ Computed from the internal-dependency DAG. An item starts only when everything i
 |---|---|---|
 | 1 | BENCH-01 | The task schema is the contract every scorer reads. Nothing else can start. |
 | 2 | BENCH-02, 03, 04, 05, 06, 07, 09 | All depend only on 01, and touch disjoint files. Seven concurrent. |
-| 3 | BENCH-08, BENCH-10 | 08 needs the harness and the scorers; 10 needs the citation checks from 03. |
+| 3 | BENCH-08, BENCH-10, BENCH-11 | 08 needs the harness and the scorers; 10 needs the citation checks from 03; 11 merges stored results and needs both. |
 
 BENCH-09 is hand-authoring work and is the long pole in wall-clock terms. It starts in wave 2 and may still be running when wave 3 begins; 08 and 10 do not depend on it.
 
@@ -57,6 +58,7 @@ BENCH-09 is hand-authoring work and is the long pole in wall-clock terms. It sta
 | BENCH-08 | Reporting and comparison | 02, scorers | Blocked | | |
 | BENCH-09 | The seed task corpus | 01 | Blocked | | |
 | BENCH-10 | Self-eval of Dossier's own checking | 01, 03 | Blocked | | |
+| BENCH-11 | Which combination is best | 02, scorers | Blocked | | |
 
 ## Context contract
 
@@ -85,3 +87,4 @@ Merges are serialized by the orchestrator, one branch at a time, so conflicts in
 - **27 Jul, decisions** — Verification substituted (gate plus stdio smoke, no Playwright). Full fleet of ten authorised. Directory renamed to the conventional name.
 - **27 Jul, pre-triage** — All ten ids claimed in one ledger write rather than allocated serially, since the briefs already carry stable ids. Removes the shared write instead of queueing behind it.
 - **27 Jul, wave 1 started** — BENCH-01 dispatched to an Opus runner. Nothing else can start until it merges.
+- **27 Jul, BENCH-11 added** — Combination scoring. It costs nothing extra to run: BENCH-02 stores every cell raw, so all 2^N subsets are evaluated by merging reports already paid for. This is the payoff from separating the run from the scoring, and it is what will replace the 27 July routing retune that currently rests on a single observation of 4% overlap.
