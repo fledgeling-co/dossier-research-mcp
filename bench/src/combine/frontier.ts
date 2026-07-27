@@ -44,12 +44,45 @@
  */
 export interface FrontierCandidate {
   readonly id: string;
-  /** Maximise. Whatever the caller's injected scorer returned. */
+  /**
+   * Maximise. Whatever the caller's injected scorer returned.
+   *
+   * **What this number is has to be declared**, which is why `paretoFrontier`
+   * takes a `MeasureLabel` and why `FrontierResult` carries it. The benchmark's
+   * scorers deliberately do not expose one common score: source quality refuses
+   * to blend, citation accuracy and citation volume are kept as two numbers on
+   * purpose, and a Brier score is lower-is-better. A frontier over an unnamed
+   * "score" would quietly average incomparable things or silently rank a
+   * lower-is-better measure upside down, and the caller would have no way to
+   * tell which had happened. So one frontier answers for one named measure, and
+   * the caller runs it again for the next one.
+   */
   readonly score: number;
-  /** Minimise. The sum of the members' reserved worst cases. */
+  /**
+   * Minimise. Metered dollars: the sum of the members' reserved worst cases.
+   *
+   * Subscription quota and unrecoverable spend are **not** in here. They are
+   * counted on the merged object and reported beside the frontier, because
+   * folding unmetered quota in as zero puts every subscription combination at
+   * the cheap end by construction.
+   */
   readonly costUsd: number;
   /** Maximise. `robustness.worstCaseSurvivingShare` from `overlap.ts`. */
   readonly robustness: number;
+}
+
+/**
+ * What the score axis actually measures, and which way it points.
+ *
+ * `direction` exists because several of this benchmark's measures are
+ * lower-is-better and the frontier maximises. A caller with a Brier score must
+ * declare it, and `paretoFrontier` flips it once, here, rather than leaving
+ * every caller to remember.
+ */
+export interface MeasureLabel {
+  /** The measure's name, e.g. `accuracy`, `citation-accuracy`, `brier`. */
+  readonly name: string;
+  readonly direction: 'higher-is-better' | 'lower-is-better';
 }
 
 export interface DominatedCandidate {

@@ -1,6 +1,6 @@
 import { registrableDomain } from '../../../src/research/corroborate.js';
 import { memberUrlSet } from './merge.js';
-import type { CombinationMember } from './member.js';
+import { completionRate, type CombinationMember } from './member.js';
 
 /**
  * How much of the ground a combination covered was paid for twice, measured
@@ -92,19 +92,36 @@ export interface MemberRobustness {
 
 export interface RobustnessProfile {
   readonly unionSize: number;
+  /** The full distribution, one entry per member, so the axis can be re-derived. */
   readonly perMember: readonly MemberRobustness[];
   /**
-   * The minimum surviving share across members: a combination is only as robust
-   * as its most load-bearing member. This is the third frontier axis, oriented
-   * so that higher is better.
+   * The **minimum** surviving share across members, and the frontier's third
+   * axis, oriented so that higher is better.
+   *
+   * Minimum rather than mean, stated because it changes domination outcomes and
+   * a choice that changes an answer must not be left implicit. A combination is
+   * only as robust as its most load-bearing member: the question the axis
+   * answers is "what happens if I lose one", and the honest answer to that is
+   * the worst case, not the average case. A mean would let a combination of one
+   * indispensable member and four cheap ones read as robust.
+   *
+   * `perMember` carries the whole distribution beside it, so a reader who wants
+   * the mean has it without this having to pick two axes.
    */
   readonly worstCaseSurvivingShare: number;
+  /** The mean across members, reported because it is the obvious alternative. */
+  readonly meanSurvivingShare: number;
 }
 
 /** Per-member sources most others also found, and the ones it missed. */
 export interface MemberCentrality {
   readonly memberId: string;
-  /** Central URLs this member did not find. High means eccentric, not broad. */
+  /**
+   * Central URLs this member did not find. High means eccentric, not broad.
+   *
+   * A count out of `centralUrls.length`, which is the denominator; both are
+   * returned so the share can be taken without guessing at one.
+   */
   readonly missedCentral: number;
   /** URLs no other member found. Breadth, **not** value; see `marginal.ts`. */
   readonly uniqueUrls: number;
@@ -112,7 +129,17 @@ export interface MemberCentrality {
 
 export interface CentralityProfile {
   /**
-   * URLs more than half the members found.
+   * URLs **strictly more than half** the members found.
+   *
+   * "Most others" made precise, because a threshold left as a word is one every
+   * reader resolves differently. Strictly more than half means: at two members,
+   * a source both found is central and a source one found is not; at three, two
+   * finders is central; at four, three is.
+   *
+   * The denominator is **members**, not runs. A member of five runs votes once,
+   * because otherwise a backend run more often would drag centrality toward
+   * whatever it happens to read, and centrality is meant to say what
+   * *independent searchers* converged on.
    *
    * "Central" is a claim about the *web*, not about quality: it says several
    * independent searchers converged on this page, which is what makes missing
@@ -138,6 +165,16 @@ export interface OverlapProfile {
   readonly urlToDomainGap: number | undefined;
   readonly robustness: RobustnessProfile;
   readonly centrality: CentralityProfile;
+  /**
+   * Completed runs over attempted, across every member.
+   *
+   * Carried here as well as on the merge because a combination's overlap is
+   * read from a sample that failures have already narrowed: two members that
+   * each failed half their runs may show low overlap because they read
+   * different pages, or because they barely read anything. The rate is what
+   * tells those apart.
+   */
+  readonly completionRate: number;
   /** Always `OVERLAP_IS_NOT_AN_OBJECTIVE`. */
   readonly caution: string;
 }
@@ -258,8 +295,14 @@ export function sourceOverlapProfile(members: readonly CombinationMember[]): Ove
         perMemberRobustness.length === 0
           ? 0
           : Math.min(...perMemberRobustness.map((m) => m.survivingShare)),
+      meanSurvivingShare:
+        perMemberRobustness.length === 0
+          ? 0
+          : perMemberRobustness.reduce((s, m) => s + m.survivingShare, 0) /
+            perMemberRobustness.length,
     },
     centrality: { centralUrls, centralThreshold, perMember: perMemberCentrality },
+    completionRate: completionRate(members.flatMap((m) => m.runs)),
     caution: OVERLAP_IS_NOT_AN_OBJECTIVE,
   };
 }

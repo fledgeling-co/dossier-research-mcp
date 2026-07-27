@@ -36,21 +36,31 @@ import type { ExactnessRefusedError } from './errors.js';
 /**
  * The most members an exact credit split will be computed for.
  *
- * Sixteen, and the arithmetic is written down rather than asserted. The lattice
- * is `2^n` coalitions and evaluating it costs one set union over up to `n`
- * members' URL sets each, so the work is `O(n * 2^n)` insertions:
+ * Sixteen, and the arithmetic is written down rather than asserted, because a
+ * refusal at an unexplained number is one somebody raises without knowing what
+ * it costs.
  *
- * | n  | coalitions | insertions (at ~500 URLs a member) |
- * |----|-----------|------------------------------------|
- * | 8  | 256       | ~1.0 million                        |
- * | 12 | 4,096     | ~25 million                         |
- * | 16 | 65,536    | ~520 million                        |
- * | 20 | 1,048,576 | ~10 billion                         |
+ * The credit split itself is **not** the binding cost. Coalition values are
+ * computed once into a table and read `n * 2^(n-1)` times, so the split is a
+ * few million floating-point operations even at the ceiling. What binds is the
+ * work in front of it: the lattice has `2^n` coalitions and each one is a merge
+ * (a set union over up to `n` members' source sets) plus one call to the
+ * caller's scorer.
  *
- * Sixteen is seconds and twenty is not minutes, it is hours. The brief puts the
- * affordable point at eight and the unaffordable one at sixteen; this sits at
- * the top of that range because a caller with twelve real members should get an
- * answer, and refuses immediately after.
+ * | n  | coalitions | merges + scorer calls | set insertions at ~500 URLs a member |
+ * |----|------------|-----------------------|--------------------------------------|
+ * | 8  | 256        | 256                   | ~1.0 million                          |
+ * | 12 | 4,096      | 4,096                 | ~25 million                           |
+ * | 16 | 65,536     | 65,536                | ~520 million                          |
+ * | 20 | 1,048,576  | 1,048,576             | ~10 billion                           |
+ *
+ * Sixteen is seconds. Twenty is not minutes, it is hours, and it is 65,536
+ * *scorer* calls at sixteen already, which is the figure that actually decides
+ * this: the scorer is the caller's and may itself be expensive.
+ *
+ * The brief puts the affordable point at eight and the unaffordable one at
+ * sixteen. This sits at the top of that range because a caller with twelve real
+ * members should get an answer, and refuses immediately after.
  *
  * **Raising this is not a free parameter.** Anyone tempted to should read the
  * table first, and should reach for grouping repeats into one member instead:
@@ -63,19 +73,27 @@ export type CoalitionValue = (memberIds: readonly string[]) => number;
 
 export interface MemberContribution {
   readonly memberId: string;
-  /** The exact Shapley value over the supplied value function. */
+  /**
+   * The exact Shapley value: marginals weighted by coalition size, so every
+   * *ordering* of the members counts once.
+   */
   readonly shapley: number;
   /**
-   * The plain average of `v(S+i) - v(S)` over every subset, unweighted.
+   * The exact **Banzhaf** value: the plain average of `v(S+i) - v(S)` over every
+   * subset, with every subset weighted equally.
    *
-   * Reported beside the Shapley value because it answers the simpler question
-   * the brief actually asks ("how much does the combination lose when that
-   * member is removed, averaged across every subset it appears in") and because
-   * the two diverging is informative: the Shapley weighting leans on the small
-   * and large coalitions, so a member whose value is concentrated in the middle
-   * sizes reads differently under the two.
+   * Both are reported because the brief asks for one in words and names the
+   * other. "How much the combination loses when that member is removed,
+   * averaged across every subset it appears in" is the Banzhaf value exactly;
+   * "a sampled Shapley value reported as exact" names the Shapley value. They
+   * are different quantities and the difference is informative rather than
+   * noise: Shapley weighting leans on the smallest and largest coalitions, so a
+   * member whose value is concentrated in the middle sizes reads lower under
+   * Shapley and higher under Banzhaf. Reporting one under the other's name is
+   * the sort of quiet substitution this benchmark exists to avoid, so neither
+   * is called simply "the marginal contribution".
    */
-  readonly meanDrop: number;
+  readonly banzhaf: number;
   /** How many coalitions this member's marginal was measured over: `2^(n-1)`. */
   readonly measuredOver: number;
 }
@@ -206,7 +224,7 @@ export function marginalContributions(
     perMember.push({
       memberId: memberIds[i]!,
       shapley,
-      meanDrop: dropSum / subsetsWithout,
+      banzhaf: dropSum / subsetsWithout,
       measuredOver: subsetsWithout,
     });
   }
