@@ -75,18 +75,17 @@ const PERISHABLE_HOSTS = /(^|\.)(status\.[a-z0-9-]+\..+|paperswithcode\.com)$/i;
  * classifier can only ever improve on the status quo or leave it alone.
  */
 export function classifyDurability(url: string): DurabilityVerdict {
-  let path = '';
-  let host = '';
+  let parsed: URL;
   try {
-    const parsed = new URL(canonicaliseUrl(url));
-    path = parsed.pathname;
-    host = parsed.hostname;
+    parsed = new URL(canonicaliseUrl(url));
   } catch {
     return {
       durability: 'unknown',
       basis: 'the URL could not be parsed, so nothing is assumed about what kind of document it is',
     };
   }
+  const path = parsed.pathname;
+  const host = parsed.hostname;
   const domain = registrableDomain(url);
 
   if (PERISHABLE_PATHS.test(path)) {

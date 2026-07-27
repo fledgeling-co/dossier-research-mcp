@@ -206,7 +206,12 @@ export function findConfidenceMarkers(report: string): ConfidenceMarker[] {
   for (const marker of raw) {
     if (marker.start < claimedTo) continue;
     kept.push(marker);
-    claimedTo = marker.delimited ? marker.delimited.end : marker.end;
+    // A tag claims its **whole** match, closing tag included. Claiming only as
+    // far as the body left `</CONFIDENCE:LOW>` unclaimed, and the labelled
+    // pattern reads `CONFIDENCE:LOW` inside it, so every tagged claim was
+    // counted twice and every tagged report's Brier score was computed over a
+    // doubled sample. Found by the test, not by reading.
+    claimedTo = marker.end;
   }
 
   const paragraphs = paragraphRanges(report);
