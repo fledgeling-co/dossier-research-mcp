@@ -9,6 +9,14 @@
  * `confidence.ts` parses markers, `calibration.ts` turns them into a Brier
  * score, `refusal.ts` grades the two families where the right answer is not an
  * answer, and `recency.ts` grades a source set against the task's as-of date.
+ *
+ * `accuracy.ts` decides whether each recorded answer was actually stated, and
+ * `relevance.ts` whether the report is about the right subject at all. Those two
+ * read the text through `prose.ts`, which strips citations so a figure pasted
+ * inside a URL cannot score, and compare values through `numbers.ts`,
+ * `units.ts` and `dates.ts`. The accuracy scorer's output is exactly the
+ * recovery record `calibration.ts` takes as an input, which is why the answer
+ * ids in the task format are required rather than optional.
  */
 export {
   assertProbabilities,
@@ -76,3 +84,46 @@ export type {
   RecencyUnmeasurable,
   SourceRecency,
 } from './recency.js';
+
+export { factRecovery, scoreAccuracy } from './accuracy.js';
+export type {
+  AccuracyFact,
+  AccuracyNotApplicable,
+  AccuracyOptions,
+  AccuracyResult,
+  AccuracyScored,
+} from './accuracy.js';
+
+export { DEFAULT_DRIFT_WEIGHT, scoreRelevance } from './relevance.js';
+export type {
+  RelevanceNotApplicable,
+  RelevanceOptions,
+  RelevanceResult,
+  RelevanceScored,
+} from './relevance.js';
+
+export { extractProse, isNegated, NEGATION_CUES, NEGATION_WINDOW_WORDS } from './prose.js';
+
+export {
+  isZeroWidthTolerance,
+  readNumbers,
+  shiftDecimal,
+  toPlainString,
+  withinTolerance,
+} from './numbers.js';
+export type { NumberMention, NumberReading } from './numbers.js';
+
+export { goldDay, readDates } from './dates.js';
+export type { DateForm, DateMention } from './dates.js';
+
+export {
+  AMBIGUOUS_SCALE_SUFFIXES,
+  canonicaliseUnit,
+  DIMENSIONLESS,
+  foldScaleWord,
+  matchCurrencyPrefix,
+  matchUnitAt,
+  SCALE_WORDS,
+  unitSurfaceForms,
+} from './units.js';
+export type { CanonicalUnit, FoldedUnit, UnitMatch } from './units.js';
