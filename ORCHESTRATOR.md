@@ -1,6 +1,6 @@
 # Orchestrator: the Dossier benchmark
 
-**Started** 27 July 2026 · **Integration branch** `main` · **Fleet size** 12 items, up to 8 concurrent
+**Started** 27 July 2026 · **Integration branch** `main` · **Fleet size** 13 items, up to 8 concurrent
 
 This file is the memory, not the transcript. A fresh session resumes the whole fleet from here alone. If context is compacted, re-read this file, `CLAUDE.md` and `docs/plan/benchmark.md` before doing anything else.
 
@@ -40,7 +40,7 @@ Computed from the internal-dependency DAG. An item starts only when everything i
 |---|---|---|
 | 1 | BENCH-01 | The task schema is the contract every scorer reads. Nothing else can start. |
 | 2 | BENCH-02, 03, 04, 05, 06, 07, 09 | All depend only on 01, and touch disjoint files. Seven concurrent. |
-| 3 | BENCH-08, BENCH-10, BENCH-11 | 08 needs the harness and the scorers; 10 needs the citation checks from 03; 11 merges stored results and needs both. |
+| 3 | BENCH-08, BENCH-10, BENCH-11, BENCH-13 | 08 needs the harness and the scorers; 10 needs the citation checks from 03; 11 merges stored results and needs both. |
 
 BENCH-09 is hand-authoring work and is the long pole in wall-clock terms. It starts in wave 2 and may still be running when wave 3 begins; 08 and 10 do not depend on it.
 
@@ -60,6 +60,7 @@ BENCH-09 is hand-authoring work and is the long pole in wall-clock terms. It sta
 | BENCH-10 | Self-eval of Dossier's own checking | 01, 03 | Blocked | | |
 | BENCH-11 | Which combination is best | 02, scorers | Blocked | | |
 | BENCH-12 | A finished report is an input to the next one | none | Queued | | |
+| BENCH-13 | The statistics | 02, 08 | Blocked | | |
 
 ## Context contract
 
@@ -90,3 +91,8 @@ Merges are serialized by the orchestrator, one branch at a time, so conflicts in
 - **27 Jul, wave 1 started** — BENCH-01 dispatched to an Opus runner. Nothing else can start until it merges.
 - **27 Jul, BENCH-11 added** — Combination scoring. It costs nothing extra to run: BENCH-02 stores every cell raw, so all 2^N subsets are evaluated by merging reports already paid for. This is the payoff from separating the run from the scoring, and it is what will replace the 27 July routing retune that currently rests on a single observation of 4% overlap.
 - **27 Jul, BENCH-12 added** — Not a benchmark slice. A finished report cannot currently ground the next run without a manual export and upload, so Dossier's own output is the one evidence it cannot easily consume. From Bridgewater's Pocket Analyst, whose outputs land in the same store as its inputs. Carries a hard constraint: a prior report is a user's own document, valid primary evidence about what was concluded and never independent evidence the conclusion was right.
+- **27 Jul, prior art read and acted on** — The benchmark-design panel finished; three CLI members completed, `local-codex` failed on the argument-parsing bug. 49 sources, 48 resolve, and I verified DeepTRACE and promptfoo exist directly rather than trusting the report. Exported to `docs/deep-research/benchmark-prior-art.md`, which every benchmark runner must now read in full.
+
+  It reversed two decisions. **BENCH-02 is now an adoption, not a build**: promptfoo already is a TypeScript multi-provider harness with custom JavaScript scorers, and building a runner, provider abstraction and result store is months of undifferentiated work. **BENCH-03 adopts DeepTRACE's published dimensions** instead of metrics I invented, in particular the accuracy-versus-thoroughness-versus-necessity split that catches over-citing.
+
+  **BENCH-13 is new and covers what the design had none of: statistics.** Paired-difference tests with bootstrap intervals, standard errors clustered on category (naive errors inflate up to threefold on a corpus of ten categories of ten related tasks, which is exactly this one), `pass^k` beside `pass@1`, and completion rate as a validity metric. That last one is not hypothetical here: `local-codex` is 0-for-3 and `openai` 0-for-2 in this repo's own ledger, and both would have silently vanished from a naive average.

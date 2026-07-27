@@ -1,8 +1,18 @@
-# BENCH-02: the run harness
+# BENCH-02: the run harness, adopted rather than built
+
+> **Amended 27 July 2026.** This brief originally said to build a harness. The prior-art research in `../deep-research/benchmark-prior-art.md` says promptfoo already is one: TypeScript, shipping daily, with multi-provider evals, custom JavaScript scorers returning `{pass, score, reason}`, custom aggregation and agent-trajectory assertions. Building a runner, a provider abstraction and a result store is months of undifferentiated work, and none of it is what makes this benchmark worth having.
 
 ## What
 
-Execute the matrix of task times backend times repetition, and write one raw JSONL line per cell to `bench/results/`.
+Adopt promptfoo as the shell. Write the Dossier-specific parts as its extension points: a provider adapter per backend, and each scorer as a custom JavaScript assertion.
+
+**Evaluate the claim before committing to it.** Confirm against the real package that it does multi-provider runs, resumes an interrupted matrix, stores raw output per cell, and lets a custom scorer see the whole report rather than a truncated field. If any of those is missing, say so and build only the missing piece rather than abandoning the adoption or pretending it fits.
+
+The requirements below still hold; they are now acceptance criteria for the adapter layer rather than a specification for a harness.
+
+## What the matrix must still do
+
+Execute task times backend times repetition, and keep one raw record per cell.
 
 ## Why the run and the scoring are separate
 

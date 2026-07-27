@@ -102,6 +102,22 @@ Each carries gold facts and is checked by the machinery above.
 | Contested | Due weight, both numbers, dissent retention |
 | Settled-with-fringe | The false-balance counterweight |
 
+## Amended 27 July 2026, after reading the prior art
+
+A seven-backend panel researched what already exists. The report is `../deep-research/benchmark-prior-art.md`, 49 sources, 48 of which resolve. Two decisions below were wrong and are corrected here rather than quietly edited.
+
+**Wrong: build the harness shell.** promptfoo is TypeScript, ships daily, and already has multi-provider evals, custom JavaScript scorers returning `{pass, score, reason}`, custom aggregation and agent-trajectory assertions. Building a runner, a provider abstraction and a result store is months of undifferentiated work. Adopt the shell; the differentiated part was never the harness.
+
+**Wrong: invent the metrics.** DeepTRACE (arXiv 2509.04499, ICLR 2026) specifies eight dimensions at formula level and separates **accuracy from thoroughness from necessity**, which is the distinction that catches over-citing. I verified the paper exists and is titled as cited. Adopting a published metric set also makes results comparable with everyone else's, which inventing one destroys.
+
+**Right, and confirmed: build the citation scorer.** No harness in TypeScript, Rust or Go ships one. The algorithm is public.
+
+**Missing entirely: the statistics.** The design had none, and the 2026 literature treats several as non-negotiable. Paired-difference tests with bootstrap confidence intervals. **Clustered standard errors when tasks share topics, which inflate naive errors up to threefold** and which this corpus walks straight into, being ten categories of ten related tasks. `k >= 3` repeats with `pass^k` reported beside `pass@1`. Completion rate as a validity metric. And **citation accuracy reported separately from citation volume**, since a backend citing a hundred sources at 80% is not the same product as one citing ten at 80%.
+
+**Underpowered.** The design says a hundred tasks. The report's judgement is that every existing set is underpowered and that effort belongs in extending toward a thousand. Recorded rather than acted on, because a hundred well-authored tasks still beats a thousand thin ones, but the reader should know the target is low.
+
+**One place the prior art and this design genuinely disagree.** DeepTRACE's support check uses a model judge. This design forbids a model in the scoring loop and uses token containment instead, which is weaker and exact. Both are kept: containment is the default because it is free and repeatable, the judged variant is available for anyone who wants it, and BENCH-10 scores the two against the same labelled corpus so the gap between them is measured rather than assumed.
+
 ## Implementation
 
 TypeScript in this repo, typechecked by `tsgo`, for one reason that outweighs the others: `corroborate.ts`, `evidence.ts` and `citations.ts` already export 34 of the primitives the scorer needs, all already tested. Adopting a Python harness means a second implementation of independent-domain counting and source classification, and two implementations of a rule eventually disagree about what the rule is.

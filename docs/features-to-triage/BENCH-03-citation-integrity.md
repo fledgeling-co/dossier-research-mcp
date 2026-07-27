@@ -24,6 +24,20 @@ Registry existence is exact, free hallucination detection for the canonical fail
 - A known-good DOI scores present; a well-formed but non-existent DOI scores absent; an unreachable registry scores unchecked and is excluded from the denominator.
 - Token containment reports what it is, never as claim verification. A page can contain "28.6%" while saying something else entirely about it. This check is weaker than a model's judgement and it is exact, repeatable and free, which for a regression suite is the better bargain.
 
+## Adopt DeepTRACE's dimensions rather than inventing metrics
+
+Amended 27 July 2026 after the prior-art research. DeepTRACE (arXiv 2509.04499, ICLR 2026) specifies its dimensions at formula level and separates **accuracy from thoroughness from necessity**. That third one is the distinction this brief was missing: it catches over-citing, where a report attaches sources to everything and scores well on any metric that only asks whether cited things are real.
+
+Report citation accuracy and citation **volume** as separate numbers, always. A backend citing a hundred sources at 80% accuracy and one citing ten at 80% are not the same product, and a single collapsed score cannot tell them apart.
+
+Adopting published metrics also makes results comparable with everyone else's, which inventing a private set destroys.
+
+## Where this design and the published one genuinely disagree
+
+DeepTRACE's support check uses a model judge. This design forbids a model in the scoring loop and uses token containment instead.
+
+Keep both, and be plain about which is which. **Containment is the default**, because it is free, exact and repeatable, and because a regression suite that costs money per run gets run once. The judged variant is available for anyone who wants the stronger check. BENCH-10 scores the two against the same labelled corpus, so the gap between them is a measurement rather than an assumption, and if containment turns out to be much weaker that is a finding worth having rather than a decision to defend.
+
 ## Non-goals
 
-No entailment. No model.
+No entailment in the default path. No model in the default path.

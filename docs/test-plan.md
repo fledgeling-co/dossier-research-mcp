@@ -187,6 +187,13 @@ Acceptance criteria are taken from the README's tool contracts and the tool desc
 | **CLI-23** | The model probe refuses anything short of identified-and-signed-in, so a prompt never reaches an unidentified binary | unit: `local-cli` | ✓ |
 | **CLI-24** | `MODEL=` is read out of a noisy answer, and an echoed prompt placeholder is refused rather than cached as a model name | unit: `local-cli` | ✓ |
 | **CLI-25** | The model cache round-trips with its timestamp, merges rather than replacing, and a corrupt file reads back as never-probed | unit: `local-cli` | ✓ |
+| **CLI-26** | No shipped adapter's headless argv carries an argument its own binary rejects; the Codex form no longer sends `--search` to `codex exec` | unit: `local-cli` | ✓ |
+| **CLI-27** | The headless form is chosen by probing the binary's own help output, never by comparing version numbers | unit: `local-cli` | ✓ |
+| **CLI-28** | A probe that cannot answer falls back to the current form rather than guessing the alternate, and the answer is cached per resolved absolute path so two installs can differ | unit: `local-cli` | ✓ |
+| **CLI-29** | The argv self-test runs the real headless invocation and reports `accepted` when the binary parses it and `rejected` when it refuses at argument parsing | unit: `local-cli` | ✓ |
+| **CLI-30** | A non-zero exit with no argument-parse signature is `inconclusive`, never `rejected`, so a binary wanting a login is not reported as a broken adapter | unit: `local-cli` | ✓ |
+| **CLI-31** | The self-test never invokes an absent or unidentified binary, on the same rule that governs a research run | unit: `local-cli` | ✓ |
+| **CLI-32** | A CLI that exits non-zero having printed an argument-parse refusal is reported as a broken adapter, not as failed research | unit: `local-provider` | ✓ |
 | **BROWSER-01** | A browser binary is identified by version string or install-path provenance, and reported ambiguous when it is neither | unit: `browser-detect` | ✓ |
 | **BROWSER-02** | An MCP server package is probed by presence on disk only; `npx` is never invoked, because that would fetch and execute it | unit: `browser-detect` | ✓ |
 | **BROWSER-03** | Whether an MCP server is registered with a client is always reported unknown; no client config is read | unit: `browser-detect` | ✓ |
@@ -279,6 +286,22 @@ Acceptance criteria are taken from the README's tool contracts and the tool desc
 | **PANEL-25** | Two CLIs probed as serving one model seat one: the survivor is the earlier in preference order, and the other is named as excluded with the shared model and the probe's age | unit: `panel` | ✓ |
 | **PANEL-26** | An unprobed machine loses no backend: every CLI keeps its seat and the panel says the lane may hold the same model twice, rather than guessing from a product name | unit: `panel` | ✓ |
 | **PANEL-27** | A capability is never inherited from a probed model: a CLI pointed at Grok still has no X access and stays off a social panel | unit: `panel` | ✓ |
+| **PANEL-28** | A finished panel reports which members produced a report and which did not, so four members returning one report cannot read as four-way coverage | unit: `panel` | ✓ |
+| **PANEL-29** | A panel whose members did not all contribute carries a warning saying to read the breadth as the answering members', not the panel's | unit: `panel` | ✓ |
+| **FAIL-01** | A failed run records WHY it failed, so a broken adapter and a hard question are distinguishable without opening the run | unit: `runner` | ✓ |
+| **FAIL-02** | The upstream provider message is surfaced where a person looking at a failed run will see it, not only stored on the record | unit: `runner`, `tools` | ✓ |
+| **FAIL-03** | A 429 is labelled as rate limiting, with its HTTP status, rather than as an unexplained failure | unit: `runner` | ✓ |
+| **FAIL-04** | `research_list` shows the failure kind and the first line of the upstream error, and warns when a backend refused the invocation | unit: `tools` | ✓ |
+| **RETRY-01** | A 429 on a PAID create is retried, because a rate limiter that answered created nothing | unit: `safety` | ✓ |
+| **RETRY-02** | A timeout, a dropped connection and a 5xx are still attempted exactly once and raise ambiguous spend | unit: `safety`, `providers` | ✓ |
+| **RETRY-03** | 400, 401 and 403 are definitive rejections passed straight through without a retry; 404, 409 and 5xx stay ambiguous | unit: `safety` | ✓ |
+| **RETRY-04** | The wait honours `Retry-After` first, then a delay named in the provider's message, then jittered backoff | unit: `safety` | ✓ |
+| **RETRY-05** | The rate-limit retry is bounded by attempt count, by a total-delay ceiling and by the caller's deadline | unit: `safety` | ✓ |
+| **RETRY-06** | A status carried only on a wrapped error's `cause` is still found, so a wrapped 429 is not classified fatal | unit: `safety` | ✓ |
+| **BUDGET-04** | A definitively-rejected run releases its commitment as a compensating `release` line; the reservation line is never mutated or removed | unit: `runner` | ✓ |
+| **BUDGET-05** | An ambiguous failure KEEPS its commitment, because the provider may have accepted the request | unit: `runner` | ✓ |
+| **BUDGET-06** | A release can never give back more than its run reserved, so a duplicated or forged release cannot lower committed spend without bound | unit: `runner` | ✓ |
+| **DOCTOR-01** | `research_doctor` runs the argv self-test on its default path and names any adapter whose invocation the binary refuses | unit: `tools` | ✓ |
 
 ### The paid project
 
