@@ -6,7 +6,8 @@ import { DiskRegistryCache, MemoryRegistryCache } from './cache.js';
 import { citationLookupCoordinator, collectAnchors, collectCitationEvidence } from './collect.js';
 import { parseEvidence } from './evidence.js';
 import type { RegistryResponse } from './registries.js';
-import type { FetchedSource } from '../verify/verify.js';
+import { BlockedUrlError } from '../../../src/net/safe-fetch.js';
+import type { FetchedPage } from './fetch.js';
 
 /**
  * Collection, entirely offline.
@@ -19,7 +20,7 @@ import type { FetchedSource } from '../verify/verify.js';
  * over whichever half happened to succeed.
  */
 
-const page = (over: Partial<FetchedSource> = {}): FetchedSource => ({
+const page = (over: Partial<FetchedPage> = {}): FetchedPage => ({
   url: 'https://example.com/a',
   status: 200,
   ok: true,
@@ -89,6 +90,30 @@ describe('a snapshot of one report', () => {
     // A truncated body is never complete readable HTML, so anchors are not
     // listed from it and the anchor check answers unchecked rather than missing.
     expect(evidence.pages[0]?.completeHtml).toBe(false);
+  });
+
+  it('keeps a refused URL\'s own verdict instead of flattening it to unreachable', async () => {
+    const blocked = new BlockedUrlError('private', 'Private address blocked: 127.0.0.1');
+    const evidence = await collectCitationEvidence(REPORT, {
+      registryTransport: transportFor({}),
+      fetchPage: () =>
+        Promise.resolve(
+          page({ ok: false, status: 0, body: '', error: blocked.message, thrown: blocked }),
+        ),
+    });
+    // The product calls an SSRF refusal `invalid_url` and a timeout
+    // `unreachable`, and those are different findings about a citation.
+    expect(evidence.pages[0]?.verdict).toBe('invalid_url');
+  });
+
+  it('calls a self-redirect loop blocked, not invalid, as the product does', async () => {
+    const loop = new BlockedUrlError('redirect_loop', 'Server redirects this URL to itself');
+    const evidence = await collectCitationEvidence(REPORT, {
+      registryTransport: transportFor({}),
+      fetchPage: () =>
+        Promise.resolve(page({ ok: false, status: 0, body: '', error: loop.message, thrown: loop })),
+    });
+    expect(evidence.pages[0]?.verdict).toBe('blocked');
   });
 
   it('records a page that would not load, rather than dropping it', async () => {

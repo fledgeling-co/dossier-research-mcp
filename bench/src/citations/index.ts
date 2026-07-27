@@ -33,6 +33,7 @@ export {
 export type { CitationEvidence, PageEvidence, RegistryAnswer } from './evidence.js';
 
 export { MAX_PAGE_BYTES, MAX_REGISTRY_BYTES, fetchPage, fetchRegistry } from './fetch.js';
+export type { FetchedPage } from './fetch.js';
 
 export { evidenceMatchesReport, evidencePath, readEvidence, writeEvidence } from './store.js';
 

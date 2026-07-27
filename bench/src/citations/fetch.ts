@@ -2,6 +2,21 @@ import { safeFetch } from '../../../src/net/safe-fetch.js';
 import type { FetchedSource } from '../verify/verify.js';
 
 /**
+ * A fetched page, plus the error object itself when one was thrown.
+ *
+ * `FetchedSource` reduces a failure to a message, which is enough for gold
+ * verification and not enough here: `judgeCitationError` distinguishes a
+ * malformed or SSRF-refused URL from a bot-deterrent redirect loop from an
+ * ordinary network failure, and it can only do that from the error's own class.
+ * Flattening it to a string first would make every refusal read `unreachable`,
+ * losing the one distinction the product's own verdicts are careful about.
+ * Carried as `unknown` rather than re-typed, so the rule stays in one place.
+ */
+export interface FetchedPage extends FetchedSource {
+  readonly thrown?: unknown;
+}
+
+/**
  * The two live adapters, and the only things in this slice that reach a network.
  *
  * Both go through `safeFetch` rather than `fetch`, because a URL that came out
@@ -61,7 +76,7 @@ function looksTruncated(body: string, cap: number): boolean {
 export async function fetchPage(
   url: string,
   options: { readonly timeoutMs?: number; readonly maxBytes?: number } = {},
-): Promise<FetchedSource> {
+): Promise<FetchedPage> {
   const maxBytes = options.maxBytes ?? MAX_PAGE_BYTES;
   try {
     const result = await safeFetch(url, {
@@ -88,6 +103,7 @@ export async function fetchPage(
       contentType: '',
       truncated: false,
       error: e instanceof Error ? e.message : 'fetch failed',
+      thrown: e,
     };
   }
 }

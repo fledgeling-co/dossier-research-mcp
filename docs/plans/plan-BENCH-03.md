@@ -227,6 +227,7 @@ Export from `bench/src/score/index.ts` and a new `bench/src/citations/index.ts`.
 | **INTEG-41** | A truncated page body is carried as truncated through collection into the containment verdict |
 | **INTEG-42** | Number and text matching goes through BENCH-09's shared primitives, so the two slices cannot disagree about a thousands separator |
 | **INTEG-43** | An evidence snapshot round-trips through a disk, is Zod-parsed on read, and a malformed one is refused rather than scored against |
+| **INTEG-44** | A URL refused as private keeps the product's own `invalid_url` verdict, and a self-redirect loop keeps `blocked` |
 
 ## Verify
 

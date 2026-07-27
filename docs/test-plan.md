@@ -615,6 +615,7 @@ The sharpest instrument in the benchmark, and the one whose wrong answer is most
 | **INTEG-38** | The same report and snapshot score identically twice | unit: `citations` | ✓ |
 | **INTEG-39** | A report with no citations is `unmeasurable / no-citations` and still reports volume | unit: `citations` | ✓ |
 | **INTEG-40** | With every network call failing, collection still returns a complete snapshot | unit: `collect` | ✓ |
+| **INTEG-44** | A URL refused as private keeps the product's own `invalid_url` verdict, and a self-redirect loop keeps `blocked`, rather than both flattening to `unreachable` | unit: `collect` | ✓ |
 | **INTEG-41** | A truncated page body is carried as truncated through collection into the containment verdict | unit: `collect`, `containment` | ✓ |
 | **INTEG-42** | Number and text matching goes through the shared primitives, so two slices cannot disagree about a thousands separator | unit: `containment` | ✓ |
 | **INTEG-43** | An evidence snapshot read back from disk is Zod-parsed, and a malformed one is refused rather than scored against | unit: `evidence` | ✓ |

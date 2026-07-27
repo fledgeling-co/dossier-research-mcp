@@ -3,7 +3,7 @@ import { canonicaliseUrl } from '../../../src/research/corroborate.js';
 import { judgeCitationError, judgeCitationStatus } from '../../../src/research/citations.js';
 import { extractCitedUrls } from '../../../src/research/report.js';
 import { decodeEntities, extractText } from '../verify/match.js';
-import type { FetchedSource } from '../verify/verify.js';
+import type { FetchedPage } from './fetch.js';
 import { extractIdentifiers, type ExtractedIdentifier } from '../score/identifiers.js';
 import {
   MemoryRegistryCache,
@@ -38,7 +38,7 @@ import { crossrefGapMs, isRefusal, plan, type RegistryOptions, type RegistryTran
 
 export interface CollectOptions {
   readonly registryTransport: RegistryTransport;
-  readonly fetchPage: (url: string) => Promise<FetchedSource>;
+  readonly fetchPage: (url: string) => Promise<FetchedPage>;
   readonly cache?: RegistryCache | undefined;
   readonly limiter?: RateLimiter | undefined;
   /**
@@ -109,7 +109,7 @@ export function collectAnchors(html: string): string[] {
 }
 
 /** Whether a body is HTML we read to the end, which is what gates the anchor check. */
-function isCompleteHtml(source: FetchedSource): boolean {
+function isCompleteHtml(source: FetchedPage): boolean {
   if (source.truncated || source.error !== undefined || !source.ok) return false;
   const head = source.body.slice(0, 2000).toLowerCase();
   return head.includes('<!doctype html') || head.includes('<html') || /<(body|head|div|p|h1)\b/.test(head);
@@ -177,14 +177,17 @@ async function lookUpIdentifier(
 async function collectPage(
   url: string,
   checkedAt: string,
-  fetchOne: (url: string) => Promise<FetchedSource>,
+  fetchOne: (url: string) => Promise<FetchedPage>,
 ): Promise<PageEvidence> {
   const source = await fetchOne(url);
 
+  // The error object itself where there is one, so a URL `safeFetch` refused as
+  // private or malformed keeps its own verdict instead of flattening into
+  // `unreachable` alongside a timeout.
   const judged =
     source.error === undefined
       ? judgeCitationStatus(source.status, source.ok)
-      : judgeCitationError(new Error(source.error));
+      : judgeCitationError(source.thrown ?? new Error(source.error));
 
   const raw = extractText(source.body, source.contentType);
   const text = raw.slice(0, MAX_PAGE_TEXT_CHARS);
