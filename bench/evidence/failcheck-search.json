@@ -1,0 +1,163 @@
+{
+  "mode": "search",
+  "backend": "claude",
+  "checkedAt": "2026-07-27",
+  "probes": [
+    {
+      "taskId": "deeptrace-gemini-citation-accuracy",
+      "category": "contested",
+      "factsTotal": 2,
+      "factsPresent": 2,
+      "presentFactIds": [
+        "gemini-thoroughness",
+        "corpus-size"
+      ],
+      "responseLength": 2148,
+      "responseExcerpt": "**No — the paper gives two different numbers for it.**\n\nFor Gemini's deep-research configuration (`Gemini (DR)`), DeepTRACE reports citation accuracy as:\n\n| Where | Figure | Severity label |\n|---|---|---|\n| Table 1, `%Citation Accuracy` column | **50.3%** | borderline |\n| Results prose, \"Deep Research Agents\" paragraph | **40.3%** | problematic |\n\nThe prose reads: *\"Gemini(DR) demonstrates weak citation performance: only 40.3% citation accuracy (problematic)\"* — in the same sentence that gives its 27.1% thoroughness, which **is** consistent with Table 1.\n\nSo the inconsistency is confined to the accuracy figure, and it isn't a bare typo you can read past: under the paper's own Appendix B thresholds (below 50 = problematic), each number is self-consistent with the label printed next to it. A reader can't use the severity marker to work out which one is meant.\n\n**The abstract breaks the tie in favour of 40.3%.** It states citation accuracy for deep-research configurations *\"ranging from 40–80% across systems.\"* Table 1's deep-research rows are GPT-5 79.1, YouChat 72.3, Copilot 62.1, PPLX 58.0, and Gemini 50.3 — Gemini is the floor of that range. A 50.3% floor would make the abstract's range 50–80%, not 40–80%. Two of the three mentions therefore point at 40.3, and Table 1's 50.3 looks like the transcription error.\n\nCaveat on the tie-break: it's an inference from internal consistency, not an author correction. Only v1 exists on arXiv (v2 returns 404 as of today), so nothing publi",
+      "verdict": "already-passed"
+    },
+    {
+      "taskId": "cvss-scores-july-2026",
+      "category": "enumeration",
+      "factsTotal": 6,
+      "factsPresent": 6,
+      "presentFactIds": [
+        "c53488-v31",
+        "c53488-v40",
+        "c41579-v31",
+        "c54500-v31",
+        "c54502-v40",
+        "c54592-v31"
+      ],
+      "responseLength": 1559,
+      "responseExcerpt": "Pulled from the NVD API (`services.nvd.nist.gov/rest/json/cves/2.0`), retrieved 27 July 2026.\n\n| CVE | CVSS v3.1 base | CVSS v4.0 base |\n|---|---|---|\n| CVE-2026-53488 (containerd) | **8.8** HIGH — `AV:L/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H` | **9.4** CRITICAL — `AV:L/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:H/SI:H/SA:H` |\n| CVE-2026-41579 (runc) | **3.3** LOW — `AV:L/AC:L/PR:N/UI:R/S:U/C:N/I:L/A:N` | **no v4.0 score published** |\n| CVE-2026-54500 (Oj) | **5.3** MEDIUM — `AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N` | **no v4.0 score published** |\n| CVE-2026-54502 (Oj) | **no v3.1 score published** | **6.3** MEDIUM — `AV:N/AC:L/AT:P/PR:N/UI:N/VC:N/VI:N/VA:L/SC:N/SI:N/SA:N` |\n| CVE-2026-54592 (Oj) | **7.5** HIGH — `AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H` | **no v4.0 score published** |\n\nOnly CVE-2026-53488 carries both. CVE-2026-54502 is the inverse case: the record has a `cvssMetricV40` entry and no `cvssMetricV31` entry at all.\n\nTwo provenance points that affect how much weight these carry:\n\n- **Only one of these scores is NVD's own.** The 8.8 on CVE-2026-53488 is a Primary metric sourced `nvd@nist.gov`. Every other score in the table — including that CVE's 9.4 — is a Secondary metric sourced `security-advisories@github.com`, i.e. the CNA's score carried in the NVD record rather than produced by NVD analysis.\n- **The three Oj CVEs are `vulnStatus: Deferred`**, so NVD has stopped enrichment on them and will not be adding a primary score of either version. CVE-2026-53488 and CVE-2026-41579 are `A",
+      "verdict": "already-passed"
+    },
+    {
+      "taskId": "node-26-5-1-security-release",
+      "category": "false-premise",
+      "factsTotal": 1,
+      "factsPresent": 1,
+      "presentFactIds": [
+        "latest-26x"
+      ],
+      "refusalAcknowledged": true,
+      "fabricatedTermsMentioned": true,
+      "responseLength": 2987,
+      "responseExcerpt": "There is no Node.js 26.5.1, and nothing was published on 20 July 2026. The premise doesn't hold up against the release record.\n\n**What the record actually shows**\n\nThe v26 line, per `nodejs.org/dist/index.json`:\n\n| Version | Date | Security release |\n|---|---|---|\n| v26.5.0 | 2026-07-08 | no |\n| v26.4.0 | 2026-06-24 | no |\n| v26.3.1 | 2026-06-17 | **yes** |\n| v26.3.0 | 2026-06-01 | no |\n| v26.2.0 | 2026-05-20 | no |\n| v26.1.0 | 2026-05-06 | no |\n| v26.0.0 | 2026-05-05 | no |\n\nv26.5.0 is still the latest release as of this check. No 26.5.1 has shipped, and there is no v26 release dated 20 July.\n\n**What did happen around that date**\n\nOn 21 July 2026 the project posted an advance notice: security releases for the 26.x, 24.x and 22.x lines, \"available on, or shortly after, Monday, July 27, 2026\" — that's today. Highest severity is HIGH on all three lines. Pre-announcements deliberately withhold the CVE list, and this one lists none. So if a 26.5.1 appears, it will likely be today or in the next few days, and its CVEs aren't public yet.\n\n**The nearest real thing**\n\nThe only security release in the v26 line so far is **v26.3.1** (17 June, announced 18 June), alongside v24.17.0 and v22.23.0. It fixed 12 CVEs:\n\n- **High:** CVE-2026-48933 (WebCrypto AES integer overflow, process abort when `subtle.encrypt()` input is a multiple of 2GiB); CVE-2026-48618 (unicode dot separator handling, TLS wildcard-depth auth bypass from a resolver/verifier normalization mismatch).\n- **Medium:** CVE-20",
+      "verdict": "already-passed"
+    },
+    {
+      "taskId": "fcc-ng911-rule-2026",
+      "category": "legal-regulatory",
+      "factsTotal": 4,
+      "factsPresent": 4,
+      "presentFactIds": [
+        "document-number",
+        "citation",
+        "publication-date",
+        "effective-date"
+      ],
+      "responseLength": 1055,
+      "responseExcerpt": "Both fields confirmed against the Federal Register API record.\n\n**FCC — Facilitating Implementation of Next Generation 911 Services (NG911); Improving 911 Reliability**\n\n| Field | Value |\n|---|---|\n| Document number | **2026-13998** |\n| FR citation | **91 FR 42794** (pp. 42794–42843) |\n| Publication date | **10 July 2026** |\n| Effective date | **10 August 2026** |\n| Type | Final rule |\n| Dockets | PS Docket Nos. 21-479 and 13-75; FCC 26-39 |\n\nSource: [federalregister.gov/documents/2026/07/10/2026-13998](https://www.federalregister.gov/documents/2026/07/10/2026-13998/facilitating-implementation-of-next-generation-911-services-ng911-improving-911-reliability)\n\nOne caveat worth flagging: the effective date above is the document-level `effective_on` field. Rules of this size often stagger compliance dates for individual provisions (and some sections carry OMB/PRA-contingent dates announced later in a separate FR notice). If you need the date a *specific* requirement bites, say which section and I'll pull the DATES paragraph from the rule text.",
+      "verdict": "already-passed"
+    },
+    {
+      "taskId": "cve-2026-14191-no-cvss-v40",
+      "category": "obscure-entity",
+      "factsTotal": 0,
+      "factsPresent": 0,
+      "presentFactIds": [],
+      "refusalAcknowledged": true,
+      "responseLength": 1668,
+      "responseExcerpt": "**NVD publishes no CVSS v4.0 base score for CVE-2026-14191.**\n\nChecked both the NVD web record and the NVD REST API (`services.nvd.nist.gov/rest/json/cves/2.0?cveId=CVE-2026-14191`):\n\n- **CVSS 4.0:** absent. No `cvssMetricV40` entry in the API response; the detail page shows \"N/A — NVD assessment not yet provided.\"\n- **CVSS 3.x:** NVD itself has also not scored it. The only score on the record is a **secondary/CNA** score from securin: **7.8 HIGH**, `CVSS:3.1/AV:L/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:H`.\n- **CVSS 2.0:** absent.\n\nThe reason is the record's status: published 2026-07-01 by securin, last modified 2026-07-09, and flagged **\"Not Scheduled\"** (API `vulnStatus: Deferred`) — NVD is explicitly not prioritising it for enrichment, so no NIST-authored metric of any version exists.\n\nI'm not computing a v4.0 vector for you, per your instruction. If you need one for triage, note that the CNA's 3.1 vector would not translate mechanically anyway: v4.0 splits impact into Vulnerable/Subsequent System and adds Attack Requirements and User Interaction granularity (Passive vs Active), and the \"run a repair on a hostile .rev set\" precondition is exactly where those new metrics change the arithmetic.\n\nCorroborating details from the record, in case they're what you actually need: CWE-129 + CWE-787, out-of-bounds heap write in `RecVolumes5::ReadHeader` (`recvol5.cpp`) where `RecNum` from a later .rev file is validated against that file's own `TotalCount` but never against the allocated `RecIte",
+      "verdict": "already-passed"
+    },
+    {
+      "taskId": "cve-2026-54502-no-cvss-v31",
+      "category": "obscure-entity",
+      "factsTotal": 0,
+      "factsPresent": 0,
+      "presentFactIds": [],
+      "refusalAcknowledged": false,
+      "responseLength": 1861,
+      "responseExcerpt": "**There is no published CVSS v3.1 base score for CVE-2026-54502.** NVD's 3.x tab shows `Base Score: N/A` with \"NVD assessment not yet provided\", and no vector string from NVD or any secondary source.\n\nWhat the record actually carries:\n\n| Version | Source | Score |\n|---|---|---|\n| CVSS 4.0 | GitHub, Inc. (CNA) | 6.3 MEDIUM — `CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:N/VC:N/VI:N/VA:L/SC:N/SI:N/SA:N` |\n| CVSS 4.0 | NVD | not provided |\n| CVSS 3.x | NVD | not provided |\n| CVSS 2.0 | NVD | not provided |\n\nSo the single numeric score anywhere on the record is the CNA's v4.0 6.3. NVD has assessed nothing itself under any version — the page states the CVE is not being prioritized for NVD enrichment.\n\nPer your instruction I'm not deriving a v3.1 figure from the 6.3. The two versions aren't interconvertible: v4.0 splits impact into Vulnerable-System (`VC/VI/VA`) and Subsequent-System (`SC/SI/SA`) metrics and adds Attack Requirements (`AT:P`), which has no v3.1 counterpart. Any \"v3.1 equivalent\" would be a fresh scoring judgement of mine, not something NVD published.\n\nThe rest of the record matches your description of the bug: CWE-121 stack-based buffer overflow, `ohler55/oj` versions `< 3.17.2`, where `fill_indent` in `dump.h` calls `memset(indent_str, ' ', (size_t)opts->indent)` unvalidated — an `INT_MAX` indent writes ~2 GB into a 4,184-byte stack buffer. Fixed in 3.17.2; advisory GHSA-3v45-f3vh-wg7m.\n\nOne caveat worth flagging: the JSON API reported `vulnStatus: \"Deferred\"` while the HTML de",
+      "verdict": "fails"
+    },
+    {
+      "taskId": "fr-2026-14072-no-effective-date",
+      "category": "obscure-entity",
+      "factsTotal": 0,
+      "factsPresent": 0,
+      "presentFactIds": [],
+      "refusalAcknowledged": true,
+      "responseLength": 1247,
+      "responseExcerpt": "The Federal Register record for document 2026-14072 carries **no effective date**. The `effective_on` field is present in the record and its value is `null`.\n\nDocument record (confirmed via two independent calls to `https://www.federalregister.gov/api/v1/documents/2026-14072.json`):\n\n| Field | Value |\n|---|---|\n| `document_number` | `2026-14072` |\n| `title` | Safety Zone; Chicago Sanitary and Ship Canal, Chicago, IL |\n| `type` | Rule |\n| `publication_date` | `2026-07-13` |\n| `citation` | 91 FR 42870 |\n| `effective_on` | `null` |\n| agencies | Homeland Security Department → Coast Guard |\n\nPer your instruction, I'm not inferring one. For completeness, and explicitly *not* as an effective date: the record's free-text `dates` field describes enforcement of the already-codified regulation at 33 CFR 165.930 from July 13–17 and July 27–31, 2026, daily 7–11 a.m. and 1–5 p.m. That is enforcement-period prose in a different field, not the effective-date field, and the absence of `effective_on` is consistent with a notice-of-enforcement rule that activates an existing CFR section rather than establishing a new one.\n\nSo: if a gold fact for this document asserts an effective date, the document record does not support it — the field is empty.",
+      "verdict": "already-passed"
+    },
+    {
+      "taskId": "nature-phospholipid-flipping",
+      "category": "primary-literature",
+      "factsTotal": 4,
+      "factsPresent": 4,
+      "presentFactIds": [
+        "doi",
+        "published",
+        "volume",
+        "pages"
+      ],
+      "responseLength": 1503,
+      "responseExcerpt": "Confirmed real — verified against the publisher-deposited Crossref record for the DOI, not from memory (the paper postdates my knowledge cutoff, so I couldn't have known it either way).\n\n**Fan et al., \"Heat-triggered phospholipid flipping stabilizes plasma membrane fluidity\"** *Nature* (25 authors)\n\n| Field | Value |\n|---|---|\n| DOI | `10.1038/s41586-026-10726-x` |\n| Publication date | **1 July 2026** (online / advance) · **23 July 2026** (print issue) |\n| Volume | **655**, issue 8124 |\n| Pages | **1060–1069** |\n\nTwo notes on the details:\n\n- **The date is genuinely two dates.** Crossref carries `published-online: 2026-07-01` and `published-print: 2026-07-23`. For a Nature paper these differ by design, so which one you cite depends on the style — most reference managers take 1 July 2026. If this is going into a gold set, record both rather than collapsing them.\n- **How I checked.** My first lookup was a Crossref fuzzy title search, whose top hit matched character for character. That's also exactly what a fabricated citation looks like, so I re-fetched the DOI directly (`api.crossref.org/works/<doi>` → HTTP 200) and read the raw JSON rather than a summarized version of it. The volume, issue, page range, and both dates above come from that record, which is publisher-deposited metadata.\n\nThe article page is at https://doi.org/10.1038/s41586-026-10726-x — worth noting I did not fetch the paper itself, so I've verified the citation metadata, not the content of the claims in the tit",
+      "verdict": "already-passed"
+    },
+    {
+      "taskId": "containerd-label-propagation-cve",
+      "category": "technical",
+      "factsTotal": 3,
+      "factsPresent": 3,
+      "presentFactIds": [
+        "cve-id",
+        "published",
+        "cvss-v31-base"
+      ],
+      "responseLength": 1953,
+      "responseExcerpt": "**CVE-2026-53488** (GitHub advisory GHSA-xhf5-7wjv-pqxp).\n\n| | |\n|---|---|\n| **CVE** | CVE-2026-53488 |\n| **NVD published** | 1 July 2026 (`2026-07-01T02:17:00.467`) |\n| **NVD CVSS v3.1 base score** | **8.8 (High)** — `CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H` |\n\nThe v3.1 score above is NVD's own: it carries `source: nvd@nist.gov`, `type: Primary`, and the record's `vulnStatus` is `Analyzed`, so NIST has actually completed enrichment rather than passing through the CNA's numbers.\n\nTwo things worth flagging, because they'd otherwise cause confusion:\n\n- **The advisory was published in June, not July.** GitHub published GHSA-xhf5-7wjv-pqxp on 18 June 2026; NVD published its record on 1 July 2026. Your question asked for the NVD publication date specifically, so 1 July is the right answer — but if you were working from \"published in July\", that's the NVD date, not the upstream advisory date.\n- **The severity differs by scoring system, and the higher number is not NVD's.** GitHub scored it CVSS v4.0 **9.4 Critical**; NVD scored it CVSS v3.1 **8.8 High**. Both live on the same NVD record, with GitHub's marked `Secondary`. So \"Critical\" and \"9.4\" are frequently quoted for this CVE, and neither is the v3.1 figure you asked for.\n\nVerified directly against the NVD 2.0 API record and the containerd advisory. The description matches your framing exactly — the CRI plugin propagates image-config labels (Dockerfile `LABEL`) to a container without validation, which can lead to arbitrary ",
+      "verdict": "already-passed"
+    },
+    {
+      "taskId": "node-26-5-0-toolchain",
+      "category": "technical",
+      "factsTotal": 4,
+      "factsPresent": 4,
+      "presentFactIds": [
+        "version",
+        "release-date",
+        "v8-version",
+        "npm-version"
+      ],
+      "responseLength": 969,
+      "responseExcerpt": "**Node.js v26.5.0** — the only release on the 26.x line in July 2026.\n\n| | |\n|---|---|\n| Version | v26.5.0 (Current) |\n| Release date | 8 July 2026 |\n| V8 | 14.6.202.34 |\n| npm | 11.17.0 |\n\nTwo notes on how this was verified:\n\n- The premise checks out. The 26.x line went v26.4.0 (24 June) → **v26.5.0 (8 July)** → nothing since; v26.5.0 is still the latest 26.x as of today, 27 July.\n- The V8 and npm numbers are *not* in the v26.5.0 changelog, because changelogs only list what changed and neither dependency was bumped in that release. They carry over — V8 14.6.202.34 has been constant since v26.1.0, and npm 11.17.0 came in with v26.4.0. I took both from `nodejs.org/dist/index.json`, which records the full bundled version set per release rather than the delta.\n\nSources: [Node.js releases blog](https://nodejs.org/en/blog/release/), [v26.5.0 changelog](https://nodejs.org/en/blog/release/v26.5.0), [nodejs.org/dist/index.json](https://nodejs.org/dist/index.json)",
+      "verdict": "already-passed"
+    },
+    {
+      "taskId": "promptfoo-june-2026-releases",
+      "category": "time-bound",
+      "factsTotal": 4,
+      "factsPresent": 4,
+      "presentFactIds": [
+        "p-0-121-14",
+        "p-0-121-15",
+        "p-0-121-16",
+        "p-0-121-17"
+      ],
+      "responseLength": 849,
+      "responseExcerpt": "Four versions of `promptfoo` were published to npm during June 2026:\n\n| Version | Published (UTC) |\n|---|---|\n| 0.121.14 | 2026-06-02T13:59:19Z |\n| 0.121.15 | 2026-06-05T14:31:09Z |\n| 0.121.16 | 2026-06-16T15:21:36Z |\n| 0.121.17 | 2026-06-16T17:10:37Z |\n\nSource: the npm registry document for `promptfoo` (`registry.npmjs.org/promptfoo`, `.time` map), fetched just now — June 2026 is past my knowledge cutoff, so this is registry data rather than recall.\n\nBoundary check, since you asked for June only: the nearest neighbours are 0.121.13 on 2026-05-28 and 0.121.18 on 2026-07-08. Neither is close enough to the month edge for a timezone shift to move it into or out of June, so the list is the same under UTC or local time. Note 0.121.16 and 0.121.17 landed under two hours apart on 16 June — that's genuinely two publishes, not a duplicate record.",
+      "verdict": "already-passed"
+    }
+  ],
+  "alreadyPassed": 10,
+  "partial": 0,
+  "fails": 1,
+  "noResponse": 0,
+  "notApplicable": 0
+}

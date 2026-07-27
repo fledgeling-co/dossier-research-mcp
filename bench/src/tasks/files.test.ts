@@ -200,9 +200,16 @@ describe('TASKFMT-28 an empty corpus directory', () => {
 });
 
 describe('the shipped corpus directory', () => {
-  it('holds nothing but its placeholder, because authoring the corpus is a separate item', () => {
+  // BENCH-01 asserted this directory held nothing but its placeholder, because
+  // authoring the corpus was a separate item. BENCH-09 is that item, so the
+  // assertion is replaced rather than deleted: what it protected was that
+  // nothing unexpected sits in the corpus directory, and that is still worth
+  // holding, now expressed as "everything here is a task file or the
+  // placeholder" rather than "nothing is here".
+  it('holds only task files, grouped into per-category directories', () => {
     const shipped = new URL('../../tasks/', import.meta.url);
-    const names = readdirSync(shipped);
-    expect(names).toEqual(['.gitkeep']);
+    const names = readdirSync(shipped, { withFileTypes: true });
+    const stray = names.filter((e) => !e.isDirectory() && e.name !== '.gitkeep');
+    expect(stray.map((e) => e.name)).toEqual([]);
   });
 });

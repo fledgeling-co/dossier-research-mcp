@@ -130,13 +130,16 @@ export function quoteAppears(text: string, quote: string): Presence {
  */
 export function numberForms(value: number): string[] {
   const forms = new Set<string>();
+  // The exponent guard sits here rather than at one call site, because both
+  // spellings JavaScript reaches for above 1e21 are exponential: `String(1e21)`
+  // *and* `(1e21).toFixed(0)` are both `1e+21`. Guarding only the first is the
+  // bug this function's own test caught. `1e+21` appears in no publisher's page,
+  // so offering it as a spelling of the number can only produce a false absent.
   const add = (s: string): void => {
-    if (s.length > 0) forms.add(s);
+    if (s.length > 0 && !s.includes('e') && !s.includes('E')) forms.add(s);
   };
 
   add(String(value));
-  // `toFixed` rather than exponent notation: a large integer printed by
-  // JavaScript as 1e+21 appears in no publisher's page.
   if (Number.isInteger(value)) {
     const plain = value.toFixed(0);
     add(plain);
