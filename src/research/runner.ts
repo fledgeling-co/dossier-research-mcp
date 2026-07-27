@@ -116,6 +116,14 @@ export interface StartRunArgs {
   readonly window?: string;
   /** The wide spec, serialised, when this is a wide run. */
   readonly wideSpec?: string;
+  /**
+   * A deliberate repetition index, for measuring non-determinism.
+   *
+   * Omitted for every ordinary run. The benchmark harness sets it so `n = 5` of
+   * one task on one backend is five paid runs rather than one run reported five
+   * times; see `FingerprintInput.repeat`.
+   */
+  readonly repeat?: number;
   readonly label?: string;
   readonly tags?: readonly string[];
   readonly attachments?: readonly {
@@ -284,7 +292,15 @@ export class Runner {
   fingerprintFor(
     args: Pick<
       StartRunArgs,
-      'prompt' | 'tier' | 'tools' | 'collaborativePlanning' | 'attachments' | 'shape' | 'window' | 'wideSpec'
+      | 'prompt'
+      | 'tier'
+      | 'tools'
+      | 'collaborativePlanning'
+      | 'attachments'
+      | 'shape'
+      | 'window'
+      | 'wideSpec'
+      | 'repeat'
     > & {
       /**
        * The backend, or a panel token naming every member.
@@ -306,6 +322,7 @@ export class Runner {
       ...(args.shape ? { shape: args.shape } : {}),
       ...(args.window ? { window: args.window } : {}),
       ...(args.wideSpec ? { wideSpec: args.wideSpec } : {}),
+      ...(args.repeat ? { repeat: args.repeat } : {}),
     });
   }
 
@@ -401,6 +418,10 @@ export class Runner {
         shape: args.shape ?? 'deep',
         ...(args.window ? { window: args.window } : {}),
         ...(args.wideSpec ? { wideSpec: args.wideSpec } : {}),
+        // Recorded, not merely hashed. A stored cell has to be attributable to
+        // its repetition an hour later, or a resumed batch cannot tell which of
+        // five it already bought.
+        ...(args.repeat ? { repeat: args.repeat } : {}),
         fingerprint: fp,
         createdAt: at,
         updatedAt: at,

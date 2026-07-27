@@ -43,6 +43,28 @@ export interface FingerprintInput {
   readonly shape?: string;
   readonly window?: string;
   readonly wideSpec?: string;
+  /**
+   * Which deliberate repetition of an otherwise identical purchase this is.
+   *
+   * Dedupe exists to stop *accidental* duplicate spend, and a benchmark repeat
+   * is not accidental. Without this field, `n = 5` of one task on one backend
+   * inside the dedupe window collapsed onto **one** paid run, so every spread,
+   * every `pass^k` and every non-determinism figure would have been computed
+   * over a single sample while reporting five. The measurement most sensitive
+   * to the defect is the one the defect makes look cleanest: five identical
+   * copies of one report have zero variance.
+   *
+   * The fix is to make a repeat *expressible*, never to add a nonce to every
+   * request. A nonce would delete the protection for the case it exists for:
+   * an agent stuck in a retry loop passes the same arguments each time,
+   * including this one, and still collapses onto one run. Only a caller that
+   * deliberately counts gets a second purchase.
+   *
+   * Omitted or `0` is the ordinary single run, and hashes to exactly the string
+   * it hashed to before this field existed — so no stored fingerprint is
+   * invalidated and no in-flight dedupe window is reopened by the upgrade.
+   */
+  readonly repeat?: number;
 }
 
 /**
@@ -80,6 +102,16 @@ function normaliseTools(tools: readonly ResearchToolSpec[]): string {
 }
 
 export function fingerprint(input: FingerprintInput): string {
+  const repeat = input.repeat ?? 0;
+  // Fail closed rather than hash whatever arrived. `NaN`, `1.5` and `-1` all
+  // stringify to something, and every `NaN` stringifies to the *same* thing —
+  // so a bad index would silently collapse the cells it was added to separate,
+  // which is the exact defect this field exists to fix, wearing a disguise.
+  if (!Number.isInteger(repeat) || repeat < 0) {
+    throw new TypeError(
+      `fingerprint: repeat must be a non-negative integer; received ${String(input.repeat)}`,
+    );
+  }
   const canonical = [
     normalisePrompt(input.prompt),
     input.tier,
@@ -91,6 +123,9 @@ export function fingerprint(input: FingerprintInput): string {
     input.shape ?? 'deep',
     input.window ?? 'none',
     input.wideSpec ?? '',
+    // Appended only when a repeat was actually asked for, so the ordinary run
+    // hashes to the byte-identical string it did before this field existed.
+    ...(repeat > 0 ? [`repeat:${String(repeat)}`] : []),
   ].join(' ');
   return createHash('sha256').update(canonical).digest('hex').slice(0, 32);
 }

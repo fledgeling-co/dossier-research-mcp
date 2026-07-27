@@ -84,6 +84,16 @@ export const RunRecordSchema = z.object({
    * and that is not recoverable from the prompt an hour later.
    */
   wideSpec: z.string().max(20_000).optional(),
+  /**
+   * Which deliberate repetition of an identical request this run is.
+   *
+   * Set only by the benchmark harness, where `n = 5` of one task on one backend
+   * must be five paid runs rather than one run counted five times. Absent on
+   * every ordinary run, and absent on every record written before it existed.
+   * The cap is the same order as a plausible `n`; a five-digit repetition index
+   * is a loop, not a measurement.
+   */
+  repeat: z.number().int().min(1).max(1000).optional(),
   state: z.enum(RUN_STATES),
   tier: z.enum(RESEARCH_TIERS),
   archetype: z.enum(ARCHETYPE_NAMES),
