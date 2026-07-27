@@ -1,5 +1,6 @@
 import type { BenchTaskFile, GoldFact } from '../tasks/schema.js';
 import {
+  assertProbabilities,
   DEFAULT_CONFIDENCE_PROBABILITY,
   findConfidenceMarkers,
   mentions,
@@ -88,7 +89,10 @@ export interface CalibrationUnmeasurable extends CalibrationCommon {
   readonly status: 'unmeasurable';
   readonly reason: UnmeasurableReason;
   readonly why: string;
+  /** Every marker found, abstentions included. Same meaning as in `scoreRefusal`. */
   readonly markerCount: number;
+  /** Markers that stated a level. `markerCount` minus `abstentions`. */
+  readonly gradedMarkers: number;
   readonly abstentions: number;
 }
 
@@ -104,7 +108,23 @@ export interface CalibrationScored extends CalibrationCommon {
   readonly uncertainty: number;
   readonly bins: readonly CalibrationBin[];
   readonly pairings: readonly CalibrationPairing[];
+  /**
+   * The denominator, stated, because a Brier score without it is unreadable.
+   *
+   * Silence is otherwise free: a backend that states a confidence only about
+   * the answers it got right scores near-perfectly over its own chosen sample.
+   * On a three-answer task with two wrong, staying quiet about the two is worth
+   * roughly fifty times on the headline number. `coverage` is what makes that
+   * visible, and BENCH-08 must print it beside the score rather than under it.
+   */
+  readonly scoredAnswers: number;
+  readonly goldFacts: number;
+  /** `scoredAnswers / goldFacts`. Read the Brier score only against this. */
+  readonly coverage: number;
+  /** Every marker found, abstentions included. Same meaning as in `scoreRefusal`. */
   readonly markerCount: number;
+  /** Markers that stated a level. `markerCount` minus `abstentions`. */
+  readonly gradedMarkers: number;
   readonly abstentions: number;
   /** Answers paired to a marker but absent from the recovery input. */
   readonly unresolved: readonly string[];
@@ -152,6 +172,7 @@ export function scoreCalibration(
   options: CalibrationOptions = {},
 ): CalibrationResult {
   const probabilities = options.probabilities ?? DEFAULT_CONFIDENCE_PROBABILITY;
+  assertProbabilities(probabilities);
   const notes: string[] = [];
 
   // Agrees with `ApplicableMetrics.calibration` rather than re-deriving it: a
@@ -178,7 +199,8 @@ export function scoreCalibration(
         abstentions > 0
           ? `the report states no confidence anywhere; ${String(abstentions)} abstention(s) were found, and an abstention is not a confidence assertion`
           : 'the report states no confidence anywhere, so there is nothing to pair with an outcome',
-      markerCount: 0,
+      markerCount: markers.length,
+      gradedMarkers: 0,
       abstentions,
       probabilities,
       notes,
@@ -244,7 +266,8 @@ export function scoreCalibration(
       why: missingOutcome
         ? `${String(unresolved.length)} answer(s) were discussed under a confidence marker and are missing from the recovery input, so no outcome is known for any pairing`
         : `the report states ${String(graded.length)} confidence(s), none of which discuss an answer the gold set records`,
-      markerCount: graded.length,
+      markerCount: markers.length,
+      gradedMarkers: graded.length,
       abstentions,
       probabilities,
       notes,
@@ -293,6 +316,13 @@ export function scoreCalibration(
     resolution += (inBin.length * (observed - baseRate) ** 2) / n;
   }
 
+  const coverage = n / task.goldFacts.length;
+  if (coverage < 1) {
+    notes.push(
+      `This score covers ${String(n)} of the task's ${String(task.goldFacts.length)} answers. A backend that states a confidence only about what it got right scores well over a sample it chose, so read the score against its coverage.`,
+    );
+  }
+
   return {
     status: 'scored',
     brier,
@@ -301,7 +331,11 @@ export function scoreCalibration(
     uncertainty: baseRate * (1 - baseRate),
     bins,
     pairings,
-    markerCount: graded.length,
+    scoredAnswers: n,
+    goldFacts: task.goldFacts.length,
+    coverage,
+    markerCount: markers.length,
+    gradedMarkers: graded.length,
     abstentions,
     unresolved,
     unpaired,

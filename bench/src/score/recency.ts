@@ -50,9 +50,28 @@ export interface DurabilityVerdict {
 const DURABLE_HOSTS =
   /(^|\.)(iso\.org|iec\.ch|ietf\.org|rfc-editor\.org|w3\.org|whatwg\.org|ecma-international\.org|unicode\.org|itu\.int|etsi\.org|ansi\.org|astm\.org|bipm\.org|opengroup\.org|oasis-open\.org|legislation\.gov\.uk|eur-lex\.europa\.eu|congress\.gov|govinfo\.gov|supremecourt\.gov|legislation\.gov\.au|austlii\.edu\.au|courtlistener\.com)$/i;
 
-/** Path segments that name a durable document wherever it is hosted. */
+/**
+ * Path segments that name a durable document wherever it is hosted.
+ *
+ * `tr` was here for `w3.org/TR/` and had to go: `/tr/` is the ordinary Turkish
+ * locale segment on the open web, so a 2019 Turkish news article graded
+ * `durable` and came out `fresh` seven years later. `w3.org` is recognised by
+ * host anyway, which is the narrower and correct way to reach the same pages.
+ */
 const DURABLE_PATHS =
-  /(^|\/)(tr|rfc|rfcs?|std|standards?|specs?|specification|statute|statutes|legislation|regulation|regulations|directive|judgment|judgement|constitution)(\/|$)/i;
+  /(^|\/)(rfcs?|std|standards?|specs?|specification|statutes?|legislation|regulations?|directive|judgment|judgement|constitution)(\/|$)/i;
+
+/**
+ * Paths that are not durable documents even on a standards body's own host.
+ *
+ * A standards body publishes news, blog posts and press releases beside its
+ * specifications, and treating the whole host as durable let a 2019 W3C blog
+ * post grade `fresh` in 2026. Demoted to `unknown` rather than `perishable`:
+ * a standards body's blog post is not a leaderboard, it is simply not a
+ * standard, and the honest answer is to fall back to the source-type horizon.
+ */
+const NOT_A_DOCUMENT_PATHS =
+  /(^|\/)(blogs?|news|newsroom|press|press-releases?|announcements?|events?|about|search|tags?|categor(y|ies))(\/|$)/i;
 
 /**
  * Pages whose whole content is a measurement of a moment.
@@ -103,13 +122,20 @@ export function classifyDurability(url: string): DurabilityVerdict {
   // Host as well as registrable domain: `registrableDomain` collapses
   // `eur-lex.europa.eu` to `europa.eu`, which is the right answer for counting
   // independent sources and the wrong one for recognising a specific publisher.
-  if (DURABLE_HOSTS.test(domain) || DURABLE_HOSTS.test(host)) {
+  const durableHost = DURABLE_HOSTS.test(domain) || DURABLE_HOSTS.test(host);
+  if (durableHost && NOT_A_DOCUMENT_PATHS.test(path)) {
+    return {
+      durability: 'unknown',
+      basis: 'a standards body, a legislature or a court, but on a news, blog or press path rather than a standards document, so the source-type horizon applies unchanged',
+    };
+  }
+  if (durableHost) {
     return {
       durability: 'durable',
       basis: 'a standards body, a legislature or a court, whose output stands until something supersedes it',
     };
   }
-  if (DURABLE_PATHS.test(path)) {
+  if (DURABLE_PATHS.test(path) && !NOT_A_DOCUMENT_PATHS.test(path)) {
     return {
       durability: 'durable',
       basis: 'its path names a standard, specification or statute, which stands until superseded',
@@ -220,6 +246,17 @@ const DAY_MS = 86_400_000;
  * measurement of nothing.
  */
 export function assessSourceRecency(source: RecencySource, asOf: string): SourceRecency {
+  // A bad as-of date is a programming error, not data, and it is the loader's
+  // own rule: `loadCorpus` throws on an invalid reference date rather than
+  // letting every comparison silently answer `false`. Read per source it also
+  // reported the caller's broken argument as the *source's* missing date, which
+  // sends whoever is debugging it to the corpus instead of to the one bad line.
+  const anchor = Date.parse(asOf);
+  if (Number.isNaN(anchor)) {
+    throw new TypeError(
+      `assessSourceRecency needs a readable as-of date; received "${asOf.slice(0, 40)}"`,
+    );
+  }
   const type = source.type ?? classifySource(source.url).type;
   const { durability, basis } = classifyDurability(source.url);
   const horizon = recencyHorizon(type, durability);
@@ -236,8 +273,7 @@ export function assessSourceRecency(source: RecencySource, asOf: string): Source
     };
   }
   const at = Date.parse(published);
-  const anchor = Date.parse(asOf);
-  if (Number.isNaN(at) || Number.isNaN(anchor)) {
+  if (Number.isNaN(at)) {
     return {
       ...base,
       freshness: 'undated',
@@ -246,8 +282,15 @@ export function assessSourceRecency(source: RecencySource, asOf: string): Source
     };
   }
 
-  const ageDays = Math.round((anchor - at) / DAY_MS);
-  if (ageDays < 0) {
+  // Branch on the raw difference, not on the rounded one. `Math.round(-0.4)` is
+  // `-0`, and `-0 < 0` is false, so a source stamped up to twelve hours *after*
+  // the as-of date fell through the guard and was counted `fresh`, entering the
+  // numerator of the freshness share. The product's `assessStaleness` still
+  // rounds first and still has that hole; the benchmark does not, and the
+  // divergence is confined to sub-day future timestamps.
+  const deltaMs = anchor - at;
+  const ageDays = Math.round(deltaMs / DAY_MS);
+  if (deltaMs < 0) {
     return {
       ...base,
       freshness: 'after-horizon',
@@ -321,6 +364,9 @@ export function scoreRecency(
   sources: readonly RecencySource[],
   asOf: string,
 ): RecencyResult {
+  if (Number.isNaN(Date.parse(asOf))) {
+    throw new TypeError(`scoreRecency needs a readable as-of date; received "${asOf.slice(0, 40)}"`);
+  }
   if (sources.length === 0) {
     return {
       status: 'not-applicable',

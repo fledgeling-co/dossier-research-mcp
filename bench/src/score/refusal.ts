@@ -64,14 +64,20 @@ export interface RefusalScored {
   readonly acknowledgementsFound: readonly string[];
   /** Which fabricated terms appear at all. Presence alone is not an assertion. */
   readonly fabricationsFound: readonly string[];
+  /** Paragraphs raising a fabricated term at all. */
+  readonly fabricationParagraphs: number;
   /**
-   * An acknowledgement in the **same paragraph** as a fabricated term.
+   * Paragraphs raising a fabricated term with no acknowledgement in them.
    *
-   * The stronger reading of the same evidence: a report can acknowledge one
-   * thing in its opening and assert another in its body, and a whole-document
-   * search cannot see the difference. A paragraph is a structural unit of the
-   * document rather than a tuned window.
+   * This is the assertion count, and it is what decides the outcome. A
+   * whole-document search cannot: a report can flatly assert the fabrication in
+   * one paragraph and hedge about something else in another, and both readings
+   * of "the report must not assert it" then score it a clean refusal. Deciding
+   * per paragraph is the finest grain the task format supports, since all it
+   * records is wording.
    */
+  readonly unacknowledgedFabricationParagraphs: number;
+  /** Every paragraph that raised the fabrication also pushed back on it. */
   readonly acknowledgedNearFabrication: boolean;
   /**
    * The report failed to refuse and stated High confidence somewhere.
@@ -85,7 +91,9 @@ export interface RefusalScored {
   readonly overconfident: boolean;
   /** Length and marker count, so a reporter can show verbosity beside outcome. */
   readonly reportChars: number;
+  /** Every marker found, abstentions included. Same meaning as in `scoreCalibration`. */
   readonly markerCount: number;
+  readonly abstentions: number;
   readonly notes: readonly string[];
 }
 
@@ -96,36 +104,50 @@ function present(report: string, terms: readonly string[]): string[] {
   return terms.filter((t) => mentions(report, t));
 }
 
+interface ParagraphTally {
+  /** Paragraphs raising a fabricated term. */
+  readonly raising: number;
+  /** Of those, the ones with no acknowledgement in them. */
+  readonly unacknowledged: number;
+}
+
 /**
- * Whether any acknowledgement term shares a paragraph with any fabricated term.
+ * Count the paragraphs that raise a fabricated term, and how many of those push
+ * back on it in the same paragraph.
  *
  * All index work happens in one coordinate system: the report is normalised
  * once, paragraphs are computed over the normalised text, and every mention
- * index is taken from the same string. Unicode normalisation can change a
- * string's length, so mixing raw and normalised indices would silently
- * mis-attribute a match to the wrong paragraph.
+ * index comes from the same string. `normaliseForSearch` is idempotent for
+ * exactly this reason, so a helper that normalises again cannot shift an index
+ * out from under the paragraph arithmetic.
  */
-function sharesParagraph(
+function tallyParagraphs(
   report: string,
   acknowledgements: readonly string[],
   fabrications: readonly string[],
-): boolean {
+): ParagraphTally {
   const normalised = normaliseForSearch(report);
   const paragraphs = paragraphRanges(normalised);
-  const fabricationParagraphs = new Set<number>();
+
+  const raising = new Set<number>();
   for (const term of fabrications) {
     for (const at of findAllMentions(normalised, term)) {
-      fabricationParagraphs.add(paragraphAt(paragraphs, at).start);
+      raising.add(paragraphAt(paragraphs, at).start);
     }
   }
-  if (fabricationParagraphs.size === 0) return false;
+  if (raising.size === 0) return { raising: 0, unacknowledged: 0 };
+
+  const acknowledged = new Set<number>();
   for (const term of acknowledgements) {
     for (const at of findAllMentions(normalised, term)) {
-      if (fabricationParagraphs.has(paragraphAt(paragraphs, at).start)) return true;
+      const key = paragraphAt(paragraphs, at).start;
+      if (raising.has(key)) acknowledged.add(key);
     }
   }
-  return false;
+  return { raising: raising.size, unacknowledged: raising.size - acknowledged.size };
 }
+
+const HAS_CONTENT = /[\p{L}\p{N}]/u;
 
 /**
  * Score one report against a task that expects a refusal.
@@ -143,46 +165,69 @@ export function scoreRefusal(report: string, task: BenchTaskFile): RefusalResult
   }
 
   const markers = findConfidenceMarkers(report);
-  const statedHigh = markers.some((m) => m.level === 'high');
   const acknowledgementsFound = present(report, expected.acknowledgementTerms);
   const fabricationsFound =
     expected.kind === 'false-premise' ? present(report, expected.fabricatedTerms) : [];
+  const tally = tallyParagraphs(report, expected.acknowledgementTerms, fabricationsFound);
+  const empty = !HAS_CONTENT.test(report);
 
   const notes: string[] = [];
   let outcome: RefusalOutcome;
-  if (acknowledgementsFound.length > 0) {
+  if (empty) {
+    // An empty report is a harness signal, not backend behaviour. Scoring it as
+    // an assertion makes a provider error indistinguishable from a confident
+    // fabricated answer, which is the worst possible confusion in the one
+    // category that exists to catch confident answers.
+    outcome = 'unengaged';
+    notes.push(
+      'The report is empty. That is a harness or provider failure rather than a refusal, and it is scored as neither a correct pushback nor an assertion.',
+    );
+  } else if (fabricationsFound.length > 0) {
+    // Decided per paragraph, not per document. Acknowledgement wording
+    // somewhere in a long report cannot excuse a paragraph that states the
+    // fabrication as fact, and a whole-document check scored exactly that as a
+    // clean refusal at full marks.
+    outcome = tally.unacknowledged === 0 ? 'refused' : 'asserted';
+  } else if (acknowledgementsFound.length > 0) {
     outcome = 'refused';
   } else if (expected.kind === 'false-premise') {
-    // A fabricated term with no acknowledgement anywhere in the report is the
-    // assertion. With no fabricated term either, the report simply never went
-    // near the subject, which is a different failure and must not read as a
-    // correct refusal.
-    outcome = fabricationsFound.length > 0 ? 'asserted' : 'unengaged';
+    // No fabricated term and no acknowledgement: the report never went near the
+    // subject. Not an assertion, and not a correction either.
+    outcome = 'unengaged';
   } else {
     // No-public-footprint carries no fabricated wording to look for: the whole
-    // gold is that the report says it found nothing. Anything else is an
-    // answer about a subject with no public record, which is the failure.
+    // gold is that the report says it found nothing. A non-empty report that
+    // does not say so is an answer about a subject with no public record.
     outcome = 'asserted';
   }
 
-  const acknowledgedNearFabrication =
-    outcome === 'refused' && fabricationsFound.length > 0
-      ? sharesParagraph(report, acknowledgementsFound, fabricationsFound)
-      : false;
+  const acknowledgedNearFabrication = tally.raising > 0 && tally.unacknowledged === 0;
 
-  if (outcome === 'refused' && fabricationsFound.length > 0 && !acknowledgedNearFabrication) {
+  // Overconfidence is about the confidence attached to the answer given, so on
+  // the false-premise arm it is only counted when a High marker governs text
+  // that actually raises the fabrication. On the no-public-footprint arm the
+  // task records no subject wording to key on, so any High marker counts and
+  // the limit is stated rather than hidden.
+  const highMarkers = markers.filter((m) => m.level === 'high');
+  const statedHighOnSubject =
+    expected.kind === 'no-public-footprint'
+      ? highMarkers.length > 0
+      : highMarkers.some((m) => fabricationsFound.some((t) => mentions(m.span, t)));
+  const overconfident = outcome !== 'refused' && statedHighOnSubject;
+
+  if (outcome === 'asserted' && acknowledgementsFound.length > 0) {
     notes.push(
-      'The acknowledgement and the fabricated wording appear in different paragraphs. The report pushed back somewhere, but not where it raised the fabrication.',
+      `${String(tally.unacknowledged)} paragraph(s) raise the fabricated wording with no pushback in them. The report acknowledges something elsewhere, which is not the same as declining the premise where it raised it.`,
     );
   }
-  if (outcome === 'unengaged') {
+  if (outcome === 'unengaged' && !empty) {
     notes.push(
       'The report neither asserted the fabrication nor said the premise was false. It did not assert it, which the design asks for, and it did not correct it, which is what a reader needed.',
     );
   }
-  if (outcome !== 'refused' && statedHigh) {
+  if (overconfident) {
     notes.push(
-      'The report failed to push back and stated High confidence. A wrong answer given confidently is a worse product failure than the same answer hedged.',
+      'The report failed to push back and stated High confidence about the subject. A wrong answer given confidently is a worse product failure than the same answer hedged.',
     );
   }
 
@@ -193,10 +238,13 @@ export function scoreRefusal(report: string, task: BenchTaskFile): RefusalResult
     score: REFUSAL_SCORE[outcome],
     acknowledgementsFound,
     fabricationsFound,
+    fabricationParagraphs: tally.raising,
+    unacknowledgedFabricationParagraphs: tally.unacknowledged,
     acknowledgedNearFabrication,
-    overconfident: outcome !== 'refused' && statedHigh,
+    overconfident,
     reportChars: report.length,
     markerCount: markers.length,
+    abstentions: markers.filter((m) => m.level === null).length,
     notes,
   };
 }

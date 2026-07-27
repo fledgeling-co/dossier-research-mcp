@@ -11,6 +11,7 @@
  * answer, and `recency.ts` grades a source set against the task's as-of date.
  */
 export {
+  assertProbabilities,
   CONFIDENCE_LEVELS,
   DEFAULT_CONFIDENCE_PROBABILITY,
   findAllMentions,
@@ -27,7 +28,17 @@ export type {
   ConfidenceProbabilities,
   MarkerForm,
   Range,
+  SpanDirection,
 } from './confidence.js';
+
+/**
+ * Re-exported because they are structural members of what this barrel returns:
+ * `SourceRecency.freshness`, `SourceRecency.type` and `RecencyScored.counts` are
+ * all typed by them, and a consumer that could not name them would have to
+ * reach into `src/research/evidence.js` to describe a value this module handed
+ * it.
+ */
+export type { Freshness, SourceType } from '../../../src/research/evidence.js';
 
 export { scoreCalibration } from './calibration.js';
 export type {

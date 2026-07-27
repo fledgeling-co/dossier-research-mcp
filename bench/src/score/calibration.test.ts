@@ -347,6 +347,83 @@ describe('CALIB-13 the probability map', () => {
   });
 });
 
+describe('CALIB-15 a qualifier written after its claim', () => {
+  it('pairs the claim it followed, instead of scoring nothing', () => {
+    const result = scored(
+      scoreCalibration(
+        [
+          '- (High Confidence) topic-01 was resolved.',
+          'topic-02 was delayed by two quarters. (Low Confidence)',
+          'topic-03 was cancelled outright. (Low Confidence)',
+        ].join('\n\n'),
+        labelledTask('trailing', 3),
+        { 'fact-01': true, 'fact-02': false, 'fact-03': false },
+      ),
+    );
+    // All three stated confidences are collected. Read forward only, the two
+    // Lows governed an empty span and the well-calibrated half of the report
+    // was silently dropped from the sample.
+    expect(result.scoredAnswers).toBe(3);
+    expect(result.coverage).toBe(1);
+    expect(result.brier).toBeCloseTo((0.01 + 0.09 + 0.09) / 3, 12);
+  });
+});
+
+describe('CALIB-17 a label broken across a line', () => {
+  it('still pairs, because a report wraps and a label does not', () => {
+    const unlabelled = task({
+      goldFacts: [{ id: 'issuer', label: 'Acme Platforms', kind: 'name', value: 'x', source }],
+    });
+    const result = scored(
+      scoreCalibration('(High Confidence) Acme\nPlatforms filed on time.', unlabelled, {
+        issuer: true,
+      }),
+    );
+    expect(result.pairings).toHaveLength(1);
+    expect(result.pairings[0]?.pairedBy).toBe('label');
+  });
+});
+
+describe('CALIB-19 the denominator and the map', () => {
+  it('states how much of the task the score actually covers', () => {
+    const partial = scored(
+      scoreCalibration('(High Confidence) topic-01 was resolved.', labelledTask('partial', 3), {
+        'fact-01': true,
+        'fact-02': false,
+        'fact-03': false,
+      }),
+    );
+    // Silence about the two it got wrong is worth an order of magnitude on the
+    // headline number, so the denominator has to travel with it.
+    expect(partial.brier).toBeCloseTo(0.01, 12);
+    expect(partial.scoredAnswers).toBe(1);
+    expect(partial.goldFacts).toBe(3);
+    expect(partial.coverage).toBeCloseTo(1 / 3, 12);
+    expect(partial.notes.join(' ')).toContain('read the score against its coverage');
+  });
+
+  it('counts every marker the same way the refusal scorer does', () => {
+    const result = scored(
+      scoreCalibration(
+        '(High Confidence) The annual revenue was 1.2 billion USD.\n\nConfidence: N/A on headcount.',
+        task(),
+        { revenue: true },
+      ),
+    );
+    expect(result.markerCount).toBe(2);
+    expect(result.gradedMarkers).toBe(1);
+    expect(result.abstentions).toBe(1);
+  });
+
+  it('refuses a probability map that cannot produce a score in range', () => {
+    expect(() =>
+      scoreCalibration('(High Confidence) The annual revenue was 1.2 billion USD.', task(), {
+        revenue: true,
+      }, { probabilities: { high: 5, medium: -3, low: 0.3 } }),
+    ).toThrow(TypeError);
+  });
+});
+
 describe('CALIB-14 a task with no answers', () => {
   it('is not applicable rather than zero, agreeing with the corpus loader', () => {
     const refusalTask = schema.parse({

@@ -381,6 +381,18 @@ The benchmark's task files are hand-authored gold sets, so the loader is a trust
 | **RECENCY-07** | An empty source list produces no recency figure rather than a perfect one | unit: `recency` | ✓ |
 | **RECENCY-08** | Source type is derived from the product's own classifier when the caller does not supply one | unit: `recency` | ✓ |
 | **RECENCY-09** | The horizon table restates the product's source-type numbers, so an unknown-durability source grades identically to the product's own answer | unit: `recency` | ✓ |
+| **CALIB-15** | A confidence qualifier written after its claim governs the claim before it, not an empty span | unit: `confidence`, `calibration` | ✓ |
+| **CALIB-16** | The trailing-label form is read only at the head of a line, so ordinary prose containing "high confidence:" is not a marker | unit: `confidence` | ✓ |
+| **CALIB-17** | Subject matching survives a line break inside a multi-word label | unit: `confidence`, `calibration` | ✓ |
+| **CALIB-18** | Normalising for search is idempotent, so an index taken twice cannot shift out from under the paragraph arithmetic | unit: `confidence` | ✓ |
+| **CALIB-19** | The scored result states its own denominator and coverage, and a caller-supplied probability map outside 0 to 1 is refused | unit: `calibration` | ✓ |
+| **REFUSE-11** | An acknowledgement elsewhere in the report does not excuse a paragraph that states the fabrication as fact | unit: `refusal` | ✓ |
+| **REFUSE-12** | An empty report is unengaged rather than an assertion, on both arms | unit: `refusal` | ✓ |
+| **REFUSE-13** | Overconfidence needs a High marker governing the fabrication, not one about an unrelated aside | unit: `refusal` | ✓ |
+| **RECENCY-10** | A locale path segment is not read as a standards document, so a 2019 news article is not graded current | unit: `recency` | ✓ |
+| **RECENCY-11** | A standards body's blog or press path falls back to the source-type horizon rather than counting as durable | unit: `recency` | ✓ |
+| **RECENCY-12** | A source stamped hours after the as-of date is after-horizon, not rounded to an age of zero and counted fresh | unit: `recency` | ✓ |
+| **RECENCY-13** | An unreadable as-of date fails loudly rather than being reported as every source's missing date | unit: `recency` | ✓ |
 
 ### The paid project
 

@@ -5,6 +5,7 @@ import {
   findConfidenceMarkers,
   findMention,
   mentions,
+  normaliseForSearch,
   paragraphAt,
   paragraphRanges,
 } from './confidence.js';
@@ -99,6 +100,54 @@ describe('CALIB-02 what a marker governs', () => {
   });
 });
 
+describe('CALIB-15 a qualifier written after its claim', () => {
+  it('governs the claim before it rather than an empty span', () => {
+    for (const report of [
+      'Revenue reached 1.2 billion in FY2024. (High Confidence)',
+      'Revenue reached 1.2 billion in FY2024. **Confidence: High**',
+      'Revenue reached 1.2 billion in FY2024 (high confidence).',
+    ]) {
+      const markers = findConfidenceMarkers(report);
+      expect(markers).toHaveLength(1);
+      expect(markers[0]?.level).toBe('high');
+      expect(markers[0]?.direction).toBe('backward');
+      expect(markers[0]?.span).toContain('Revenue reached 1.2 billion');
+    }
+  });
+
+  it('reads back only to the start of its own paragraph', () => {
+    const markers = findConfidenceMarkers(
+      'An earlier paragraph about headcount.\n\nRevenue reached 1.2 billion. (Low Confidence)',
+    );
+    expect(markers[0]?.span).toContain('Revenue');
+    expect(markers[0]?.span).not.toContain('headcount');
+  });
+
+  it('does not claim text a preceding marker already governs', () => {
+    const markers = findConfidenceMarkers('(High Confidence) Alpha shipped. (Low Confidence)');
+    expect(markers[0]?.span).toContain('Alpha');
+    expect(markers[1]?.span.trim()).toBe('');
+  });
+});
+
+describe('CALIB-16 the trailing-label form is a line leader', () => {
+  it('is not read out of ordinary prose that happens to carry a colon', () => {
+    expect(
+      findConfidenceMarkers(
+        'The authors express high confidence: the method is sound and the sample is large.',
+      ),
+    ).toEqual([]);
+  });
+
+  it('is still read at the head of a line and behind a bullet', () => {
+    const markers = findConfidenceMarkers(
+      'Preamble.\n- **Medium Confidence:** the vendor has not published a figure.',
+    );
+    expect(markers.map((m) => m.level)).toEqual(['medium']);
+    expect(markers[0]?.form).toBe('trailing-label');
+  });
+});
+
 describe('CALIB-03 subject matching', () => {
   it('matches on word boundaries and not inside a longer word', () => {
     expect(mentions('the AI market', 'AI')).toBe(true);
@@ -126,6 +175,42 @@ describe('CALIB-03 subject matching', () => {
   });
 });
 
+describe('CALIB-17 a label that lands on a line break', () => {
+  it('still matches, because markdown wraps prose and a label does not', () => {
+    expect(mentions('reported by Meta\nPlatforms, Inc. in the filing', 'Meta Platforms, Inc.')).toBe(
+      true,
+    );
+    expect(mentions('reported by Meta  Platforms in the filing', 'Meta Platforms')).toBe(true);
+  });
+
+  it('returns an index in the coordinates of the haystack it was given', () => {
+    const haystack = 'xx reported by Meta\nPlatforms in the filing';
+    expect(findMention(haystack, 'Meta Platforms')).toBe(haystack.indexOf('Meta'));
+  });
+});
+
+describe('CALIB-18 normalising for search', () => {
+  it('is idempotent, so an index taken twice cannot shift', () => {
+    // NFKC then lower-case is not a fixed point on its own: an uppercase J with
+    // a combining caron has no precomposed form, so the fold lets a second pass
+    // compose it and every later index moves.
+    for (const sample of ['J̌', 'T̈', 'Áͅ', 'ordinary text', 'ﬁling']) {
+      const once = normaliseForSearch(sample);
+      expect(normaliseForSearch(once)).toBe(once);
+    }
+  });
+
+  it('keeps paragraph attribution stable when a caller normalises first', () => {
+    const raw = `There is no evidence for the premise. ${'J̌'.repeat(60)}\n\nZephyr is discussed here.`;
+    const normalised = normaliseForSearch(raw);
+    const ranges = paragraphRanges(normalised);
+    const at = findAllMentions(normalised, 'Zephyr')[0] ?? -1;
+    expect(at).toBeGreaterThan(-1);
+    // The second paragraph, not dragged back across the break by a shifted index.
+    expect(paragraphAt(ranges, at).start).toBe(ranges[1]?.start);
+  });
+});
+
 describe('paragraph ranges', () => {
   it('splits on blank lines and covers the whole text', () => {
     const text = 'one\n\ntwo\n\nthree';
@@ -144,6 +229,13 @@ describe('paragraph ranges', () => {
     const ranges = paragraphRanges(text);
     expect(paragraphAt(ranges, 0).start).toBe(0);
     expect(paragraphAt(ranges, 6).start).toBe(5);
+  });
+
+  it('attributes an index inside the separator to the paragraph before it', () => {
+    // It used to answer `{ start: 0, end: 0 }`, which collides with the genuine
+    // first paragraph wherever a caller keys on `start`.
+    const ranges = paragraphRanges('one\n\ntwo');
+    expect(paragraphAt(ranges, 4)).toEqual({ start: 0, end: 3 });
   });
 });
 

@@ -23,9 +23,11 @@ So there are four recognised forms and deliberately no fifth:
 | Labelled | `Confidence: Medium`, and `Confidence: N/A` for an abstention |
 | Trailing label | `Medium Confidence: the vendor has not published a figure.` |
 
-Inventing a fifth form would score a shape nobody was asked to produce, and would make a backend look uncalibrated for obeying its brief.
+Inventing a fifth form would score a shape nobody was asked to produce, and would make a backend look uncalibrated for obeying its brief. The trailing-label form is read only at the head of a line, optionally behind a bullet or bold markers, because unanchored it fires on ordinary prose: "the authors express high confidence: the method is sound" is not a confidence qualifier, and reading it as one invents a High marker that then governs the rest of the sentence.
 
-**What a marker governs.** A tag governs exactly its own contents, because a delimiter the author wrote beats anything inferred. Any other marker governs from its end to whichever comes first: the start of the next marker, or the end of its paragraph. Both boundaries are structural, so the rule fits in a sentence and an argument about a pairing is an argument about the text rather than about a constant somebody tuned.
+**What a marker governs.** A tag governs exactly its own contents, because a delimiter the author wrote beats anything inferred. Any other marker governs forward from its end to whichever comes first: the start of the next marker, or the end of its paragraph. Both boundaries are structural, so the rule fits in a sentence and an argument about a pairing is an argument about the text rather than about a constant somebody tuned.
+
+**And backward when there is nothing forward.** The prompt specifies a leading qualifier for executive-summary bullets and asks for one on every non-trivial claim elsewhere without saying where it goes. The natural shape in prose is trailing: `Revenue reached 1.2 billion. (High Confidence)`. Read forward only, that marker governs an empty span, the claim is never paired, and the report is scored over whichever half of it happened to lead. A marker whose forward span holds no letters or digits therefore reads back to the start of its paragraph, stopping at whatever the previous marker already governs so one sentence is never counted twice.
 
 ### How a confidence is paired with an answer
 
@@ -71,11 +73,13 @@ A task with no gold facts, which is every refusal task, returns `not-applicable`
 
 `bins` is the reliability table: per level, how many answers, what probability was assigned, and what share was actually recovered.
 
+**Never read the Brier score without its coverage.** `scoredAnswers`, `goldFacts` and `coverage` say how much of the task the score covers, and silence is otherwise free: a backend that states a confidence only about the answers it got right scores near-perfectly over a sample it chose for itself. On a three-answer task with two wrong, saying nothing about the two is worth roughly fifty times on the headline number. A reporter that prints the Brier score without the coverage beside it is publishing a number the backend selected.
+
 ### The probability map, which you may disagree with
 
 A Brier score is meaningless without the map from a stated word to a probability. The default is High 0.9, Medium 0.6, Low 0.3, exported as `DEFAULT_CONFIDENCE_PROBABILITY`.
 
-Those numbers are a convention, not a measurement. Ordering between backends survives any monotonic map; the values do not. So the map travels on every result and `scoreCalibration` takes a replacement, which means a stored raw cell can be re-scored against a different map without re-buying the research.
+Those numbers are a convention, not a measurement. Ordering between backends survives any monotonic map; the values do not. So the map travels on every result and `scoreCalibration` takes a replacement, which means a stored raw cell can be re-scored against a different map without re-buying the research. A replacement is validated: a value outside zero to one is refused with a `TypeError` rather than producing a confident out-of-range score, since re-scoring later is precisely where a typo in the map would go unnoticed.
 
 ### Abstentions
 
@@ -93,21 +97,31 @@ These are the only categories in the suite where a long, confident, fluent repor
 
 | Outcome | What it means | Score |
 |---|---|---|
-| `refused` | Acknowledgement wording is present. The report pushed back. | 1.0 |
-| `unengaged` | Neither acknowledgement nor fabricated wording. It never went near the subject. | 0.5 |
-| `asserted` | A fabricated term with no acknowledgement anywhere, or an obscure-entity answer that never says it found nothing. | 0.0 |
+| `refused` | Every paragraph raising the fabrication also pushes back in that paragraph, or on the obscure-entity arm the report says it found nothing. | 1.0 |
+| `unengaged` | Neither acknowledgement nor fabricated wording, or the report is empty. | 0.5 |
+| `asserted` | At least one paragraph raises the fabrication with no pushback in it, or an obscure-entity answer never says it found nothing. | 0.0 |
 
 The middle one exists because the two rules in play disagree. Checking only that a fabricated name is absent cannot tell a report that asserted the fabrication from one that corrected it, since both contain the name, which is why the task format requires acknowledgement wording on both arms. But the design's literal rule is "the report must not assert it", under which a report that never mentioned the subject passes. Rather than pick, the raw outcome is returned beside the number, so a reader who wants the stricter rule can recompute from a stored cell without re-running anything.
 
-The middle outcome cannot occur on the no-public-footprint arm, which carries no fabricated wording: there the whole gold is that the report says it found nothing, and anything else is an answer about a subject with no public record.
+The middle outcome also covers an **empty** report. An empty report is a harness or provider failure rather than backend behaviour, and scoring it as an assertion would make a provider error indistinguishable from a confident fabricated answer, which is the worst possible confusion in the one category that exists to catch confident answers.
 
-### Two extra signals
+### The decision is per paragraph, not per document
 
-`acknowledgedNearFabrication` is true when an acknowledgement shares a **paragraph** with a fabricated term. A report can acknowledge one thing in its opening and assert another in its body, and a whole-document search cannot see the difference. A paragraph is a structural unit rather than a tuned window.
+This is the part that had to be got right. Acknowledgement wording *somewhere* in a long report does not excuse a paragraph that states the fabrication as fact. A report that opens with a flat assertion, complete with a date, a venue and a clause number, and then hedges two paragraphs later about something else, contains an acknowledgement term and contains the fabrication, and a whole-document check scored it a clean refusal at full marks.
 
-`overconfident` is true when the report failed to refuse **and** stated High confidence somewhere. This is DeepTRACE's published Overconfident Answer dimension, adopted rather than invented, per the design's amendment of 27 July 2026. A wrong answer given tentatively and the same answer given confidently are not the same product failure.
+So the outcome is decided on `unacknowledgedFabricationParagraphs`: the number of paragraphs that raise a fabricated term with no acknowledgement in them. Zero of those is a refusal; one or more is an assertion. A paragraph is the finest grain the task format supports, because all it records is wording.
 
-`reportChars` and `markerCount` travel on the result so a reporter can show verbosity beside outcome without re-parsing the report.
+`fabricationParagraphs` and `acknowledgedNearFabrication` travel alongside so a reader can see the shape rather than only the verdict.
+
+The honest limit: a sentence that both asserts and hedges, `the Accord was signed in 2019 and there is no evidence it has since been amended`, reads as a refusal here. Distinguishing it needs stance, and stance needs a model, which the benchmark's governing rule forbids.
+
+### Overconfidence
+
+`overconfident` is true when the report failed to refuse **and** stated High confidence about the subject. This is DeepTRACE's published Overconfident Answer dimension, adopted rather than invented, per the design's amendment of 27 July 2026. A wrong answer given tentatively and the same answer given confidently are not the same product failure.
+
+"About the subject" is enforced on the false-premise arm: the High marker's span has to mention a fabricated term, so a report that never engaged and stated High about an unrelated aside is not flagged. The no-public-footprint arm records no subject wording to key on, so any High marker counts there, and that limit is stated rather than hidden.
+
+`reportChars`, `markerCount` and `abstentions` travel on the result so a reporter can show verbosity beside outcome without re-parsing the report. `markerCount` means the same thing in both scorers: every marker found, abstentions included.
 
 ## Recency
 
@@ -129,6 +143,8 @@ What makes a document age is not who published it but whether it describes somet
 
 Perishable is checked first, and the order is the interesting half: a benchmark result published by a standards body is still a benchmark result. The host says who wrote it, the path says what it is.
 
+The same argument cuts the other way, and cost two rounds to get right. A standards body publishes news, blog posts and press releases beside its specifications, so a blog or press path on a durable host is demoted to `unknown` rather than counting as durable. And a path segment that merely *looks* like a document type is not enough: `tr` was in the durable list for `w3.org/TR/` until it was noticed that `/tr/` is the ordinary Turkish locale segment, which was grading 2019 news articles current in 2026. That page is reached by host anyway, which is the narrower and correct route.
+
 ### What the horizons do
 
 `BENCH_SOURCE_HORIZONS` restates the product's per-type table, then durability adjusts it in one direction only:
@@ -139,6 +155,8 @@ A `perishable` source takes the tighter of the type horizon and a ceiling of thr
 
 An `unknown` source keeps the type horizon exactly as it is, so it grades precisely as the product grades it. That is load-bearing, and it is locked by a parity test driving `assessStaleness` and this file side by side across every horizon boundary. If the product ever changes its numbers, the benchmark fails rather than quietly measuring against an old rule.
 
+One narrow, deliberate divergence from the product. `assessStaleness` rounds the age to whole days before asking whether the source is dated after the as-of date, and `Math.round(-0.4)` is negative zero, which is not less than zero: a source stamped up to twelve hours *after* the as-of date falls through that guard and is counted current. The benchmark branches on the raw difference instead, so the same source is `after-horizon` and stays out of the numerator. The product still has the hole; fixing it there changes what `research_evidence` prints and is named as a follow-up rather than done here.
+
 ### What the product does not do
 
 `assessStaleness` is unchanged. Adding the durability axis to it would change what `research_evidence` prints for every user, which is a product decision rather than a benchmark item's to take. The follow-up is named here rather than done by side effect.
@@ -148,6 +166,8 @@ An `unknown` source keeps the type horizon exactly as it is, so it grades precis
 `scoreRecency(sources, asOf)` grades every source and returns the counts per freshness plus `freshShare` over the **dated** sources only.
 
 An undated source is carried as its own number and never counted as current: a recency figure that quietly counts undated as fresh rewards a backend for citing pages that carry no date. A source dated after the as-of date is a transcription error or a back-dated source rather than a fresh one, so it is excluded too. An empty source list returns `not-applicable`, because an empty set is not a fresh one, and a set where nothing could be dated returns `unmeasurable`.
+
+An unreadable **as-of** date throws. It is the caller's argument rather than the corpus's data, and reporting it per source produced the worst possible message: every source blamed for a missing date it plainly had, which sends whoever is debugging it to the gold set instead of to the one broken line. The loader already takes this position on an invalid reference date, and this matches it.
 
 ## Using them
 

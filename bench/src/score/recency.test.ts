@@ -185,6 +185,62 @@ describe('RECENCY-04 to RECENCY-07 the report-level figure', () => {
   });
 });
 
+describe('RECENCY-10 to RECENCY-13 the holes an adversarial pass found', () => {
+  it('does not read a locale path segment as a standards document', () => {
+    // `tr` was in the durable path list for `w3.org/TR/`. It is also the
+    // Turkish locale segment, which graded a 2019 news article `fresh` in 2026.
+    const graded = assessSourceRecency(
+      { url: 'https://www.hurriyetdailynews.com/tr/2019/ekonomi/haber-12345', publishedAt: '2019-03-04' },
+      AS_OF,
+    );
+    expect(graded.durability).toBe('unknown');
+    expect(graded.freshness).toBe('stale');
+    // The page it was there for is reached by host anyway.
+    expect(classifyDurability('https://www.w3.org/TR/webauthn-2/').durability).toBe('durable');
+  });
+
+  it('falls back to the source-type horizon on a standards body news or blog path', () => {
+    for (const url of [
+      'https://www.w3.org/blog/2019/some-news-post/',
+      'https://www.congress.gov/news/2019/daily-digest',
+    ]) {
+      const verdict = classifyDurability(url);
+      expect(verdict.durability).toBe('unknown');
+      expect(verdict.basis).toContain('rather than a standards document');
+    }
+    expect(
+      assessSourceRecency(
+        { url: 'https://www.w3.org/blog/2019/some-news-post/', publishedAt: '2019-03-04' },
+        AS_OF,
+      ).freshness,
+    ).toBe('stale');
+  });
+
+  it('reports a source stamped hours after the as-of date as after-horizon', () => {
+    // `Math.round(-0.4)` is `-0`, and `-0 < 0` is false, so branching on the
+    // rounded age let a future timestamp into the fresh count.
+    const graded = assessSourceRecency(
+      { url: 'https://example.com/notes/x', publishedAt: '2026-07-27T11:00:00Z' },
+      AS_OF,
+    );
+    expect(graded.freshness).toBe('after-horizon');
+    const result = scoreRecency(
+      [{ url: 'https://example.com/notes/x', publishedAt: '2026-07-27T11:00:00Z' }],
+      AS_OF,
+    );
+    expect(result.status).toBe('unmeasurable');
+  });
+
+  it('fails loudly on an unreadable as-of date instead of blaming the sources', () => {
+    expect(() =>
+      assessSourceRecency({ url: 'https://example.com/a', publishedAt: '2020-01-01' }, 'not-a-date'),
+    ).toThrow(TypeError);
+    expect(() =>
+      scoreRecency([{ url: 'https://example.com/a', publishedAt: '2020-01-01' }], 'not-a-date'),
+    ).toThrow(TypeError);
+  });
+});
+
 describe('RECENCY-08 source type', () => {
   it('is derived from the product classifier when the caller does not supply one', () => {
     expect(assessSourceRecency({ url: 'https://arxiv.org/abs/2509.04499' }, AS_OF).type).toBe(

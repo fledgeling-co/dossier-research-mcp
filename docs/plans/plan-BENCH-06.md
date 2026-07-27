@@ -98,7 +98,7 @@ None. No new dependency, no gate wiring, no change to `package.json`.
 - **Details:** The orphan, closed here rather than re-parked.
 
   - `classifyDurability(url): { durability: 'durable' | 'perishable' | 'unknown', basis }`. **Durable**: standards and law bodies and their document paths (`iso.org`, `w3.org/TR/`, `rfc-editor.org`, `ietf.org`, `ecma-international.org`, `unicode.org`, `nist.gov` publications, `iec.ch`, `etsi.org`, legislation and court hosts, a `/standard`, `/spec`, `/rfc` or `/statute` path segment). **Perishable**: leaderboards, benchmarks, pricing, changelogs, releases, status pages, "state of" reports (`/leaderboard`, `/benchmark`, `/pricing`, `/changelog`, `/releases`, `/status`, `/whats-new`). Anything else is `unknown`, which is the common and honest case, exactly as `classifySource` leaves an unrecognised domain `other`.
-  - `BENCH_HORIZONS`: the source-type table restated from `src/research/evidence.ts` (it is module-private there and cannot be imported), with the durability axis multiplying it. Durable widens the horizon, perishable narrows it, unknown leaves it alone. A named constant with its provenance in a comment, so the multipliers are arguable rather than folded into a formula.
+  - `BENCH_SOURCE_HORIZONS`: the source-type table restated from `src/research/evidence.ts` (it is module-private there and cannot be imported), with the durability axis adjusting it in one direction only. Durable takes the **wider** of the type horizon and a floor; perishable takes the **tighter** of it and a ceiling; unknown leaves it alone. Implemented as `Math.max` against `DURABLE_FLOOR` and `Math.min` against `PERISHABLE_CEILING` rather than as a multiplier, so the one-directional property is structural and holds even if the type table changes. `nist.gov` was named here as a durable host and is deliberately **not** in the code: NIST publishes far more than standards, and a whole-host rule is exactly the padding vector the classifier's own comment warns about.
   - `assessSourceRecency({ url, publishedAt, type? }, asOf)` returning the same `Freshness` vocabulary the product already uses (`fresh` / `ageing` / `stale` / `undated` / `after-horizon`), so nothing downstream has to learn a second word for the same idea. `type` defaults to `classifySource(url).type`.
   - `scoreRecency(sources, asOf)` returning the counts per freshness, the share fresh **over the dated sources only**, and `undated` carried as its own number. An undated source is never counted as current; a recency figure that quietly does is a measurement of nothing.
 
@@ -137,30 +137,30 @@ None. No new dependency, no gate wiring, no change to `package.json`.
 
 ## Acceptance criteria
 
-- [ ] All four marker forms parse, including the bolded and lower-case variants, and an unrecognised form does not.
-- [ ] A `<CONFIDENCE:LOW>` tag's span is exactly its contents; an undelimited marker's span stops at the next marker or the paragraph end.
-- [ ] `mentions` matches on word boundaries and does not match inside a longer word.
-- [ ] A report with no confidence markers returns `measurable: false, reason: 'no-markers'`, and the returned object carries **no** Brier score at all, so no caller can read it as zero.
-- [ ] `markers-present-but-unpaired` and `no-recovery-input` are distinct reasons from `no-markers`.
-- [ ] A confidently-wrong claim is paired through the fact's label and scores against the backend; the same fixture with no label falls back to value pairing, reports `pairedByValueOnly`, and the note says what that costs.
-- [ ] A fact with no entry in the recovery input is counted `unresolved` and excluded, not scored as wrong.
-- [ ] An abstention marker is counted in `abstentions` and never enters the Brier.
-- [ ] The brief's own comparison holds as a fixture: a backend right 60% that says High every time scores a worse Brier and worse reliability than one right 55% whose Highs are right 90%.
-- [ ] The reliability table reports count, mean predicted and observed frequency per level, and the Murphy decomposition sums back to the Brier score within floating-point tolerance.
-- [ ] The probability map is carried on every result and an alternative map passed by the caller changes the score.
-- [ ] A false-premise report that pushes back scores 1.0 even when it contains nothing else useful.
-- [ ] A false-premise report that asserts the fabrication with no acknowledgement scores 0.0 and is `asserted`.
-- [ ] A false-premise report that never mentions the fabrication is `unengaged` at 0.5, and is not reported as a refusal.
-- [ ] `acknowledgedNearFabrication` is true only when both appear in the same paragraph.
-- [ ] A no-public-footprint report that says it found nothing scores 1.0; one that answers confidently scores 0.0 and is flagged `overconfident`.
-- [ ] `scoreRefusal` on a task with no `expectedRefusal` returns `applicable: false` and no score.
-- [ ] A 2019 standard is `fresh` against a 2026 as-of date and a 2019 benchmark is `stale`, which is the design's own sentence turned into a test.
-- [ ] An unrecognised URL is `unknown` and falls back to the existing source-type horizon unchanged.
-- [ ] Undated sources are counted separately and excluded from the fresh share; a source dated after the as-of date is `after-horizon`.
-- [ ] An empty source list produces no recency figure rather than a perfect one.
-- [ ] `npm run gate` passes, and the suite is green on two consecutive runs.
-- [ ] A real-Node out-of-transform run through `bench/src/score/index.js` scores a fixture.
-- [ ] An stdio smoke test against `dist/index.js` shows the server unchanged and no stdout noise.
+- [x] All four marker forms parse, including the bolded and lower-case variants, and an unrecognised form does not.
+- [x] A `<CONFIDENCE:LOW>` tag's span is exactly its contents; an undelimited marker's span stops at the next marker or the paragraph end.
+- [x] `mentions` matches on word boundaries and does not match inside a longer word.
+- [x] A report with no confidence markers returns `measurable: false, reason: 'no-markers'`, and the returned object carries **no** Brier score at all, so no caller can read it as zero.
+- [x] `markers-present-but-unpaired` and `no-recovery-input` are distinct reasons from `no-markers`.
+- [x] A confidently-wrong claim is paired through the fact's label and scores against the backend; the same fixture with no label falls back to value pairing, reports `pairedByValueOnly`, and the note says what that costs.
+- [x] A fact with no entry in the recovery input is counted `unresolved` and excluded, not scored as wrong.
+- [x] An abstention marker is counted in `abstentions` and never enters the Brier.
+- [x] The brief's own comparison holds as a fixture: a backend right 60% that says High every time scores a worse Brier and worse reliability than one right 55% whose Highs are right 90%.
+- [x] The reliability table reports count, mean predicted and observed frequency per level, and the Murphy decomposition sums back to the Brier score within floating-point tolerance.
+- [x] The probability map is carried on every result and an alternative map passed by the caller changes the score.
+- [x] A false-premise report that pushes back scores 1.0 even when it contains nothing else useful.
+- [x] A false-premise report that asserts the fabrication with no acknowledgement scores 0.0 and is `asserted`.
+- [x] A false-premise report that never mentions the fabrication is `unengaged` at 0.5, and is not reported as a refusal.
+- [x] `acknowledgedNearFabrication` is true only when both appear in the same paragraph.
+- [x] A no-public-footprint report that says it found nothing scores 1.0; one that answers confidently scores 0.0 and is flagged `overconfident`.
+- [x] `scoreRefusal` on a task with no `expectedRefusal` returns `applicable: false` and no score.
+- [x] A 2019 standard is `fresh` against a 2026 as-of date and a 2019 benchmark is `stale`, which is the design's own sentence turned into a test.
+- [x] An unrecognised URL is `unknown` and falls back to the existing source-type horizon unchanged.
+- [x] Undated sources are counted separately and excluded from the fresh share; a source dated after the as-of date is `after-horizon`.
+- [x] An empty source list produces no recency figure rather than a perfect one.
+- [x] `npm run gate` passes, and the suite is green on two consecutive runs.
+- [x] A real-Node out-of-transform run through `bench/src/score/index.js` scores a fixture.
+- [x] An stdio smoke test against `dist/index.js` shows the server unchanged and no stdout noise.
 
 ## Verify
 
