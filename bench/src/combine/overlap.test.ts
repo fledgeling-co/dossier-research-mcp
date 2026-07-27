@@ -63,12 +63,24 @@ describe('domain overlap and the gap (COMB-10)', () => {
     expect(profile.urlToDomainGap).toBeCloseTo(1);
   });
 
-  it('is zero on both when the sites differ', () => {
+  it('is zero on both when the registrable domains genuinely differ', () => {
+    // Two different registrable domains, not two subdomains of one: `one.example.com`
+    // and `two.example.com` both reduce to `example.com`, which is the domain
+    // count doing its job and would make this assertion measure the opposite.
+    const profile = sourceOverlapProfile([
+      member('a', ['https://alpha.org/x']),
+      member('b', ['https://beta.net/x']),
+    ]);
+    expect(profile.urlToDomainGap).toBe(0);
+  });
+
+  it('treats two subdomains of one site as one domain, so the gap opens', () => {
     const profile = sourceOverlapProfile([
       member('a', ['https://one.example.com/x']),
       member('b', ['https://two.example.com/x']),
     ]);
-    expect(profile.urlToDomainGap).toBe(0);
+    expect(profile.pairs[0]!.urlJaccard).toBe(0);
+    expect(profile.pairs[0]!.domainJaccard).toBe(1);
   });
 });
 

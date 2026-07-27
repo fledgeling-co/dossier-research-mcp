@@ -96,6 +96,14 @@ export interface DominatedCandidate {
 export interface FrontierResult {
   readonly frontier: readonly FrontierCandidate[];
   readonly dominated: readonly DominatedCandidate[];
+  /**
+   * What the score axis measured, and which way the caller declared it points.
+   *
+   * A frontier answers for one named measure. Reading a frontier without
+   * knowing whether its score was accuracy, citation accuracy or a Brier score
+   * is reading a ranking of an unknown quantity.
+   */
+  readonly measure: MeasureLabel;
   /** The direction of each axis, carried so a reader never has to guess. */
   readonly axes: {
     readonly score: 'maximise';
@@ -134,10 +142,15 @@ function dominates(a: FrontierCandidate, b: FrontierCandidate): boolean {
   return a.score > b.score || a.costUsd < b.costUsd || a.robustness > b.robustness;
 }
 
-function explain(a: FrontierCandidate, b: FrontierCandidate): string {
+function explain(a: FrontierCandidate, b: FrontierCandidate, measure: MeasureLabel): string {
+  // Scores here are in the flipped comparison space, so they are stated back in
+  // the caller's units before anyone reads them.
+  const shown = (v: number): string =>
+    (measure.direction === 'lower-is-better' ? -v : v).toFixed(4);
   const parts: string[] = [];
-  if (a.score > b.score) parts.push(`scores ${a.score.toFixed(4)} against ${b.score.toFixed(4)}`);
-  else if (a.score === b.score) parts.push('scores the same');
+  if (a.score > b.score) {
+    parts.push(`has ${measure.name} ${shown(a.score)} against ${shown(b.score)}`);
+  } else if (a.score === b.score) parts.push(`matches on ${measure.name}`);
   if (a.costUsd < b.costUsd) parts.push(`costs $${a.costUsd.toFixed(2)} against $${b.costUsd.toFixed(2)}`);
   else if (a.costUsd === b.costUsd) parts.push('costs the same');
   if (a.robustness > b.robustness) {
@@ -159,7 +172,17 @@ function explain(a: FrontierCandidate, b: FrontierCandidate): string {
  * subtle ordering bugs; if the top of the range ever becomes the ordinary case
  * this is the place to revisit, with a test already pinning the answer.
  */
-export function paretoFrontier(candidates: readonly FrontierCandidate[]): FrontierResult {
+export function paretoFrontier(
+  candidates: readonly FrontierCandidate[],
+  measure: MeasureLabel,
+): FrontierResult {
+  if (measure.name.trim() === '') {
+    throw new TypeError(
+      'a frontier needs a named measure. The benchmark deliberately has no single "score": source ' +
+        'quality refuses to blend, citation accuracy and volume are two numbers on purpose, and a ' +
+        'Brier score is lower-is-better. An unnamed axis is a ranking of an unknown quantity.',
+    );
+  }
   const seen = new Set<string>();
   for (const c of candidates) {
     assertFinite(c);
@@ -169,18 +192,31 @@ export function paretoFrontier(candidates: readonly FrontierCandidate[]): Fronti
     seen.add(c.id);
   }
 
+  // Flipped once, here, rather than left to every caller to remember. A Brier
+  // score compared as though higher were better ranks the worst-calibrated
+  // combination first, and nothing downstream could tell.
+  const oriented: FrontierCandidate[] =
+    measure.direction === 'lower-is-better'
+      ? candidates.map((c) => ({ ...c, score: -c.score }))
+      : [...candidates];
+
   const frontier: FrontierCandidate[] = [];
   const dominated: DominatedCandidate[] = [];
 
-  for (const b of candidates) {
-    const winner = candidates.find((a) => a.id !== b.id && dominates(a, b));
-    if (winner) dominated.push({ id: b.id, dominatedBy: winner.id, why: explain(winner, b) });
-    else frontier.push(b);
+  // Reported in the caller's own units, so a negated Brier score never reaches
+  // a reader; only the comparison happens in the flipped space.
+  const asGiven = new Map(candidates.map((c) => [c.id, c]));
+
+  for (const b of oriented) {
+    const winner = oriented.find((a) => a.id !== b.id && dominates(a, b));
+    if (winner) dominated.push({ id: b.id, dominatedBy: winner.id, why: explain(winner, b, measure) });
+    else frontier.push(asGiven.get(b.id)!);
   }
 
   return {
     frontier,
     dominated,
+    measure,
     axes: { score: 'maximise', costUsd: 'minimise', robustness: 'maximise' },
   };
 }

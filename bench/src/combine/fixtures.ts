@@ -32,8 +32,34 @@ export function run(
   return {
     runId: nextRunId(),
     provider,
+    outcome: 'ok',
     markdown: markdown ?? reportCiting(provider, urls),
     estimatedCostUsd: costUsd,
+    billing: 'api',
+  };
+}
+
+/** A run that was attempted and produced nothing. It still counts as attempted. */
+export function failedRun(provider: string, costUsd = 0): MemberRun {
+  return {
+    runId: nextRunId(),
+    provider,
+    outcome: 'failed',
+    markdown: '',
+    estimatedCostUsd: costUsd,
+    billing: costUsd > 0 ? 'unknown' : 'api',
+  };
+}
+
+/** A run against a subscription quota: counted, never costed. */
+export function subscriptionRun(provider: string, urls: readonly string[]): MemberRun {
+  return {
+    runId: nextRunId(),
+    provider,
+    outcome: 'ok',
+    markdown: reportCiting(provider, urls),
+    estimatedCostUsd: 0,
+    billing: 'subscription',
   };
 }
 

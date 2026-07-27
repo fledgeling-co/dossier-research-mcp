@@ -5,14 +5,23 @@ import {
   type MarginalResult,
 } from './marginal.js';
 import { mergeCombination, type MergedCombination } from './merge.js';
-import { assertIndependentMembers, type CombinationMember } from './member.js';
+import {
+  assertIndependentMembers,
+  MAX_LISTED_COMBINATIONS,
+  type CombinationMember,
+} from './member.js';
 import {
   overlapCurve,
   sourceOverlapProfile,
   type OverlapBin,
   type OverlapProfile,
 } from './overlap.js';
-import { paretoFrontier, type FrontierCandidate, type FrontierResult } from './frontier.js';
+import {
+  paretoFrontier,
+  type FrontierCandidate,
+  type FrontierResult,
+  type MeasureLabel,
+} from './frontier.js';
 
 /**
  * Evaluate every combination of a set of members, and say which are worth their
@@ -47,12 +56,22 @@ import { paretoFrontier, type FrontierCandidate, type FrontierResult } from './f
 export interface EvaluateInput {
   readonly members: readonly CombinationMember[];
   /**
-   * What one merged combination is worth. Higher is better.
+   * What one merged combination is worth.
    *
    * Called once per combination and its result is reused for the frontier and
    * for the credit split, so it is never called `2^n` times twice.
    */
   readonly scoreCombination: (merged: MergedCombination) => number;
+  /**
+   * What that number is, and which way it points.
+   *
+   * Required, not optional. The benchmark's scorers deliberately expose no
+   * common "score": source quality refuses to blend, citation accuracy and
+   * volume stay two numbers, and a Brier score is lower-is-better. One
+   * evaluation answers for one named measure and the caller runs it again for
+   * the next, which is the only reading under which a frontier means anything.
+   */
+  readonly measure: MeasureLabel;
   /**
    * An explicit list of combinations, each named by member ids.
    *
@@ -148,6 +167,18 @@ export function evaluateCombinations(input: EvaluateInput): CombinationReport {
     requested = enumerateSubsets(allIds);
     exhaustive = true;
   } else {
+    if (input.combinations.length > MAX_LISTED_COMBINATIONS) {
+      // The shortlist is the escape hatch above the member ceiling, and an
+      // unbounded one is also how that ceiling gets walked around by hand: a
+      // caller could list all 2^20 subsets and get the work the refusal exists
+      // to prevent, one line at a time.
+      throw new TypeError(
+        `${String(input.combinations.length)} listed combinations exceeds the cap of ` +
+          `${String(MAX_LISTED_COMBINATIONS)}. The explicit list is an escape hatch for a handful of ` +
+          'named candidates above the member ceiling, not a way to enumerate a lattice the ceiling ' +
+          'already refused.',
+      );
+    }
     requested = input.combinations.map((ids) => [...ids]);
     exhaustive = false;
     notes.push(
@@ -201,14 +232,19 @@ export function evaluateCombinations(input: EvaluateInput): CombinationReport {
     costUsd: e.costUsd,
     robustness: e.overlap.robustness.worstCaseSurvivingShare,
   }));
-  const frontier = paretoFrontier(candidates);
+  const frontier = paretoFrontier(candidates, input.measure);
 
   let marginal: MarginalResult | undefined;
   if (exhaustive) {
     // Every subset's score is already computed. The value function is a lookup,
     // never a re-merge, which is what keeps the credit split free rather than
     // doubling the work of the whole evaluation.
-    const scores = new Map(evaluations.map((e) => [e.id, e.score]));
+    //
+    // Oriented the same way the frontier is: on a lower-is-better measure, a
+    // member that reduces the score is contributing, and an unflipped credit
+    // split would name the worst member the most valuable one.
+    const sign = input.measure.direction === 'lower-is-better' ? -1 : 1;
+    const scores = new Map(evaluations.map((e) => [e.id, sign * e.score]));
     marginal = marginalContributions(
       allIds,
       // The empty coalition is worth zero: nothing bought, nothing found. Every
@@ -218,11 +254,58 @@ export function evaluateCombinations(input: EvaluateInput): CombinationReport {
     );
   }
 
+  const worstCompletion = evaluations.reduce(
+    (lowest, e) => Math.min(lowest, e.merged.completionRate),
+    1,
+  );
+  const subscriptionRuns = evaluations.reduce(
+    (most, e) => Math.max(most, e.merged.cost.subscriptionRuns),
+    0,
+  );
+  const unknownSpendRuns = evaluations.reduce(
+    (most, e) => Math.max(most, e.merged.cost.unknownSpendRuns),
+    0,
+  );
+
   notes.push(
-    'A combination is scored as the union of its members and never has to be run: every cell was stored ' +
-      'raw, so this whole lattice was evaluated with zero network calls and zero spend.',
-    "Cost is the sum of the members' reserved worst cases, matching how a panel actually reserves. A " +
-      'cheaper realistic average would flatter a member that occasionally costs much more.',
+    `A combination is scored as the union of its members and never has to be run: every cell was stored ` +
+      `raw, so all ${String(evaluations.length)} combinations here were evaluated with zero network calls ` +
+      'and zero spend.',
+    `The score axis is "${input.measure.name}" (${input.measure.direction}). One frontier answers for one ` +
+      'named measure; the scorers deliberately expose no single blended score, so comparing another ' +
+      'measure means running this again rather than reading this differently.',
+    "Cost is the sum of the members' reserved worst cases in metered dollars, matching how a panel " +
+      'actually reserves. A cheaper realistic average would flatter a member that occasionally costs ' +
+      'much more.',
+  );
+  if (subscriptionRuns > 0) {
+    notes.push(
+      `Up to ${String(subscriptionRuns)} run(s) in a single combination went to a subscription backend. ` +
+        'Those are counted and never costed: a subscription CLI is not free, it spends quota already ' +
+        'paid for that Dossier cannot meter, and folding it in as $0 would put every subscription ' +
+        'combination at the cheap end of the frontier by construction.',
+    );
+  }
+  if (unknownSpendRuns > 0) {
+    notes.push(
+      `Up to ${String(unknownSpendRuns)} run(s) in a single combination carry a spend that could not be ` +
+        'established, usually a creation that failed after the ledger reserved. Their reserved figure is ' +
+        'included in the cost and the count beside it says the figure is not to be trusted on its own.',
+    );
+  }
+  if (worstCompletion < 1) {
+    notes.push(
+      `The least reliable combination completed ${(worstCompletion * 100).toFixed(0)}% of its attempted ` +
+        'runs. Completion rate is a validity metric rather than a footnote: failed runs are carried into ' +
+        'the denominator, because scoring only the cells a backend happened to finish makes an ' +
+        'unreliable backend look better than a reliable one.',
+    );
+  }
+  notes.push(
+    'These are point estimates. There are no confidence intervals, no paired-difference tests and no ' +
+      'standard errors clustered on topic here, and this corpus is exactly the shape where naive errors ' +
+      'inflate. A frontier computed from point estimates over a small category must not authorise a ' +
+      'routing change on its own; it is the input to that decision and not the decision.',
   );
   if (exhaustive) {
     notes.push(
@@ -281,6 +364,7 @@ export interface ScopedCombinationReport {
 export function evaluateScopes(
   scopes: readonly CombinationScope[],
   scoreCombination: (merged: MergedCombination, scope: string) => number,
+  measure: MeasureLabel,
   options: { readonly maxExactMembers?: number } = {},
 ): ScopedCombinationReport {
   if (scopes.length === 0) {
@@ -319,6 +403,7 @@ export function evaluateScopes(
     report: evaluateCombinations({
       members: fill(scope.members),
       scoreCombination: (merged) => scoreCombination(merged, scope.name),
+      measure,
       ...(options.maxExactMembers !== undefined ? { maxExactMembers: options.maxExactMembers } : {}),
     }),
   }));
@@ -334,6 +419,7 @@ export function evaluateScopes(
     overall: evaluateCombinations({
       members: overallMembers,
       scoreCombination: (merged) => scoreCombination(merged, 'overall'),
+      measure,
       ...(options.maxExactMembers !== undefined ? { maxExactMembers: options.maxExactMembers } : {}),
     }),
   };
