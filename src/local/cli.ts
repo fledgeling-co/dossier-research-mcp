@@ -1,11 +1,79 @@
-import { execFile } from 'node:child_process';
-import { accessSync, constants } from 'node:fs';
+import { execFileSync, spawn } from 'node:child_process';
+import { accessSync, constants, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { access, realpath } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { delimiter, dirname, join, resolve } from 'node:path';
-import { promisify } from 'node:util';
 
-const run = promisify(execFile);
+/**
+ * Run a binary and collect its output, with stdin closed.
+ *
+ * `spawn` rather than `execFile`, and the reason is the bug this fixed. A CLI
+ * given a prompt in argv may still decide it wants stdin, and `execFile` leaves
+ * the child's stdin an open pipe, so it waits on input nobody will ever write.
+ * Codex does exactly this: it announces "Reading additional input from stdin"
+ * and exits non-zero with no output, which surfaced as "Codex CLI failed to
+ * answer" while three other CLIs answered fine.
+ *
+ * `execFile` accepts a `stdio` option and ignores it, because it manages stdio
+ * itself to capture output. Passing `['ignore', 'pipe', 'pipe']` there looks
+ * like a fix and does nothing, which is how this survived a first attempt.
+ *
+ * The research path never had the bug: its supervisor already spawns with
+ * stdin ignored. Only this probe path inherited the open pipe.
+ */
+function run(
+  file: string,
+  args: readonly string[],
+  options: { timeout?: number; maxBuffer?: number; cwd?: string },
+): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    const cap = options.maxBuffer ?? 1_000_000;
+    const child = spawn(file, [...args], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      ...(options.cwd ? { cwd: options.cwd } : {}),
+    });
+    let stdout = '';
+    let stderr = '';
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      try { child.kill('SIGTERM'); } catch { /* already gone */ }
+      reject(new Error(`timed out after ${String(options.timeout ?? 0)}ms`));
+    }, options.timeout ?? 60_000);
+
+    child.stdout.on('data', (d: Buffer) => { if (stdout.length < cap) stdout += d.toString(); });
+    child.stderr.on('data', (d: Buffer) => { if (stderr.length < cap) stderr += d.toString(); });
+    child.on('error', (e) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      reject(e);
+    });
+    child.on('close', (code) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      // The CLI's own last line, not a bare exit code. A bare code reads as a
+      // broken adapter when it is usually the CLI explaining itself.
+      if (code !== 0) {
+        const why = stderr.trim().split('\n').pop() ?? '';
+        // `stdout`, `stderr` and `code` are attached because callers read them
+        // off the rejection: that is `execFile`'s convention and `probeOutput`
+        // depends on it to tell a help screen printed with exit 1 from a binary
+        // that never answered. Rejecting with a bare Error made every probe
+        // report "did not answer" regardless of what the binary actually said.
+        const failure = Object.assign(
+          new Error(`exited ${String(code)}${why ? `: ${why.slice(0, 200)}` : ''}`),
+          { stdout, stderr, code },
+        );
+        reject(failure);
+        return;
+      }
+      resolve({ stdout, stderr });
+    });
+  });
+}
 
 /**
  * Coding CLIs as research backends.
@@ -141,7 +209,17 @@ export const CLI_ADAPTERS: readonly CliAdapter[] = [
     // not know it. That is the same class of failure as the bug above, on a
     // path the offline argv self-test cannot see, bought for an effect that was
     // proven absent.
-    headless: (prompt) => ['exec', prompt],
+    // `--skip-git-repo-check` is deliberate and is only defensible together
+    // with `cliWorkDir`. Codex refuses to run in a directory it does not
+    // consider trusted, and its trust list is granted interactively, so a fresh
+    // `git init` does not satisfy it and no headless invocation ever can. The
+    // check exists to stop an agent editing files nobody can revert; running in
+    // an empty, git-initialised scratch directory satisfies that purpose even
+    // though it bypasses the mechanism, because there is nothing there to
+    // damage and anything written is revertible. Skipping it while standing in
+    // the user's project would not be defensible, which is why the two changes
+    // shipped together.
+    headless: (prompt) => ['exec', '--skip-git-repo-check', prompt],
     headlessAlternate: {
       // An older Codex may genuinely take `--search` on `exec`, and on such a
       // build search may not be on by default, which is what the flag was for.
@@ -635,7 +713,50 @@ export function normaliseModelName(model: string): string {
  * also refused, because prompting it would either fail or open an interactive
  * login, and neither belongs in an audit command.
  */
-export async function probeCliModel(adapter: CliAdapter, timeoutMs = 60_000): Promise<CliModelProbe> {
+/**
+ * The directory a CLI is run in.
+ *
+ * Two problems, one answer.
+ *
+ * Without an explicit `cwd` a spawned child inherits the server's, and for a
+ * stdio MCP server that is the client's working directory: the user's own
+ * project. A research agent with shell access, pointed at a brief that may
+ * itself have come from a hostile page, should not be standing in the user's
+ * codebase. Nothing in the brief asks it to touch files, and nothing stops it.
+ *
+ * Separately, `codex exec` refuses to run at all in a directory it does not
+ * consider trusted, and exits non-zero. It is the only CLI that does, which is
+ * why Codex reported "failed to answer" while the other three answered.
+ *
+ * A dedicated, empty, git-initialised scratch directory under the store fixes
+ * both. Codex's guard is satisfied rather than disabled, which is the better
+ * trade: `--skip-git-repo-check` would have made the probe work by turning off
+ * the check that exists to stop an agent editing files nobody can revert.
+ */
+export function cliWorkDir(storeDir: string): string {
+  const dir = join(storeDir, 'cli-workdir');
+  try {
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    // Empty and git-initialised: enough for Codex to consider it trusted, with
+    // nothing in it worth reaching for.
+    if (!existsSync(join(dir, '.git'))) {
+      execFileSync('git', ['init', '--quiet'], { cwd: dir, stdio: 'ignore' });
+      writeFileSync(join(dir, '.gitignore'), '*\n', { mode: 0o600 });
+    }
+  } catch {
+    // A scratch directory that cannot be made is not worth failing a run over;
+    // the caller falls back to the server's cwd, which is the behaviour that
+    // shipped, so this can only improve on it.
+  }
+  return dir;
+}
+
+export async function probeCliModel(
+  adapter: CliAdapter,
+  timeoutMs = 60_000,
+  /** Where to run it. Codex refuses an untrusted directory; see `cliWorkDir`. */
+  workDir?: string,
+): Promise<CliModelProbe> {
   const base = { id: adapter.id, label: adapter.label } as const;
   const status = await probeCli(adapter);
   if (status.state !== 'ready') {
@@ -663,6 +784,7 @@ export async function probeCliModel(adapter: CliAdapter, timeoutMs = 60_000): Pr
     const { stdout, stderr } = await run(bin, [...headless(MODEL_PROBE_PROMPT)], {
       timeout: timeoutMs,
       maxBuffer: 4_000_000,
+      ...(workDir ? { cwd: workDir } : {}),
     });
     raw = `${stdout}\n${stderr}`;
   } catch (e: unknown) {

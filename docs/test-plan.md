@@ -668,3 +668,4 @@ npm run gate                # typecheck, lint, test, build
 | **READ-02** | Coverage counts distinct sections, so re-reading one is not reading several | `reading` | ✓ |
 | **READ-03** | A merge over unread reports warns at the top, and names what was never opened | `reading` | ✓ |
 | **READ-04** | The read ledger is wired: a merge over unread reports warns over the real MCP surface | `reading` acceptance | ✓ |
+| **CLI-32** | A CLI runs with stdin closed, in a scratch directory, not the client's project | `local-cli` | ✓ |

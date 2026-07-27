@@ -12,8 +12,7 @@ import {
   probeAllClis,
   probeCliModel,
   type CliArgvCheck,
-  type CliId,
-} from './local/cli.js';
+  type CliId, cliWorkDir } from './local/cli.js';
 import { describeProbeAge, readModelCache, writeModelCache } from './local/model-cache.js';
 import {
   DEFAULT_BASE_AGENT,
@@ -3460,7 +3459,11 @@ async function renderCliModels(storeDir: string, probeNow: boolean, ready: reado
     // Filtered from the adapter table rather than looked up per id, so there is
     // no `find(...)!` to be wrong about if the two lists ever drift.
     const targets = CLI_ADAPTERS.filter((a) => ready.includes(a.id));
-    const answers = await Promise.all(targets.map((a) => probeCliModel(a)));
+    // In the scratch directory, not the client's project. Codex refuses an
+    // untrusted directory outright, and none of them should be standing in
+    // the user's codebase while holding a brief from the open web.
+    const work = cliWorkDir(storeDir);
+    const answers = await Promise.all(targets.map((a) => probeCliModel(a, 60_000, work)));
     const probed = new Map<CliId, string>();
     for (const a of answers) if (a.state === 'probed' && a.model) probed.set(a.id, a.model);
     await writeModelCache(storeDir, probed);

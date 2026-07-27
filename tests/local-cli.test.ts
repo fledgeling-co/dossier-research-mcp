@@ -13,6 +13,7 @@ import {
   resolveHeadless,
   resolveOnPath,
   type CliAdapter,
+  cliWorkDir,
 } from '../src/local/cli.js';
 import { describeProbeAge, readModelCache, writeModelCache } from '../src/local/model-cache.js';
 
@@ -385,13 +386,17 @@ exit 0
 }
 
 describe('CLI-26: no shipped adapter sends an argument its binary rejects', () => {
+  // `--skip-git-repo-check` joined the argv deliberately: Codex refuses any
+  // directory it does not consider trusted, and its trust list is granted
+  // interactively so no headless invocation can ever satisfy it. It is only
+  // defensible alongside `cliWorkDir`, which runs it in an empty scratch repo.
   it('does not send `--search` to `codex exec`', () => {
     // The whole defect. `--search` is documented on `codex --help` and absent
     // from `codex exec --help`, so every headless run died at clap's argument
     // parsing. Verified by hand against codex-cli 0.145.0: `codex exec
     // --search` answers `error: unexpected argument '--search' found`.
     const codex = CLI_ADAPTERS.find((a) => a.id === 'codex');
-    expect(codex?.headless('a question')).toEqual(['exec', 'a question']);
+    expect(codex?.headless('a question')).toEqual(['exec', '--skip-git-repo-check', 'a question']);
     expect(codex?.headless('a question')).not.toContain('--search');
   });
 
@@ -585,5 +590,53 @@ describe('path provenance is directory provenance', () => {
     // The temp directory stands in for `~/.grok/` or `~/.codex/`.
     const byDir = await probeCli(adapter({ identity: null, pathHints: ['dossier-cli-'] }));
     expect(byDir.state).toBe('present-unauthed');
+  });
+});
+
+describe('CLI-32: a CLI is run with stdin closed, in a scratch directory', () => {
+  // Reported on 0.10.0: Codex alone reported "failed to answer, exited
+  // non-zero" while three other CLIs answered. Two causes, both mine.
+  //
+  // `codex exec` refuses any directory it does not consider trusted, and its
+  // trust list is granted interactively, so no headless invocation can satisfy
+  // it. And a CLI given its prompt in argv may still wait on stdin; `execFile`
+  // leaves that an open pipe, and it accepts a `stdio` option that it ignores,
+  // so the obvious fix looks applied and does nothing.
+  it('sends the flag that lets codex run headlessly at all', () => {
+    const codex = CLI_ADAPTERS.find((a) => a.id === 'codex');
+    expect(codex?.headless('q')).toContain('--skip-git-repo-check');
+  });
+
+  it('gives a scratch directory that exists and holds nothing', async () => {
+    // `.git` is deliberately not asserted. `cliWorkDir` git-initialises the
+    // directory and swallows a failure, because a scratch directory that
+    // cannot be made is not worth failing a research run over. Whether `git`
+    // is on PATH is a fact about the environment, not about this code, and
+    // asserting it here makes the suite fail on machines the product works on.
+    const root = await mkdtemp(join(tmpdir(), 'wd-'));
+    const work = cliWorkDir(root);
+    const { existsSync, readdirSync } = await import('node:fs');
+    expect(existsSync(work), 'the directory itself is the contract').toBe(true);
+    expect(work.startsWith(root), 'and it lives under the store, not the cwd').toBe(true);
+    expect(
+      readdirSync(work).filter((f) => f !== '.git' && f !== '.gitignore'),
+      'nothing in it worth reaching for',
+    ).toHaveLength(0);
+  });
+
+  it('closes stdin, so a CLI that waits for input does not hang', async () => {
+    // The fake drains stdin before answering, exactly as codex does. Under the
+    // old execFile path stdin stayed an open pipe, the drain never ended, and
+    // the probe reported a healthy binary as a broken adapter.
+    const authPath = join(dir, 'auth.json');
+    await writeFile(authPath, '{}');
+    const bin = join(dir, 'faketool');
+    await writeFile(
+      bin,
+      '#!/bin/sh\nif [ "$1" = "--version" ]; then echo "Test CLI 1.0"; exit 0; fi\ncat > /dev/null\necho "printed after stdin closed"\nexit 0\n',
+    );
+    await chmod(bin, 0o755);
+    const check = await checkHeadlessArgv(adapter({ authPaths: [authPath] }), 5_000);
+    expect(check.state, 'a drained stdin must not read as a rejected argv').toBe('accepted');
   });
 });

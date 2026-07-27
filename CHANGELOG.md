@@ -8,6 +8,19 @@ This project follows [semantic versioning](https://semver.org/). Until 1.0 the m
 
 ## [Unreleased]
 
+### Fixed
+
+- **Codex reported "failed to answer" while three other CLIs answered, and a CLI was being run in your project directory.** Two defects, both mine, found together because one hid the other.
+
+  A spawned CLI inherited the server's working directory. For a stdio MCP server that is the client's working directory, so a research agent with shell access was standing in the user's own codebase while holding a brief that may itself have come from a hostile page. Nothing in a brief asks it to touch files and nothing stopped it. Every CLI now runs in an empty, git-initialised scratch directory under the store.
+
+  And `codex exec` refuses any directory it does not consider trusted. Its trust list is granted interactively, so no headless invocation can ever satisfy it, which is why `--skip-git-repo-check` is now in its argv. That flag is only defensible alongside the scratch directory: the check exists to stop an agent editing files nobody can revert, and an empty repo satisfies that purpose even though it bypasses the mechanism. Skipping it while standing in the user's project would not have been.
+
+  Underneath both, a CLI given its prompt in argv may still wait on stdin, and `execFile` leaves that an open pipe. `execFile` also accepts a `stdio` option and ignores it, because it manages stdio itself, so the obvious fix looks applied and does nothing. Probes now spawn with stdin closed. The research path never had this bug; only the probe path did.
+
+  I met the trusted-directory error by hand earlier the same day, worked around it in my own test with a scratch repo and the flag, and did not connect it to how the product invokes the same binary. That is the same defect-restated-as-a-precondition pattern this project keeps finding in its own tests.
+
+
 ## [0.10.0] - 2026-07-27
 
 ### Fixed
