@@ -59,7 +59,7 @@ BENCH-09 is hand-authoring work and is the long pole in wall-clock terms. It sta
 | BENCH-09 | The seed task corpus | 01 | **Merged** | `ai/bench-09` | 1001 tests; 7 admitted, 20 quarantined, $0 spent |
 | BENCH-10 | Self-eval of Dossier's own checking | 01, 03 | **Running** | | |
 | BENCH-11 | Which combination is best | 02, scorers | **Running** | | |
-| BENCH-12 | A finished report is an input to the next one | none | **Running** | | |
+| BENCH-12 | A finished report is an input to the next one | none | **Merged** | `ai/bench-12` | 1717 tests; ships `research_ground` |
 | BENCH-13 | The statistics | 02, 08 | Blocked | | |
 
 ## Context contract
@@ -143,3 +143,10 @@ Nothing was lost, but the cost was real: four worktrees held uncommitted source 
   A **name collision nearly shipped through my own merge resolution**. BENCH-07 and BENCH-03 both exported `containment`, over different objects, and my keep-both conflict resolution put both in one barrel under one name. Typecheck caught it; it is now `shingleContainment` and `tokenContainment`. Append-only merges are safe for prose and not for exports.
 
 - **27 Jul, wave 3 dispatched** — BENCH-08, 10, 11 and 12. Four concurrent, the level that has held. BENCH-12 is the only one that changes shipped code rather than `bench/`, so it carries the CP §7 review and the third-party egress rules.
+- **27 Jul, BENCH-12 merged** — 1717 tests green. It is the only fleet item that changes shipped code, and it adds `research_ground`, so Dossier's own output can finally ground the next run without a manual export and upload.
+
+  The corroboration rule holds where it had to: a prior report is addressed `dossier://run/<id>`, `classifySource` detects it without being told and returns `private-user-owned`, and `assessSupport` excludes it from the domain count. A grounded run declares it in every read mode and in the exported front matter, so a reader can tell accumulated evidence from an echo.
+
+  It found a real defect on the way: `research_plan` and `research_start` normalised grounding differently, so `[RUN, RUN]` priced a two-run grounding and started a one-run one, and the contract handshake then refused a request nobody had changed. The test for it was checked in both directions and fails against the pre-fix code.
+
+  No Codex lane was available, so every reviewer on this item was Claude reviewing Claude, logged as a downgrade rather than passed off.
