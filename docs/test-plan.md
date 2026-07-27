@@ -759,3 +759,42 @@ npm run gate                # typecheck, lint, test, build
 | **READ-03** | A merge over unread reports warns at the top, and names what was never opened | `reading` | ✓ |
 | **READ-04** | The read ledger is wired: a merge over unread reports warns over the real MCP surface | `reading` acceptance | ✓ |
 | **CLI-32** | A CLI runs with stdin closed, in a scratch directory, not the client's project | `local-cli` | ✓ |
+
+### BENCH-11 — which combination is best
+
+The one slice whose acceptance is a *negative*: it must cost nothing and reach nothing. Every row runs against values built in the test, and two of them assert the absence of capability rather than the presence of behaviour, because "it happened not to fetch this time" is not the same claim as "it cannot fetch". The suffix names the file under `bench/src/combine/`: `member` / `merge` / `overlap` / `convergence` / `marginal` / `frontier` / `evaluate`.
+
+| AC | Criterion (from the contract) | Test | Status |
+|---|---|---|---|
+| **COMB-01** | Evaluating every subset of a stored result set completes with `fetch` replaced by a throwing stub | unit: `evaluate` | ✓ |
+| **COMB-02** | No file in `bench/src/combine/` imports a network, filesystem or fetching module | unit: `evaluate` | ✓ |
+| **COMB-03** | A combination of one returns that member's report byte-identical, with no wrapper or separator | unit: `merge` | ✓ |
+| **COMB-04** | A combination of one scores identically to that member alone, through an injected scorer that hashes what it was given | unit: `evaluate` | ✓ |
+| **COMB-05** | A member marked as having seen another member's output is refused, not scored | unit: `member`, `merge` | ✓ |
+| **COMB-06** | Two members sharing an id are refused, because a duplicate collapses part of the lattice | unit: `member` | ✓ |
+| **COMB-07** | Cost is the sum of members' reserved worst cases, never an average | unit: `member`, `merge` | ✓ |
+| **COMB-08** | Several runs of one backend keep per-run provenance, so their shared sources are not reported as unique | unit: `merge` | ✓ |
+| **COMB-09** | Pairwise source overlap is Jaccard over canonical URLs; the same page cited three ways is one source | unit: `overlap` | ✓ |
+| **COMB-10** | Domain overlap is never below URL overlap, and the gap between them is reported | unit: `overlap` | ✓ |
+| **COMB-11** | Robustness is the share of the union surviving the loss of the most load-bearing member | unit: `overlap` | ✓ |
+| **COMB-12** | A member finding only obscure sources has the highest unique count and the lowest score-based contribution | unit: `overlap`, `evaluate` | ✓ |
+| **COMB-13** | That same member has the highest `missedCentral`, which is what separates eccentric from broad | unit: `overlap` | ✓ |
+| **COMB-14** | The overlap curve is returned as bins in ascending overlap with no ordering on quality, and no exported function ranks combinations by overlap | unit: `overlap` | ✓ |
+| **COMB-15** | A combination of one carries no pairwise overlap and is excluded from the curve rather than binned at zero | unit: `overlap` | ✓ |
+| **COMB-16** | Source overlap and claim convergence take structurally incompatible inputs and neither accepts the other's | unit: `convergence` | ✓ |
+| **COMB-17** | Members sharing every URL and no claim tokens give high source overlap and zero convergence | unit: `convergence` | ✓ |
+| **COMB-18** | Members sharing no URL and stating one conclusion give zero source overlap and non-zero convergence | unit: `convergence` | ✓ |
+| **COMB-19** | Shapley values match a hand-computed three-member example | unit: `marginal` | ✓ |
+| **COMB-20** | Shapley values sum to `v(all) - v(none)`, the efficiency property | unit: `marginal` | ✓ |
+| **COMB-21** | Above the member ceiling the credit split refuses, names the count, and says sampling is not offered | unit: `marginal` | ✓ |
+| **COMB-22** | Above the ceiling the enumerator refuses with the same wording, so one limit has one sentence | unit: `evaluate` | ✓ |
+| **COMB-23** | An explicit shortlist is scored exactly above the ceiling, with the credit split omitted rather than approximated | unit: `evaluate` | ✓ |
+| **COMB-24** | A deliberately dominated combination never appears on the frontier, and its `dominatedBy` names the winner | unit: `frontier` | ✓ |
+| **COMB-25** | Domination does not fire when a candidate wins on any one of the three axes | unit: `frontier` | ✓ |
+| **COMB-26** | Two candidates equal on all three axes both stay on the frontier | unit: `frontier` | ✓ |
+| **COMB-27** | A candidate better on score and robustness but dearer is on the frontier, which two axes could not say | unit: `frontier` | ✓ |
+| **COMB-28** | The frontier candidate shape has exactly three axes and no field overlap could occupy | unit: `frontier` | ✓ |
+| **COMB-29** | A `NaN` on any axis is refused rather than silently surviving every comparison | unit: `frontier` | ✓ |
+| **COMB-30** | A frontier is produced per category and overall, and a category winner may differ from the overall one | unit: `evaluate` | ✓ |
+| **COMB-31** | A member absent from one scope contributes nothing there rather than being dropped from the lattice | unit: `evaluate` | ✓ |
+| **COMB-32** | The union semantics ride on every merged object, naming which direction each score family is bounded in | unit: `merge` | ✓ |
