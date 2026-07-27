@@ -67,6 +67,26 @@ describe('SRCQ-18 hashing is deterministic and a shingle set holds each window o
     expect(hashShingle('a b c d e f g h i j')).not.toBe(hashShingle('a b c d e f g h i k'));
   });
 
+  /**
+   * The published FNV-1a 32-bit vectors, which any deterministic hash would
+   * otherwise pass the test above without matching. ASCII only, deliberately:
+   * this runs over UTF-16 code units rather than UTF-8 bytes, so it agrees with
+   * the reference exactly up to U+007F and by construction not above it. The
+   * divergence is documented on `hashShingle`; the vector pins the half that is
+   * supposed to agree.
+   */
+  it('matches the published FNV-1a 32-bit vectors on ASCII', () => {
+    expect(hashShingle('')).toBe(0x811c9dc5);
+    expect(hashShingle('a')).toBe(0xe40c292c);
+    expect(hashShingle('foobar')).toBe(0xbf9cf968);
+  });
+
+  it('is not byte-canonical above U+007F, which is why the vector stops at ASCII', () => {
+    // 1812687940 is what UTF-16 code units give; UTF-8 bytes would give
+    // 513665217. Asserted so the divergence cannot be "fixed" without noticing.
+    expect(hashShingle('é')).toBe(1_812_687_940);
+  });
+
   it('returns an unsigned 32-bit value rather than a negative one', () => {
     for (const shingle of ['zzz', 'the quick brown fox jumps over the lazy dog now', '3 85 per cent']) {
       const h = hashShingle(shingle);
@@ -189,6 +209,33 @@ describe('SRCQ-01 and SRCQ-02 the two directions, on real prose', () => {
         expect(verdict.same).toBe(false);
         // Not merely under the bar: in a different part of the range entirely.
         expect(verdict.resemblance).toBeLessThan(0.1);
+        // The full verdict, so the third basis value is asserted somewhere.
+        expect(verdict.basis).toBe('below-threshold');
+      }
+    }
+  });
+
+  /**
+   * The documented range, pinned as a range.
+   *
+   * `docs/bench/source-quality.md` and the constant's own comment both say the
+   * gap between the two fixture families is wide rather than that the bar is
+   * finely balanced. Asserting only `>= 0.7` and `< 0.1` would let that claim
+   * rot without any test noticing.
+   */
+  it('holds the measured figures the documentation quotes', () => {
+    const wire = WIRE_PRINTINGS.map((p) => shingleHashes(p.text));
+    const pairs: number[] = [];
+    for (let i = 0; i < wire.length; i += 1) {
+      for (let j = i + 1; j < wire.length; j += 1) pairs.push(resemblance(wire[i]!, wire[j]!));
+    }
+    expect(Math.min(...pairs)).toBeGreaterThanOrEqual(0.83);
+    expect(Math.max(...pairs)).toBeLessThanOrEqual(0.86);
+
+    const indep = INDEPENDENT_ARTICLES.map((p) => shingleHashes(p.text));
+    for (let i = 0; i < indep.length; i += 1) {
+      for (let j = i + 1; j < indep.length; j += 1) {
+        expect(resemblance(indep[i]!, indep[j]!)).toBe(0);
       }
     }
   });
@@ -223,11 +270,17 @@ describe('SRCQ-19 an oversized page is compared on a prefix', () => {
   });
 });
 
-describe('SRCQ-21 the detector reaches no filesystem and no network', () => {
-  /** Every way a module can reach out, not just the static import form. */
-  const REACH =
-    /(?:from|import|require)\s*\(?\s*['"](?:node:)?(?:fs(?:\/promises)?|net|http|https|dns|child_process)['"]|createRequire|\bfetch\s*\(|undici/;
+/**
+ * Every way a module can reach out, not just the static import form.
+ *
+ * Exported from this describe block's scope so the scorer's own copy of the
+ * check stays identical: two hand-maintained regexes for one rule drift, and the
+ * one that drifts is the one nobody re-reads.
+ */
+export const REACH =
+  /(?:from|import|require)\s*\(?\s*['"][^'"]*(?:(?:node:)?(?:fs(?:\/promises)?|net|https?|http2|tls|dns|dgram|child_process)|safe-fetch)(?:\.[jt]s)?['"]|createRequire|\bfetch\s*\(|undici/;
 
+describe('SRCQ-21 the detector reaches no filesystem and no network', () => {
   it('imports nothing that could read a disk or open a socket', () => {
     const source = readFileSync(new URL('./syndication.ts', import.meta.url), 'utf8');
     expect(source).not.toMatch(REACH);
@@ -238,10 +291,14 @@ describe('SRCQ-21 the detector reaches no filesystem and no network', () => {
       "import { readFileSync } from 'node:fs';",
       'import { readFile } from "node:fs/promises";',
       "void import('node:https');",
+      "import { connect } from 'node:http2';",
+      "import { connect } from 'node:tls';",
+      "import { Socket } from 'node:dgram';",
       "const fs = require('fs');",
       "import { createRequire } from 'node:module';",
       'await fetch(url);',
       "import { request } from 'undici';",
+      "import { safeFetch } from '../../../src/net/safe-fetch.js';",
     ]) {
       expect(smuggled).toMatch(REACH);
     }

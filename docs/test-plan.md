@@ -553,6 +553,20 @@ The two failure modes here are silent. A gold fact missed on number formatting r
 | **SRCQ-21** | Neither module reaches a filesystem or a network, and the same input scores identically twice | unit: `syndication`, `source-quality` | ✓ |
 | **SRCQ-22** | Two separate stories make two separate clusters, and each cluster carries only its own linking pair | unit: `source-quality` | ✓ |
 | **SRCQ-23** | A supplied page whose own address is not a web address takes no part and cannot merge two cited domains | unit: `source-quality` | ✓ |
+| **SRCQ-24** | On a fixture spanning six source classes the mix reproduces `classifySource` and `profileEvidence` exactly, so an implementation grading everything `other` cannot pass | unit: `source-quality` | ✓ |
+| **SRCQ-25** | A cited domain with no page supplied stays its own source and names the missing page as the cause, and the note states the direction of the bound rather than reversing it | unit: `source-quality` | ✓ |
+| **SRCQ-26** | A syndicated pair beside an untouched domain collapses only the pair | unit: `source-quality` | ✓ |
+| **SRCQ-27** | Deduplication does not over-reach: two distinct paths on one domain remain two sources, and a supplied page is deduplicated by canonical form rather than raw equality | unit: `source-quality` | ✓ |
+| **SRCQ-28** | A page the report did not cite cannot merge two publishers even when it sits on a cited domain | unit: `source-quality` | ✓ |
+| **SRCQ-29** | The page ceiling bounds pages processed, not pages that survived, so it still bites when every earlier page was too short | unit: `source-quality` | ✓ |
+| **SRCQ-30** | A domain hitting two unchecked causes at once names both rather than only the first tested for | unit: `source-quality` | ✓ |
+| **SRCQ-31** | A supplied page with an unusable address is reported under its own cause, not under the uncited one | unit: `source-quality` | ✓ |
+| **SRCQ-32** | The scorer's own length floor is exercised at exactly the floor and one shingle below it | unit: `source-quality` | ✓ |
+| **SRCQ-33** | A publisher bridging two different syndicated stories merges all three publishers, which is the documented consequence of counting publishers rather than stories | unit: `source-quality` | ✓ |
+| **SRCQ-34** | A cluster lists the pages that actually matched and leaves out an original piece on a merged domain, which surfaces in the notes instead | unit: `source-quality` | ✓ |
+| **SRCQ-35** | The type cannot express a result carrying only one of the two counts, and the not-applicable arm carries neither | unit: `source-quality` | ✓ |
+| **SRCQ-36** | The hash matches the published FNV-1a 32-bit vectors on ASCII, and its documented divergence above U+007F is pinned so it cannot be changed unnoticed | unit: `syndication` | ✓ |
+| **SRCQ-37** | The measured figures the documentation quotes are asserted as a range, so the claim cannot rot unnoticed | unit: `syndication` | ✓ |
 
 ### The paid project
 

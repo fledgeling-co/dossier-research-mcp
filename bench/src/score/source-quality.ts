@@ -67,14 +67,22 @@ import {
  */
 
 /**
- * The most pages one call will compare.
+ * The most pages one call will shingle.
  *
- * A resource bound, like `MAX_PAGE_CHARS`. The comparison is pairwise, so the
- * work grows with the square of the page count; two hundred pages is forty
- * thousand comparisons, which is nothing, and is already far more citations than
- * any report in the corpus carries. Pages beyond the cap are **reported as
- * unexamined**, not dropped quietly, because a page nobody looked at must not
- * be able to make the collapsed count look more thorough than it was.
+ * A resource bound, like `MAX_PAGE_CHARS`. The comparison is pairwise over
+ * distinct unordered pairs, so two hundred pages is 200 x 199 / 2 = 19,900
+ * comparisons, which is nothing, and is already far more citations than any
+ * report in the corpus carries.
+ *
+ * It counts pages **processed**, not pages that turned out to be comparable.
+ * Bounding the comparable ones instead would leave the expensive step unbounded:
+ * a caller supplying ten thousand pages that are each too short would shingle
+ * all ten thousand and report a ceiling that never bit. Shingling is the cost;
+ * the cap belongs on the thing that costs.
+ *
+ * Pages beyond the cap are **reported as unexamined**, not dropped quietly,
+ * because a page nobody looked at must not be able to make the collapsed count
+ * look more thorough than it was.
  */
 export const MAX_PAGES = 200;
 
@@ -97,6 +105,15 @@ export interface SyndicationLink {
 /** Two or more domains that the page text says are carrying one story. */
 export interface SyndicationCluster {
   readonly domains: readonly string[];
+  /**
+   * The pages that were actually judged the same story, and only those.
+   *
+   * Deliberately **not** every comparable page on every merged domain. A
+   * publisher that ran both the wire copy and its own original piece has the
+   * original in neither this list nor any link, which is correct: the original
+   * is not part of the syndicated story. It is not lost either, because the
+   * notes name that domain explicitly (see the rule above the pairwise loop).
+   */
   readonly urls: readonly string[];
   /** The pairs that joined it, with their scores. This is the evidence. */
   readonly links: readonly SyndicationLink[];
@@ -276,34 +293,50 @@ export function scoreSourceQuality(
   const groups = new DomainGroups();
   for (const domain of citedDomains) groups.add(domain);
 
-  // Only pages on a domain the report actually cited take part. A page supplied
-  // for something the report never cited is not evidence about this report, and
-  // letting it join two cited domains would merge them on the strength of a
-  // document that is not in the report at all.
+  // Only pages the report actually cited take part, matched on the **canonical
+  // URL** rather than merely on the domain. A page the report never cited is not
+  // evidence about this report, and matching on the domain alone would let a
+  // document nobody cited merge two cited publishers. The harness fetches the
+  // cited URLs, so this is the ordinary case rather than a restriction; a page
+  // that arrived under a redirect target is the fetcher's to normalise, because
+  // only the fetcher knows the redirect happened.
   const comparable: { url: string; domain: string; shingles: Set<number> }[] = [];
   const domainsWithShortPage = new Set<string>();
   const domainsPastCeiling = new Set<string>();
   const truncatedPages: string[] = [];
-  let ignoredPages = 0;
+  // Three separate counts, because they are three different problems and one
+  // catch-all note would send whoever reads it to the wrong place.
+  let invalidPageAddresses = 0;
+  let uncitedPages = 0;
+  let repeatedPages = 0;
   let unexaminedPages = 0;
+  let processedPages = 0;
   const seenPageUrls = new Set<string>();
   for (const page of pages) {
     if (!isHttpUrl(page.url)) {
-      ignoredPages += 1;
+      invalidPageAddresses += 1;
       continue;
     }
     const url = canonicaliseUrl(page.url);
-    const domain = registrableDomain(url);
-    if (!citedDomains.has(domain) || seenPageUrls.has(url)) {
-      ignoredPages += 1;
+    if (!seen.has(url)) {
+      uncitedPages += 1;
+      continue;
+    }
+    if (seenPageUrls.has(url)) {
+      repeatedPages += 1;
       continue;
     }
     seenPageUrls.add(url);
-    if (comparable.length >= MAX_PAGES) {
+    const domain = registrableDomain(url);
+    // The ceiling counts pages **processed**, not pages that turned out to be
+    // comparable; see `MAX_PAGES`. Shingling is the expensive step, so the bound
+    // has to sit in front of it or it bounds nothing.
+    if (processedPages >= MAX_PAGES) {
       unexaminedPages += 1;
       domainsPastCeiling.add(domain);
       continue;
     }
+    processedPages += 1;
     if (page.text.length > MAX_PAGE_CHARS) truncatedPages.push(url);
     const shingles = shingleHashes(page.text);
     if (shingles.size < MIN_SHINGLES) {
@@ -320,17 +353,26 @@ export function scoreSourceQuality(
    * on the other. Pages are what get compared; domains are what get counted, and
    * this is the mapping between them.
    *
-   * The consequence worth knowing: an outlet that ran both its own original
-   * reporting and the wire copy merges with the wire's other carriers on the
-   * strength of the wire copy alone, even though its original piece is genuine
-   * independent evidence. That direction *understates* independence. It is
-   * accepted rather than engineered around for two reasons. Counting story
-   * clusters instead of domains would answer a different question from the raw
-   * figure it sits beside, so the two numbers would stop being comparable, which
-   * is the one property the brief insists on. And the case is visible rather
-   * than silent: the cluster is reported with its URLs and its scores, and a
-   * note below names any merged domain that also carried a page in no cluster,
-   * so a reader can see exactly what was merged and disagree.
+   * Two consequences worth knowing, both in the same direction.
+   *
+   * An outlet that ran both its own original reporting and the wire copy merges
+   * with the wire's other carriers on the strength of the wire copy alone, even
+   * though its original piece is genuine independent evidence.
+   *
+   * And because the merge is transitive over domains rather than over stories, a
+   * publisher that carried two *different* syndicated stories joins the carriers
+   * of both into one component, so two publishers that share no story at all can
+   * end up counted as one. Domain B republishing from A and, separately, from C
+   * does not make A and C the same source.
+   *
+   * Both *understate* independence. They are accepted rather than engineered
+   * around for one reason: counting story clusters instead of domains would
+   * answer a different question from the raw figure it sits beside, and the two
+   * numbers being comparable is the one property the brief insists on. The cost
+   * is paid in visibility instead of in arithmetic. Every cluster is reported
+   * with the pages that linked it and the scores that did, a note names any
+   * merged domain that also carried a page matching nothing, and the raw figure
+   * is always there to reason from.
    */
   const links: SyndicationLink[] = [];
   const clusteredPageUrls = new Set<string>();
@@ -359,24 +401,24 @@ export function scoreSourceQuality(
   }
 
   const grouped = groups.groups();
-  const urlsByDomain = new Map<string, string[]>();
-  for (const page of comparable) {
-    const bucket = urlsByDomain.get(page.domain);
-    if (bucket) bucket.push(page.url);
-    else urlsByDomain.set(page.domain, [page.url]);
-  }
-
   const syndicationClusters: SyndicationCluster[] = [];
   for (const domains of grouped.values()) {
     if (domains.length < 2) continue;
     const sorted = [...domains].sort();
     const inCluster = new Set(sorted);
+    // Both endpoints, not one. The `&&` is safe against being read as an `||`
+    // by accident: a link unions its two domains the moment it is accepted, so
+    // both endpoints are always in the same component and no valid input can
+    // reach a link that straddles two clusters. The `&&` states the invariant
+    // rather than relying on it.
+    const own = links.filter(
+      (l) => inCluster.has(registrableDomain(l.a)) && inCluster.has(registrableDomain(l.b)),
+    );
     syndicationClusters.push({
       domains: sorted,
-      urls: sorted.flatMap((d) => urlsByDomain.get(d) ?? []),
-      links: links.filter(
-        (l) => inCluster.has(registrableDomain(l.a)) && inCluster.has(registrableDomain(l.b)),
-      ),
+      // Only the pages that actually matched something, sorted for stability.
+      urls: [...new Set(own.flatMap((l) => [l.a, l.b]))].sort(),
+      links: own,
     });
   }
   syndicationClusters.sort((a, b) => b.domains.length - a.domains.length);
@@ -389,15 +431,24 @@ export function scoreSourceQuality(
     // is reading this to the harness; "the page was too short" sends them to the
     // page; "past the ceiling" sends them to this file's own bound. One
     // catch-all string would send all three to the wrong place.
-    let why: string;
+    //
+    // A domain can hit more than one of them at once, and an earlier version
+    // reported only the first, which made the message false for the rest. Every
+    // cause that applies is now named.
+    const causes: string[] = [];
     if (domainsWithShortPage.has(domain)) {
-      why = `every page supplied for this domain was shorter than ${String(MIN_SHINGLES)} shingles, which is too little text to characterise; it is counted as its own source rather than merged`;
-    } else if (domainsPastCeiling.has(domain)) {
-      why = `its page arrived past the ${String(MAX_PAGES)}-page ceiling and was never examined; it is counted as its own source`;
-    } else {
-      why = 'no page text was supplied for this domain, so it could not be compared; it is counted as its own source';
+      causes.push(`a page shorter than ${String(MIN_SHINGLES)} shingles, which is too little text to characterise`);
     }
-    uncheckedDomains.push({ domain, why });
+    if (domainsPastCeiling.has(domain)) {
+      causes.push(`a page that arrived past the ${String(MAX_PAGES)}-page ceiling and was never examined`);
+    }
+    uncheckedDomains.push({
+      domain,
+      why:
+        causes.length === 0
+          ? 'no page text was supplied for this domain, so it could not be compared; it is counted as its own source'
+          : `it is counted as its own source because the only page text for it was ${causes.join(', and ')}`,
+    });
   }
 
   const notes: string[] = [];
@@ -407,13 +458,28 @@ export function scoreSourceQuality(
     );
   }
   if (uncheckedDomains.length > 0) {
+    // The direction of the bound, stated carefully, because an earlier version
+    // of this sentence had it backwards. Untested syndication can only ever
+    // merge more, never less. So the collapsed figure is an **upper bound on
+    // how many independent sources there are**, and the gap between the two
+    // figures is a **lower bound on how much collapsing there is**.
     notes.push(
-      `${String(uncheckedDomains.length)} of ${String(citedDomains.size)} cited domain(s) had no page long enough to compare. Syndication among them is not ruled out; it is untested, and the collapsed count therefore reads as an upper bound on how much collapsing there is.`,
+      `${String(uncheckedDomains.length)} of ${String(citedDomains.size)} cited domain(s) had no page long enough to compare. Syndication among them is not ruled out, it is untested, so the collapsed figure is an upper bound on how many independent sources there are and the gap between the two figures is a lower bound on how much collapsing there is.`,
     );
   }
-  if (ignoredPages > 0) {
+  if (invalidPageAddresses > 0) {
     notes.push(
-      `${String(ignoredPages)} supplied page(s) were on a domain the report did not cite, or repeated a page already supplied, and took no part.`,
+      `${String(invalidPageAddresses)} supplied page(s) carried an address that is not a resolvable web address and took no part.`,
+    );
+  }
+  if (uncitedPages > 0) {
+    notes.push(
+      `${String(uncitedPages)} supplied page(s) were not among the report's citations and took no part; a document the report never cited is not evidence about this report.`,
+    );
+  }
+  if (repeatedPages > 0) {
+    notes.push(
+      `${String(repeatedPages)} supplied page(s) repeated a page already supplied and took no part.`,
     );
   }
   if (truncatedPages.length > 0) {

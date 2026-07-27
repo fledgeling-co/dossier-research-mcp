@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { assessSupport } from '../../../src/research/corroborate.js';
 import { classifySource, profileEvidence } from '../../../src/research/evidence.js';
 import { MAX_PAGES, scoreSourceQuality, type SourceQualityScored } from './source-quality.js';
-import { MAX_PAGE_CHARS, MIN_SHINGLES } from './syndication.js';
+import { MAX_PAGE_CHARS, MIN_SHINGLES, shingleHashes } from './syndication.js';
 import {
   BOILERPLATE_PAGES,
   INDEPENDENT_ARTICLES,
@@ -216,6 +216,35 @@ describe('SRCQ-09 both counts always travel together', () => {
     }
   });
 
+  /**
+   * The guarantee at the type level, not only at run time.
+   *
+   * The runtime assertions above check what this implementation returns. They
+   * would not notice either count becoming optional in the interface, which is
+   * the change that would let a future caller construct a result carrying only
+   * the collapsed figure. The brief forbids exactly that, so it is pinned where
+   * it is decided.
+   */
+  it('cannot express a result that carries only one of the two counts', () => {
+    const noRaw = {} as Omit<SourceQualityScored, 'rawIndependentDomains'>;
+    const noCollapsed = {} as Omit<SourceQualityScored, 'collapsedIndependentDomains'>;
+    // @ts-expect-error the raw count is required; the brief forbids reporting the collapsed figure alone
+    const missingRaw: SourceQualityScored = noRaw;
+    // @ts-expect-error the collapsed count is required too, so the pair is symmetric
+    const missingCollapsed: SourceQualityScored = noCollapsed;
+    expect(missingRaw).toBeDefined();
+    expect(missingCollapsed).toBeDefined();
+  });
+
+  it('carries no count at all on the arm that did not compute one', () => {
+    const result = scoreSourceQuality([]);
+    expect(result.status).toBe('not-applicable');
+    // A zero and an unmeasurable read identically in an average and mean
+    // opposite things, so the not-applicable arm carries neither number.
+    expect(result).not.toHaveProperty('rawIndependentDomains');
+    expect(result).not.toHaveProperty('collapsedIndependentDomains');
+  });
+
   it('grades the source mix with the product’s own classifier rather than a second one', () => {
     const result = scored(urlsOf(WIRE_PRINTINGS), WIRE_PRINTINGS);
     expect(result.profile.byType).toEqual(
@@ -232,7 +261,7 @@ describe('SRCQ-10 a page the report never cited takes no part', () => {
     const result = scored(cited, pages);
     expect(result.rawIndependentDomains).toBe(2);
     expect(result.syndicationClusters[0]?.domains).toEqual(['example.com', 'example.org']);
-    expect(result.notes.join(' ')).toContain('1 supplied page(s) were on a domain the report did not cite');
+    expect(result.notes.join(' ')).toContain("1 supplied page(s) were not among the report's citations");
   });
 
   it('ignores a repeated page rather than comparing it with itself', () => {
@@ -331,7 +360,234 @@ describe('SRCQ-23 a page whose own address is not a web address takes no part', 
     const result = scored([WIRE_PRINTINGS[0]!.url, WIRE_PRINTINGS[1]!.url], pages);
     expect(result.comparedPages).toBe(1);
     expect(result.collapsedIndependentDomains).toBe(2);
-    expect(result.notes.join(' ')).toContain('1 supplied page(s) were on a domain the report did not cite');
+    expect(result.notes.join(' ')).toContain('1 supplied page(s) carried an address that is not a resolvable web address');
+  });
+});
+
+describe('SRCQ-24 the source mix is really the product’s, on a fixture that can tell', () => {
+  /**
+   * Every other fixture here uses `.example` hosts, which `classifySource`
+   * leaves `other`. An implementation that hard-coded every source as `other`
+   * would pass all of them. This one spans six classes, so it cannot.
+   */
+  const mixed = [
+    'https://www.sec.gov/files/rules/final/2026/33-11000.pdf',
+    'https://arxiv.org/abs/2509.04499',
+    'https://www.reuters.com/markets/rates-2026-07-27/',
+    'https://www.g2.com/products/thing/reviews',
+    'https://news.ycombinator.com/item?id=1',
+    'https://some-unrecognised-host.example/page',
+  ];
+
+  it('reproduces classifySource and profileEvidence exactly, class for class', () => {
+    const result = scored(mixed);
+    const expectedSources = mixed.map((u) => classifySource(u));
+    expect(result.sources).toEqual(expectedSources);
+    expect(result.profile).toEqual(profileEvidence(expectedSources));
+  });
+
+  it('does not flatten everything into one class', () => {
+    const result = scored(mixed);
+    const used = Object.entries(result.profile.byType).filter(([, n]) => n > 0);
+    expect(used.length).toBeGreaterThanOrEqual(5);
+    expect(result.profile.byType.official).toBeGreaterThan(0);
+    expect(result.profile.byType.academic).toBeGreaterThan(0);
+    expect(result.profile.byType.journalism).toBeGreaterThan(0);
+    expect(result.profile.officialShare).toBeGreaterThan(0);
+    expect(result.profile.largestSingleDomainShare).toBeGreaterThan(0);
+  });
+});
+
+describe('SRCQ-25 a cited domain with no page supplied at all', () => {
+  it('stays its own source and names the missing page as the cause', () => {
+    const cited = [WIRE_PRINTINGS[0]!.url, WIRE_PRINTINGS[1]!.url];
+    const result = scored(cited, [WIRE_PRINTINGS[0]!]);
+    expect(result.rawIndependentDomains).toBe(2);
+    expect(result.collapsedIndependentDomains).toBe(2);
+    expect(result.uncheckedDomains).toEqual([
+      {
+        domain: 'example.org',
+        why: 'no page text was supplied for this domain, so it could not be compared; it is counted as its own source',
+      },
+    ]);
+  });
+
+  it('states the direction of the bound rather than reversing it', () => {
+    const result = scored([WIRE_PRINTINGS[0]!.url, WIRE_PRINTINGS[1]!.url], [WIRE_PRINTINGS[0]!]);
+    const note = result.notes.find((n) => n.includes('untested'))!;
+    expect(note).toContain('upper bound on how many independent sources there are');
+    expect(note).toContain('lower bound on how much collapsing there is');
+  });
+});
+
+describe('SRCQ-26 a component beside an untouched domain', () => {
+  it('collapses only the component, leaving the independent domain alone', () => {
+    const pages = [WIRE_PRINTINGS[0]!, WIRE_PRINTINGS[1]!, INDEPENDENT_ARTICLES[3]!];
+    const result = scored(urlsOf(pages), pages);
+    expect(result.rawIndependentDomains).toBe(3);
+    expect(result.collapsedIndependentDomains).toBe(2);
+    expect(result.syndicationClusters).toHaveLength(1);
+    expect(result.syndicationClusters[0]!.domains).toEqual(['example.com', 'example.org']);
+  });
+});
+
+describe('SRCQ-27 dedupe does not over-reach', () => {
+  it('keeps two distinct paths on one domain as two sources', () => {
+    const urls = [WIRE_PRINTINGS[0]!.url, ORIGINAL_ON_SYNDICATING_DOMAIN.url];
+    const result = scored(urls);
+    expect(result.sources).toHaveLength(2);
+    // Two sources, one publisher: the domain count is what collapses them, and
+    // it is supposed to.
+    expect(result.rawIndependentDomains).toBe(1);
+  });
+
+  it('deduplicates a supplied page by canonical form, not by raw equality', () => {
+    const pages = [
+      WIRE_PRINTINGS[0]!,
+      { url: `${WIRE_PRINTINGS[0]!.url}?utm_campaign=x`, text: WIRE_PRINTINGS[0]!.text },
+      WIRE_PRINTINGS[1]!,
+    ];
+    const result = scored(urlsOf(WIRE_PRINTINGS).slice(0, 2), pages);
+    expect(result.comparedPages).toBe(2);
+    expect(result.notes.join(' ')).toContain('1 supplied page(s) repeated a page already supplied');
+  });
+});
+
+describe('SRCQ-28 a page the report did not cite cannot merge two publishers', () => {
+  it('rejects an uncited page even when it sits on a cited domain', () => {
+    // Both cited pages are unrelated originals. The two wire copies are on the
+    // same two domains but at paths the report never cited, so on a
+    // domain-level rule they would merge the publishers and on a URL-level rule
+    // they cannot.
+    const cited = [
+      { url: 'https://one.alpha.example/original', text: INDEPENDENT_ARTICLES[0]!.text },
+      { url: 'https://two.beta.example/original', text: INDEPENDENT_ARTICLES[1]!.text },
+    ];
+    const uncited = [
+      { url: 'https://one.alpha.example/wire-copy', text: WIRE_PRINTINGS[0]!.text },
+      { url: 'https://two.beta.example/wire-copy', text: WIRE_PRINTINGS[1]!.text },
+    ];
+    const result = scored(urlsOf(cited), [...cited, ...uncited]);
+    expect(result.rawIndependentDomains).toBe(2);
+    expect(result.collapsedIndependentDomains).toBe(2);
+    expect(result.syndicationClusters).toEqual([]);
+    expect(result.notes.join(' ')).toContain("2 supplied page(s) were not among the report's citations");
+  });
+});
+
+describe('SRCQ-29 the page ceiling bounds what is processed, not what survives', () => {
+  it('reports the ceiling even when every earlier page was too short to compare', () => {
+    const shortPages = Array.from({ length: MAX_PAGES }, (_, i) => ({
+      url: `https://short${String(i)}.example/page`,
+      text: 'far too little text to characterise this page at all',
+    }));
+    const real = { url: 'https://real.example/story', text: WIRE_PRINTINGS[0]!.text };
+    const pages = [...shortPages, real];
+    const result = scored(urlsOf(pages), pages);
+    // The bound sits in front of the shingling, so the real page past it is
+    // unexamined rather than quietly processed because nothing before it
+    // happened to be comparable.
+    expect(result.comparedPages).toBe(0);
+    expect(result.unexaminedPages).toBe(1);
+  });
+});
+
+describe('SRCQ-30 a domain hitting two unchecked causes at once names both', () => {
+  it('does not report only the first cause it happened to test for', () => {
+    const shortFiller = Array.from({ length: MAX_PAGES - 1 }, (_, i) => ({
+      url: `https://filler${String(i)}.example/page`,
+      text: 'too short',
+    }));
+    const twoCause = [
+      { url: 'https://both.example/short', text: 'also far too short to characterise' },
+      { url: 'https://both.example/long', text: WIRE_PRINTINGS[0]!.text },
+    ];
+    // The first of the pair is processed (and too short); the second lands past
+    // the ceiling, so the domain hits both causes.
+    const pages = [...shortFiller, ...twoCause];
+    const result = scored(urlsOf(pages), pages);
+    const both = result.uncheckedDomains.find((u) => u.domain === 'both.example')!;
+    expect(both.why).toContain('too little text to characterise');
+    expect(both.why).toContain('past the 200-page ceiling');
+  });
+});
+
+describe('SRCQ-31 an unusable page address is reported as that, not as something else', () => {
+  it('gives an invalid address its own cause rather than the uncited one', () => {
+    const pages = [WIRE_PRINTINGS[0]!, { url: 'unknown', text: WIRE_PRINTINGS[1]!.text }];
+    const result = scored([WIRE_PRINTINGS[0]!.url, WIRE_PRINTINGS[1]!.url], pages);
+    const joined = result.notes.join(' ');
+    expect(joined).toContain('1 supplied page(s) carried an address that is not a resolvable web address');
+    expect(joined).not.toContain("were not among the report's citations");
+  });
+});
+
+describe('SRCQ-32 the scorer repeats the length floor, so the floor is exercised there too', () => {
+  it('compares and merges two pages sitting exactly on the floor', () => {
+    // 109 distinct words gives exactly 100 ten-word windows.
+    const words = Array.from({ length: MIN_SHINGLES + 9 }, (_, i) => `w${String(i)}`).join(' ');
+    const pages = [
+      { url: 'https://a.floor-one.example/p', text: words },
+      { url: 'https://b.floor-two.example/p', text: words },
+    ];
+    expect(shingleHashes(words).size).toBe(MIN_SHINGLES);
+    const result = scored(urlsOf(pages), pages);
+    expect(result.comparedPages).toBe(2);
+    expect(result.collapsedIndependentDomains).toBe(1);
+  });
+
+  it('leaves them alone one shingle below the floor', () => {
+    const words = Array.from({ length: MIN_SHINGLES + 8 }, (_, i) => `w${String(i)}`).join(' ');
+    const pages = [
+      { url: 'https://a.floor-one.example/p', text: words },
+      { url: 'https://b.floor-two.example/p', text: words },
+    ];
+    expect(shingleHashes(words).size).toBe(MIN_SHINGLES - 1);
+    const result = scored(urlsOf(pages), pages);
+    expect(result.comparedPages).toBe(0);
+    expect(result.collapsedIndependentDomains).toBe(2);
+  });
+});
+
+describe('SRCQ-33 a publisher bridging two different stories', () => {
+  /**
+   * The transitive case the domain-level rule has to own. B carries story X,
+   * which A also carries, and story Y, which C also carries. A and C share
+   * nothing. Counting publishers merges all three; counting stories would not.
+   * The behaviour is deliberate and is documented above the pairwise loop, so
+   * this test exists to pin it rather than to approve of it.
+   */
+  const pages = [
+    { url: 'https://a.bridge-a.example/x', text: WIRE_PRINTINGS[0]!.text },
+    { url: 'https://b.bridge-b.example/x', text: WIRE_PRINTINGS[1]!.text },
+    { url: 'https://b.bridge-b.example/y', text: INDEPENDENT_ARTICLES[0]!.text },
+    { url: 'https://c.bridge-c.example/y', text: INDEPENDENT_ARTICLES[0]!.text },
+  ];
+
+  it('merges all three publishers even though the ends share no story', () => {
+    const result = scored(urlsOf(pages), pages);
+    expect(result.rawIndependentDomains).toBe(3);
+    expect(result.collapsedIndependentDomains).toBe(1);
+    expect(result.syndicationClusters).toHaveLength(1);
+    expect(result.syndicationClusters[0]!.links).toHaveLength(2);
+  });
+
+  it('confirms the ends really do share nothing, so the merge is the bridge', () => {
+    const ends = [pages[0]!, pages[3]!];
+    const result = scored(urlsOf(ends), ends);
+    expect(result.collapsedIndependentDomains).toBe(2);
+  });
+});
+
+describe('SRCQ-34 a cluster lists the pages that matched, and only those', () => {
+  it('leaves out an original piece on a merged domain', () => {
+    const pages = [...WIRE_PRINTINGS.slice(0, 2), ORIGINAL_ON_SYNDICATING_DOMAIN];
+    const result = scored(urlsOf(pages), pages);
+    const cluster = result.syndicationClusters[0]!;
+    expect(cluster.urls).toEqual([WIRE_PRINTINGS[0]!.url, WIRE_PRINTINGS[1]!.url].sort());
+    expect(cluster.urls).not.toContain(ORIGINAL_ON_SYNDICATING_DOMAIN.url);
+    // It is not lost: the note is where it surfaces.
+    expect(result.notes.join(' ')).toContain('matching nothing else');
   });
 });
 

@@ -180,11 +180,22 @@ export function normaliseForShingling(text: string): string[] {
 }
 
 /**
- * FNV-1a, 32-bit.
+ * FNV-1a's construction, 32-bit, over UTF-16 code units.
  *
  * Broder fingerprinted shingles rather than storing them, and the reason still
  * holds: a long page is thousands of ten-word strings and holding several pages
  * of them as text is many times the memory of holding them as numbers.
+ *
+ * **Not byte-canonical FNV-1a, and the difference is named rather than hidden.**
+ * The reference algorithm runs over UTF-8 bytes; this runs over JavaScript's
+ * UTF-16 code units. For ASCII the two are identical, so a published test vector
+ * still matches. For anything above U+007F they diverge, and `é` hashes to a
+ * different number here than the reference would give. That is harmless because
+ * nothing ever compares these hashes against another implementation's: they are
+ * compared only against other hashes produced by this same function, in the same
+ * process, and all the comparison needs is determinism and a good spread. Naming
+ * the divergence costs a sentence; discovering it while trying to reproduce a
+ * score against a reference implementation would cost an afternoon.
  *
  * **The collision arithmetic, stated rather than waved at.** At 32 bits the
  * expected number of colliding pairs among n shingles is about n²/2³³. A very
