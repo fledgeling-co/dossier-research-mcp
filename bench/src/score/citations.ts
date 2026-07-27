@@ -215,10 +215,6 @@ const CONTAINMENT_MEANS =
 const JUDGED_MEANS =
   'judged: an injected judge read the statement against the page. Not the default path, and not free.';
 
-function emptyRegistryTally(): RegistryTally {
-  return { present: 0, absent: 0, unchecked: 0, invalid: 0, presentRate: null };
-}
-
 function withRate(t: Omit<RegistryTally, 'presentRate'>): RegistryTally {
   const denominator = t.present + t.absent;
   return { ...t, presentRate: denominator === 0 ? null : t.present / denominator };
@@ -437,5 +433,3 @@ export function scoreCitationIntegrity(
     ...metrics,
   };
 }
-
-export { emptyRegistryTally };
