@@ -1,6 +1,7 @@
 import type { Config } from '../config.js';
 import type { DeepResearchClient } from '../gemini/client.js';
-import type { DurationOptions } from '../gemini/cost.js';
+import type { CostBand, DurationOptions } from '../gemini/cost.js';
+import type { ProfileSignal, QuestionProfile } from '../research/profile.js';
 import { geminiProvider } from './gemini.js';
 import { localProvider } from './local.js';
 import { openAiProvider } from './openai.js';
@@ -18,6 +19,14 @@ import type { ProviderId, ResearchProvider, Shape } from './types.js';
  */
 export class ProviderRegistry {
   private readonly all: readonly ResearchProvider[];
+  /**
+   * True when the operator named backends in `DOSSIER_PROVIDERS`.
+   *
+   * Panel assembly needs to know. An allow-list is an instruction, not a hint,
+   * so a named backend joins whether or not the question profile would have
+   * asked for it; naming one backend is how you get a panel of one.
+   */
+  private readonly allowListInForce: boolean;
 
   constructor(config: Config, resolveGeminiClient: () => DeepResearchClient | null) {
     const built = [
@@ -30,10 +39,10 @@ export class ProviderRegistry {
     // An explicit allow-list is a deliberate operator choice and overrides
     // detection: a key present in the environment for some other tool should
     // not silently become a place Dossier can spend money.
-    this.all =
-      config.enabledProviders.length > 0
-        ? built.filter((p) => config.enabledProviders.includes(p.id))
-        : built;
+    this.allowListInForce = config.enabledProviders.length > 0;
+    this.all = this.allowListInForce
+      ? built.filter((p) => config.enabledProviders.includes(p.id))
+      : built;
   }
 
   list(): readonly ResearchProvider[] {
@@ -78,6 +87,34 @@ export class ProviderRegistry {
     }
     return routeAmong(configured, need);
   }
+
+  /**
+   * Assemble a panel rather than pick a winner.
+   *
+   * `route()` still exists and still answers "which one backend", because the
+   * explicit-provider path and every shaped tool needs exactly that. This is the
+   * default path for an unqualified research request: every free backend that
+   * can do the job, plus every paid backend the question actually calls for.
+   */
+  assemblePanel(need: PanelNeed): PanelDecision {
+    const configured = this.available();
+    if (configured.length === 0) {
+      return {
+        members: [],
+        free: [],
+        paid: [],
+        total: ZERO_BAND,
+        rejected: this.all.map((p) => ({ id: p.id, why: p.detect().detail })),
+        notes: ['No provider credentials are configured, so there is no panel to assemble.'],
+        crawl: null,
+        profile: need.profile,
+      };
+    }
+    return assemblePanelAmong(configured, {
+      ...need,
+      allowList: this.allowListInForce,
+    });
+  }
 }
 
 /**
@@ -91,46 +128,7 @@ export class ProviderRegistry {
  * next. This takes the providers as an argument instead.
  */
 export function routeAmong(configured: readonly ResearchProvider[], need: RoutingNeed): RoutingDecision {
-  const rejected: { id: ProviderId; why: string }[] = [];
-  const eligible = configured.filter((p) => {
-    const c = p.capabilities;
-    if (need.shape && !c.shapes.includes(need.shape)) {
-      rejected.push({ id: p.id, why: `cannot do ${need.shape} research` });
-      return false;
-    }
-    if (need.planReview && !c.planReview) {
-      rejected.push({ id: p.id, why: 'has no editable plan before spending' });
-      return false;
-    }
-    if (need.dateWindow && c.dateFilter === 'none') {
-      rejected.push({ id: p.id, why: 'cannot enforce a date window (prompt-only)' });
-      return false;
-    }
-    if (need.domains && need.domains > c.domainFilter) {
-      rejected.push({
-        id: p.id,
-        why: c.domainFilter === 0 ? 'has no domain filter' : `caps domain filters at ${c.domainFilter}`,
-      });
-      return false;
-    }
-    if (need.corpus && c.corpus === 'none') {
-      rejected.push({ id: p.id, why: 'cannot ground on a private corpus' });
-      return false;
-    }
-    if (need.social && !need.social.every((s) => c.socialSources.includes(s))) {
-      rejected.push({ id: p.id, why: `cannot search ${need.social.join('/')}` });
-      return false;
-    }
-    // A subscription backend nobody has signed into is not a cheap option, it
-    // is a broken one, and it costs $0 so it would win the cost sort below
-    // outright. Eliminated here rather than merely left unpreferred, and named
-    // in `rejected` so the fix is visible instead of mysterious.
-    if (c.billedTo === 'subscription' && p.detect().signedIn !== true) {
-      rejected.push({ id: p.id, why: 'installed but not signed in, so it cannot run' });
-      return false;
-    }
-    return true;
-  });
+  const { eligible, rejected } = screenByCapability(configured, need);
 
   if (eligible.length === 0) {
     return {
@@ -203,6 +201,74 @@ export function routeAmong(configured: readonly ResearchProvider[], need: Routin
   };
 }
 
+export interface CapabilityScreen {
+  readonly eligible: readonly ResearchProvider[];
+  readonly rejected: readonly { id: ProviderId; why: string }[];
+}
+
+/**
+ * Capability first, then usability. Nothing else.
+ *
+ * Shared by `routeAmong` and `assemblePanelAmong` so that the rule holds by
+ * construction rather than by two implementations agreeing: a backend that
+ * cannot enforce a date window does not join a date-bound panel merely because
+ * it is free. Cost, billing preference and question profile are all downstream
+ * of this function and none of them can put back what it removed.
+ *
+ * Two passes, in that order. The first is pure capability. The second is the
+ * sign-in check, which is not a capability but a fact about the machine: a
+ * subscription backend nobody has signed into is not a cheap option, it is a
+ * broken one, and it costs $0 so it would win any cost sort outright. Both are
+ * named in `rejected` so the fix is visible instead of mysterious.
+ */
+export function screenByCapability(
+  configured: readonly ResearchProvider[],
+  need: RoutingNeed,
+): CapabilityScreen {
+  const rejected: { id: ProviderId; why: string }[] = [];
+  const capable = configured.filter((p) => {
+    const c = p.capabilities;
+    if (need.shape && !c.shapes.includes(need.shape)) {
+      rejected.push({ id: p.id, why: `cannot do ${need.shape} research` });
+      return false;
+    }
+    if (need.planReview && !c.planReview) {
+      rejected.push({ id: p.id, why: 'has no editable plan before spending' });
+      return false;
+    }
+    if (need.dateWindow && c.dateFilter === 'none') {
+      rejected.push({ id: p.id, why: 'cannot enforce a date window (prompt-only)' });
+      return false;
+    }
+    if (need.domains && need.domains > c.domainFilter) {
+      rejected.push({
+        id: p.id,
+        why: c.domainFilter === 0 ? 'has no domain filter' : `caps domain filters at ${c.domainFilter}`,
+      });
+      return false;
+    }
+    if (need.corpus && c.corpus === 'none') {
+      rejected.push({ id: p.id, why: 'cannot ground on a private corpus' });
+      return false;
+    }
+    if (need.social && !need.social.every((s) => c.socialSources.includes(s))) {
+      rejected.push({ id: p.id, why: `cannot search ${need.social.join('/')}` });
+      return false;
+    }
+    return true;
+  });
+
+  const eligible = capable.filter((p) => {
+    if (p.capabilities.billedTo === 'subscription' && p.detect().signedIn !== true) {
+      rejected.push({ id: p.id, why: 'installed but not signed in, so it cannot run' });
+      return false;
+    }
+    return true;
+  });
+
+  return { eligible, rejected };
+}
+
 export interface RoutingNeed {
   readonly shape?: Shape;
   readonly planReview?: boolean;
@@ -247,4 +313,272 @@ function describeChoice(p: ResearchProvider, need: RoutingNeed, eligible: number
   if (need.corpus) return `${p.label} is the only backend that can ground on a private corpus.`;
   if (eligible === 1) return `${p.label} is the only configured provider that can do this.`;
   return `${p.label}: cheapest configured backend meeting the requirements, of ${String(eligible)} eligible.`;
+}
+
+/* ------------------------------------------------------------------ panels */
+
+/**
+ * Which budget a member draws on, as a lane.
+ *
+ * Kept separate everywhere it is printed. The reader has to be able to see what
+ * the money is buying over and above what the subscriptions already cover, and
+ * a single merged list hides exactly that.
+ */
+export type PanelLane = 'free' | 'paid';
+
+export interface PanelMember {
+  readonly provider: ResearchProvider;
+  readonly lane: PanelLane;
+  /** Why this backend is on the panel, in one sentence. */
+  readonly reason: string;
+  readonly cost: CostBand;
+}
+
+/**
+ * A crawl the panel would like and will not start.
+ *
+ * Detection of browser tooling exists in `src/local/browser.ts` and detection is
+ * not permission. This is a recommendation printed for a human, nothing else:
+ * Mode B stays opt-in behind `DOSSIER_BROWSER_PROVIDER`, and no code path here
+ * enables it.
+ */
+export interface CrawlRecommendation {
+  readonly why: string;
+  readonly sites: readonly string[];
+}
+
+export interface PanelDecision {
+  /** Free lane first, then paid, each ordered cheapest first. */
+  readonly members: readonly PanelMember[];
+  readonly free: readonly PanelMember[];
+  readonly paid: readonly PanelMember[];
+  /** The sum of every member's band. What the reservation will ask for. */
+  readonly total: CostBand;
+  readonly rejected: readonly { id: ProviderId; why: string }[];
+  /** Anything the reader would be annoyed to discover afterwards. */
+  readonly notes: readonly string[];
+  readonly crawl: CrawlRecommendation | null;
+  readonly profile: QuestionProfile;
+}
+
+export interface PanelNeed extends RoutingNeed {
+  readonly profile: QuestionProfile;
+  /**
+   * True when `DOSSIER_PROVIDERS` named the candidate set.
+   *
+   * Naming a backend is an instruction, so the allow-list overrides the profile
+   * in the inclusive direction: a named backend joins whether or not the
+   * question calls for it. Without this, `DOSSIER_PROVIDERS=xai` on a question
+   * with no social signal would assemble a panel of zero, which contradicts the
+   * rule that naming one provider yields a panel of one.
+   */
+  readonly allowList?: boolean;
+}
+
+const ZERO_BAND: CostBand = { lowUsd: 0, highUsd: 0, midUsd: 0, basis: 'no members' };
+
+/**
+ * At or under this worst case, a backend is cheap enough that leaving it out
+ * rarely saves anything worth having.
+ *
+ * Perplexity is the case this exists for: measured runs land near $0.29 and its
+ * fast deep band tops out at $2, so on an ordinary deep question it joins by
+ * default rather than waiting for a signal. At `max` tier its band doubles and
+ * the default lapses, which is the intended behaviour: "cheap" is a fact about
+ * the run, not about the vendor.
+ */
+export const PANEL_CHEAP_ENOUGH_USD = 2;
+
+/** Above this many named sites, a domain filter is OpenAI's job rather than Perplexity's. */
+const LARGE_DOMAIN_FILTER = 20;
+
+/**
+ * Assemble a panel over an already-configured set.
+ *
+ * Split from the registry for the same reason `routeAmong` is: the registry
+ * builds providers from environment and PATH, so a test asserting which
+ * backends joined would otherwise depend on what the developer has installed.
+ */
+export function assemblePanelAmong(
+  configured: readonly ResearchProvider[],
+  need: PanelNeed,
+): PanelDecision {
+  // Capability first, before billing and before the profile is even read.
+  const { eligible, rejected: screened } = screenByCapability(configured, need);
+  const rejected = [...screened];
+  const notes: string[] = [];
+
+  const costOf = (p: ResearchProvider): CostBand => p.estimate(need.estimateInput).cost;
+
+  // Lane 1. Every capable, signed-in CLI joins. There is no cost argument
+  // against including all of them, because the marginal cost of the second is
+  // zero and they read different indexes.
+  const free: PanelMember[] = eligible
+    .filter((p) => p.capabilities.billedTo === 'subscription')
+    .map((p) => ({
+      provider: p,
+      lane: 'free' as const,
+      reason:
+        `${p.label} is installed, signed in and can do this job. ` +
+        'It spends CLI subscription quota rather than an API balance, and Dossier cannot meter that quota.',
+      cost: costOf(p),
+    }));
+
+  // Lane 2. A paid backend joins when its key exists and the question profile
+  // calls for what only that backend does. An allow-list overrides the profile
+  // in the inclusive direction: naming a backend is an instruction.
+  const paid: PanelMember[] = [];
+  for (const p of eligible) {
+    if (p.capabilities.billedTo === 'subscription') continue;
+    const reason = need.allowList === true
+      ? `${p.label} was named in DOSSIER_PROVIDERS, so it joins regardless of the question profile.`
+      : paidJoinReason(p, need, costOf(p));
+    if (reason === null) {
+      rejected.push({ id: p.id, why: 'configured, but nothing in this question calls for it' });
+      continue;
+    }
+    paid.push({ provider: p, lane: 'paid', reason, cost: costOf(p) });
+  }
+
+  const byCost = (a: PanelMember, b: PanelMember): number => a.cost.highUsd - b.cost.highUsd;
+  free.sort(byCost);
+  paid.sort(byCost);
+
+  // "Never xAI alone" on a legal question, from the design and from xAI's own
+  // documentation, which describes the product as suited to finding things
+  // rather than concluding them. Refusing beats running: a legal answer from
+  // the one backend the design says must not produce one unsupervised is worse
+  // than no answer, and the operator can still force it by name.
+  const legal = need.profile.signals.includes('legal');
+  let paidFinal = paid;
+  if (legal && need.allowList !== true && free.length === 0 && paid.length === 1 && paid[0]!.provider.id === 'xai') {
+    rejected.push({
+      id: 'xai',
+      why: 'this question is legal or regulatory, and xAI must not be the only backend concluding on one',
+    });
+    notes.push(
+      'xAI was the only backend the profile called for, and this is a legal or regulatory question. ' +
+        'xAI is a finder rather than a concluder, so it is not run alone here. ' +
+        'Configure Gemini, or name xAI in DOSSIER_PROVIDERS if you want it anyway.',
+    );
+    paidFinal = [];
+  }
+
+  const members = [...free, ...paidFinal];
+  const total = sumBands(members.map((m) => m.cost));
+
+  if (members.length === 0 && notes.length === 0) {
+    notes.push('No configured provider can do this. See the rejections.');
+  } else if (members.length === 1) {
+    // A panel of one is a legitimate outcome and is said plainly. Dressing it
+    // up as a panel would be the one thing the plan output must not do.
+    notes.push(`A panel of one: ${members[0]!.provider.label} is the only backend that belongs on this question.`);
+  }
+
+  const crawl = recommendCrawl(need.profile);
+
+  return { members, free, paid: paidFinal, total, rejected, notes, crawl, profile: need.profile };
+}
+
+/**
+ * Why a paid backend belongs on this panel, or `null` if it does not.
+ *
+ * The table in `docs/plan/panel-routing.md` is the specification for this
+ * function, one branch per row, most distinctive reason first.
+ */
+function paidJoinReason(p: ResearchProvider, need: PanelNeed, cost: CostBand): string | null {
+  const has = (s: ProfileSignal): boolean => need.profile.signals.includes(s);
+  const sites = need.profile.namedSites.length;
+  const domains = Math.max(need.domains ?? 0, sites);
+
+  switch (p.id) {
+    case 'gemini': {
+      if (has('breadth')) return `${p.label}: the question is broad or multi-part, which is what it covers best.`;
+      if (has('legal')) {
+        return `${p.label}: a legal or regulatory question wants the most comprehensive backend available.`;
+      }
+      if (need.shape === 'deep' || need.shape === undefined) {
+        return `${p.label}: default yes for anything deep, as the most comprehensive backend available.`;
+      }
+      return null;
+    }
+    case 'perplexity': {
+      if (has('time-bound')) {
+        return `${p.label}: the question is time-bound, and it enforces a date window rather than asking for one.`;
+      }
+      if (has('enumeration')) {
+        return `${p.label}: the question asks for an enumeration, which its wide mode cites row by row.`;
+      }
+      if (has('named-sites') && domains <= LARGE_DOMAIN_FILTER) {
+        return `${p.label}: ${String(domains)} named site(s), inside its domain allow-list.`;
+      }
+      if (cost.highUsd <= PANEL_CHEAP_ENOUGH_USD) {
+        return (
+          `${p.label}: at a worst case of $${cost.highUsd.toFixed(2)} it is cheap enough that ` +
+          'leaving it out rarely saves anything worth having.'
+        );
+      }
+      return null;
+    }
+    case 'xai': {
+      if (has('social')) {
+        return `${p.label}: the question turns on what people are publicly saying, and nothing else reaches X.`;
+      }
+      return null;
+    }
+    case 'openai': {
+      if (has('primary-literature')) {
+        return `${p.label}: the question asks for primary literature.`;
+      }
+      if (domains > LARGE_DOMAIN_FILTER) {
+        return `${p.label}: a domain filter of ${String(domains)} sites, above what the others accept.`;
+      }
+      return null;
+    }
+    // `local` is billed to a subscription and never reaches here; the case
+    // exists so adding a provider id is a compile error rather than a silent
+    // omission from every panel.
+    case 'local':
+      return null;
+  }
+}
+
+/** Sum of the members' bands. The worst case is what gets reserved. */
+export function sumBands(bands: readonly CostBand[]): CostBand {
+  if (bands.length === 0) return ZERO_BAND;
+  const lowUsd = Number(bands.reduce((s, b) => s + b.lowUsd, 0).toFixed(2));
+  const highUsd = Number(bands.reduce((s, b) => s + b.highUsd, 0).toFixed(2));
+  const midUsd = Number(bands.reduce((s, b) => s + b.midUsd, 0).toFixed(2));
+  return {
+    lowUsd,
+    highUsd,
+    midUsd,
+    basis: `sum of ${String(bands.length)} panel member(s); $${highUsd.toFixed(2)} is reserved before any member starts`,
+  };
+}
+
+/**
+ * Should a human point a browser at something?
+ *
+ * Returns a sentence, never an action. The panel may ask for a crawl lane and
+ * must not enable one.
+ */
+function recommendCrawl(profile: QuestionProfile): CrawlRecommendation | null {
+  if (profile.namedSites.length > 0) {
+    return {
+      why:
+        'This question names specific pages. A search index reaches what it has crawled, ' +
+        'so a named site is the case where browser tooling finds what the panel cannot.',
+      sites: profile.namedSites,
+    };
+  }
+  if (profile.needsSpecificPages) {
+    return {
+      why:
+        'This question points at a document behind a login or a paywall, which no search index reaches. ' +
+        'Browser tooling is the only route to it.',
+      sites: [],
+    };
+  }
+  return null;
 }

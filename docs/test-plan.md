@@ -238,6 +238,26 @@ Acceptance criteria are taken from the README's tool contracts and the tool desc
 | **LOOP-33** | A failed-search outcome requires `gaps`, the same as any other empty report | `loop` | ✓ |
 | **LOOP-34** | Findings alongside a failed outcome are kept, and coverage is still incomplete | unit: `local-loop` | ✓ |
 | **LOOP-35** | `outcome: no-results` with a non-empty finding list is refused at the boundary | `loop` | ✓ |
+| **PANEL-01** | Capability is screened before billing and before the profile: a backend that cannot enforce a date window stays off a date-bound panel however free it is | unit: `panel` | ✓ |
+| **PANEL-02** | Every installed, signed-in, capable CLI joins the free lane, with no API key configured at all | unit: `panel` | ✓ |
+| **PANEL-03** | A paid backend joins only when the question calls for what it is distinctively good at, and is named as not called for when it does not | unit: `panel` | ✓ |
+| **PANEL-04** | Signals are additive: a question that is both time-bound and legal gets the backend each implies | unit: `panel` | ✓ |
+| **PANEL-05** | A panel of one is reported plainly as a result, not dressed up as a panel | unit: `panel` | ✓ |
+| **PANEL-06** | `DOSSIER_PROVIDERS` overrides in both directions; naming one backend yields a panel of one whatever the profile says | unit: `panel` | ✓ |
+| **PANEL-07** | xAI is never the only backend concluding on a legal or regulatory question | unit: `panel` | ✓ |
+| **PANEL-08** | Each of the seven profile signals fires on a question that carries it and stays quiet on one that does not | unit: `panel` | ✓ |
+| **PANEL-09** | The crawl lane is only ever a recommendation; no panel path enables a browser | unit: `panel` | ✓ |
+| **PANEL-10** | The panel reserves the SUM of its members' worst cases in one critical section, before any member starts | unit: `panel` | ✓ |
+| **PANEL-11** | A panel that cannot be afforded in full starts no member, writes no ledger line, and says the whole figure it needed | unit: `panel` | ✓ |
+| **PANEL-12** | A panel wider than the concurrency cap is refused whole rather than admitted member by member | unit: `panel` | ✓ |
+| **PANEL-13** | Each member is its own run bound by a shared panel id, so status, read, tail and budget keep working per member | unit: `panel` | ✓ |
+| **PANEL-14** | A member that refuses at create time is reported and does not strand the members already billed | unit: `panel` | ✓ |
+| **PANEL-15** | A member deduplicates onto an identical existing run instead of paying twice, and the rest of the panel still starts | unit: `panel` | ✓ |
+| **PANEL-16** | When every member is terminal the panel is merged automatically, counted in independent domains, and written once | unit: `panel` | ✓ |
+| **PANEL-17** | `research_plan` prints the panel member by member, free lane separate from paid, with a total, before the fingerprint | unit: `panel`, `protocol` | ✓ |
+| **PANEL-18** | The contract fingerprint binds the whole membership, so a plan for one membership cannot start another | unit: `panel` | ✓ |
+| **PANEL-19** | An explicit `provider` still starts exactly one run on the single-provider path, with no panel id | unit: `panel` | ✓ |
+| **PANEL-20** | A member named twice is admitted once, so one backend's answer is never bought at two backends' prices | unit: `panel` | ✓ |
 
 ### The paid project
 

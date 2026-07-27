@@ -45,13 +45,36 @@ So the routing advice above is not marketing copy about who is best. It's about 
 
 ## How Dossier picks
 
-If more than one provider is configured, Dossier chooses on **capability first**: a hard requirement like a date range or an editable plan rules out providers that can't do it, regardless of price. Then cost, then measured accuracy, then source diversity if it's commissioning a second opinion.
-
-It always tells you which it picked and why, it always names the runner-up, and you can always override it:
+Ask for one backend and you get one backend. Ask for none and Dossier assembles a **panel**: an ordered set of backends across three lanes, all working the same brief.
 
 ```
-research_start(question: "...", provider: "perplexity")
+research_start(question: "...", provider: "perplexity")   # exactly one, named
+research_start(question: "...")                           # a panel
 ```
+
+**Capability is screened first, before anything else.** A hard requirement like a date range, a domain allow-list or an editable plan eliminates the backends that can't enforce it, however cheap or free they are. A backend that can only *ask* a model to respect a date window doesn't join a date-bound panel just because it costs nothing.
+
+Then the lanes:
+
+| Lane | Who joins | What it costs |
+|---|---|---|
+| **Free** | Every coding CLI that is installed, signed in and capable of the shape you asked for | A subscription you already pay for. Dossier can't meter it |
+| **Paid** | An API backend whose distinctive strength the question actually calls for | Its own estimate band, reserved up front |
+| **Crawl** | Nothing. The panel *recommends* browser tooling when the question needs specific pages | Nothing, because Dossier drives no browser |
+
+The free lane is the floor. With no API keys at all you still get every capable CLI on the machine.
+
+The paid lane is driven by a **question profile** read off your question: enumeration, a time bound, social, primary literature, named sites, legal or regulatory, breadth. Each signal implies a backend. Signals are additive, so a question that is both time-bound and legal gets both. Gemini and Perplexity lean towards joining when a key exists, because Gemini is the most comprehensive backend available and Perplexity is cheap enough that leaving it out rarely saves anything worth having.
+
+Lane 3 never acts. Mode B browser research stays behind `DOSSIER_BROWSER_PROVIDER` and you drive it yourself; a panel can point at the pages it thinks need reading and that is all it can do.
+
+**Money.** A panel reserves the sum of every member's worst case in one go, before any member starts. A panel that can't be afforded in full doesn't start at all, because half a panel is a worse answer than one good backend and it has already spent money to be worse. `research_plan` prints the whole thing member by member with a cost each, free lane separately from paid, before the contract fingerprint is issued.
+
+**A panel of one is a normal outcome.** If only one backend belongs on the question, Dossier says so and runs it. It doesn't pad the panel to look busy.
+
+`DOSSIER_PROVIDERS` still overrides in both directions. Name one provider and you get a panel of one, whatever the profile thinks.
+
+Every member is its own run with its own id, so `research_status`, `research_read` and `research_tail` work per member. When the last one finishes the panel is merged automatically and the overlap warning is written to each member's journal. Read it. Five backends that read the same ten pages is the corroboration trap at five times the price, and agreement between members is not corroboration: support is counted in independent registrable domains.
 
 Dossier never silently upgrades you to a more expensive backend or tier. That decision stays yours.
 

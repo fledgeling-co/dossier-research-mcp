@@ -13,6 +13,7 @@ import { extractPlan } from './plan.js';
 import { KeyedMutex, Mutex } from './spend.js';
 import { StreamSupervisor } from './stream.js';
 import { extractCitedUrls, normaliseCitations } from './report.js';
+import { describeOverlap, mergeEvidence, type RunEvidence } from './synthesise.js';
 
 /**
  * Run lifecycle.
@@ -22,6 +23,15 @@ import { extractCitedUrls, normaliseCitations } from './report.js';
  * the next tick. Disconnect the MCP client mid-run and nothing is lost — the
  * journal keeps accumulating and `research_tail` replays it by cursor.
  */
+
+/**
+ * How the automatic panel merge marks its journal note.
+ *
+ * Matched on to make the merge idempotent: every member settles independently
+ * and the last one to arrive does the work, so a restart mid-panel must not
+ * write the same summary twice.
+ */
+const PANEL_MERGE_PREFIX = 'Panel merge:';
 
 /** The report's own first heading, which is a better title than a bought one. */
 function firstHeading(markdown: string): string | undefined {
@@ -36,10 +46,23 @@ export class BudgetExceededError extends Error {
     readonly spentUsd: number,
     readonly budgetUsd: number,
     readonly windowHours: number,
+    /**
+     * What the refused request wanted to reserve, when it is a panel.
+     *
+     * A panel reserves the sum of its members' worst cases in one go, so the
+     * refusal has to name that sum. "$4 of $20 committed" reads like there is
+     * headroom; "a panel needing $19.00 on top of $4.00" says why there is not.
+     */
+    readonly neededUsd?: number,
   ) {
     super(
-      `Budget gate: $${spentUsd.toFixed(2)} of $${budgetUsd.toFixed(2)} already committed in the last ${windowHours}h. ` +
-        'Raise DOSSIER_BUDGET_USD, wait for the window to roll, or cancel a run.',
+      neededUsd === undefined
+        ? `Budget gate: $${spentUsd.toFixed(2)} of $${budgetUsd.toFixed(2)} already committed in the last ${windowHours}h. ` +
+            'Raise DOSSIER_BUDGET_USD, wait for the window to roll, or cancel a run.'
+        : `Budget gate: this panel reserves $${neededUsd.toFixed(2)} in full before any member starts, ` +
+            `and $${spentUsd.toFixed(2)} of $${budgetUsd.toFixed(2)} is already committed in the last ${windowHours}h. ` +
+            'No member has been started and nothing has been charged. ' +
+            'Raise DOSSIER_BUDGET_USD, wait for the window to roll, cancel a run, or name one backend with the `provider` argument.',
     );
     this.name = 'BudgetExceededError';
   }
@@ -47,8 +70,19 @@ export class BudgetExceededError extends Error {
 
 export class ConcurrencyExceededError extends Error {
   readonly code = 'concurrency_exceeded' as const;
-  constructor(readonly active: number, readonly max: number) {
-    super(`${active} runs already in flight (max ${max}). Wait for one to finish or cancel it.`);
+  constructor(
+    readonly active: number,
+    readonly max: number,
+    /** How many slots the refused request wanted at once, when it is a panel. */
+    readonly wanted?: number,
+  ) {
+    super(
+      wanted === undefined
+        ? `${active} runs already in flight (max ${max}). Wait for one to finish or cancel it.`
+        : `A panel of ${wanted} needs ${wanted} slots at once and ${active} runs are already in flight (max ${max}). ` +
+            'No member has been started. Wait for one to finish, cancel one, raise DOSSIER_MAX_CONCURRENT, ' +
+            'or name one backend with the `provider` argument.',
+    );
     this.name = 'ConcurrencyExceededError';
   }
 }
@@ -65,6 +99,8 @@ export interface StartRunArgs {
   readonly preEngineered: boolean;
   /** Which backend runs this. Defaults to Gemini. */
   readonly provider?: ProviderId;
+  /** The panel this run is a member of, when it is one. */
+  readonly panelId?: string;
   /** The artefact shape asked for. Defaults to a deep report. */
   readonly shape?: 'deep' | 'wide' | 'recent' | 'corpus';
   /** The time window asked for, recorded for the audit trail. */
@@ -84,6 +120,28 @@ export interface StartRunResult {
   readonly run: RunRecord;
   /** True when an identical in-flight/recent run was returned instead. */
   readonly deduped: boolean;
+}
+
+/**
+ * One brief, several backends.
+ *
+ * `members` replaces `provider`: a panel names every backend up front so the
+ * whole bill can be reserved in one go, which is the only ordering that lets an
+ * unaffordable panel refuse before it has spent anything.
+ */
+export interface PanelStartArgs extends Omit<StartRunArgs, 'provider'> {
+  readonly members: readonly ProviderId[];
+}
+
+export interface PanelStartResult {
+  /** Shared handle binding the member runs together. */
+  readonly panelId: string;
+  /** Every member that started, plus any that deduped onto an existing run. */
+  readonly started: readonly StartRunResult[];
+  /** Members whose backend refused at create time. The panel continued without them. */
+  readonly failed: readonly { readonly provider: ProviderId; readonly error: string }[];
+  /** The sum of the members' worst cases, reserved before any member started. */
+  readonly reservedUsd: number;
 }
 
 /**
@@ -216,8 +274,16 @@ export class Runner {
   fingerprintFor(
     args: Pick<
       StartRunArgs,
-      'prompt' | 'tier' | 'tools' | 'collaborativePlanning' | 'attachments' | 'provider' | 'shape' | 'window' | 'wideSpec'
-    >,
+      'prompt' | 'tier' | 'tools' | 'collaborativePlanning' | 'attachments' | 'shape' | 'window' | 'wideSpec'
+    > & {
+      /**
+       * The backend, or a panel token naming every member.
+       *
+       * Wider than `ProviderId` because a panel is a purchase too, and one that
+       * has to be distinguishable from any of its members running alone.
+       */
+      readonly provider?: string;
+    },
   ): string {
     return fingerprint({
       prompt: args.prompt,
@@ -321,6 +387,7 @@ export class Runner {
         prompt: args.prompt.slice(0, 200_000),
         promptWasPreEngineered: args.preEngineered,
         provider,
+        ...(args.panelId ? { panelId: args.panelId } : {}),
         shape: args.shape ?? 'deep',
         ...(args.window ? { window: args.window } : {}),
         ...(args.wideSpec ? { wideSpec: args.wideSpec } : {}),
@@ -361,7 +428,23 @@ export class Runner {
 
     if ('existing' in reserved) return { run: reserved.existing, deduped: true };
 
-    const record = reserved.record;
+    return this.launch(reserved.record, args, client);
+  }
+
+  /**
+   * Create the interaction for an already-reserved record.
+   *
+   * Split from `start()` so the panel path can reserve the whole panel in one
+   * critical section and then launch its members, without a second copy of the
+   * failure handling that took the longest to get right. Everything here runs
+   * *after* the money is committed, which is why none of it retries: a create
+   * that timed out after the provider accepted it has already bought the report.
+   */
+  private async launch(
+    record: RunRecord,
+    args: StartRunArgs,
+    client: DeepResearchClient,
+  ): Promise<StartRunResult> {
     const id = record.id;
 
     let snapshot: InteractionSnapshot;
@@ -416,6 +499,206 @@ export class Runner {
     const advanced = await this.applySnapshot(started, snapshot);
     this.attachStream(advanced);
     return { run: advanced, deduped: false };
+  }
+
+  /**
+   * Start every member of a panel, reserving the whole panel first.
+   *
+   * The one rule that makes this safe: **the sum of the members' worst cases is
+   * reserved in a single critical section, before any member starts.** Not per
+   * member as it goes. Half a panel is a worse answer than one good backend and
+   * it has already spent money to be worse, so a panel that cannot be afforded
+   * in full does not begin at all.
+   *
+   * Everything after the lock is per member and independent. One backend
+   * refusing at create time must not strand the members that already started
+   * and are already being billed, so a member that throws is recorded failed and
+   * reported, and the rest continue. Each member is attempted exactly once: the
+   * adapters route paid creation through `attemptOnceThenSettle`, and nothing
+   * here wraps that in a retry.
+   */
+  async startPanel(args: PanelStartArgs): Promise<PanelStartResult> {
+    if (args.members.length === 0) throw new Error('A panel needs at least one member.');
+    // A member appearing twice would compute the same dedupe fingerprint twice,
+    // so neither copy would find the other and the panel would buy one backend's
+    // answer at two backends' prices. `assemblePanel` never repeats a provider;
+    // this is here because a caller could.
+    const members = [...new Set(args.members)];
+
+    // Resolve every client before reserving anything. Reserving budget for a
+    // member that cannot be started would commit money against a run that will
+    // never exist, and the ledger has no way to take it back.
+    const clients = new Map<ProviderId, DeepResearchClient>();
+    for (const member of members) {
+      const client = this.resolveClient(member);
+      if (!client) {
+        throw new Error(
+          `No ${member} client available, so this panel cannot be started in full. ` +
+            'Check its credentials with `research_doctor`, or name a backend with the `provider` argument.',
+        );
+      }
+      clients.set(member, client);
+    }
+
+    const panelId = args.panelId ?? newRunId();
+    const estimateInput: DurationOptions = {
+      tier: args.tier,
+      tools: args.tools.map((x) => x.type),
+      attachments: args.attachments?.length ?? 0,
+      collaborativePlanning: args.collaborativePlanning,
+      ...(args.shape ? { shape: args.shape } : {}),
+    };
+    const bandFor = (p: ProviderId): CostBand =>
+      this.estimateFor ? this.estimateFor(p, estimateInput) : estimateCost(estimateInput);
+
+    const reserved = await this.withAdmissionLock(async () => {
+      // Dedupe first, and per member: each member's fingerprint carries its own
+      // provider, so a panel re-run after a partial failure collapses onto the
+      // members that already exist and pays only for the ones that do not.
+      const deduped: RunRecord[] = [];
+      const admit: { provider: ProviderId; band: CostBand; fingerprint: string }[] = [];
+      for (const member of members) {
+        const fp = this.fingerprintFor({ ...args, provider: member });
+        const existing = await this.store.findByFingerprint(fp, this.config.dedupeTtlMinutes);
+        if (existing) {
+          deduped.push(existing);
+          continue;
+        }
+        admit.push({ provider: member, band: bandFor(member), fingerprint: fp });
+      }
+
+      if (admit.length === 0) return { deduped, records: [] as RunRecord[], reservedUsd: 0 };
+
+      const active = (await this.store.activeRuns()).filter(occupiesSlot);
+      const unreadable = await this.store.unreadableRunCount();
+      const occupied = active.length + unreadable;
+      // The panel wants every slot at once, so the cap is checked against the
+      // whole panel rather than one member. With one member this is exactly the
+      // `occupied >= max` check `start()` makes.
+      if (occupied + admit.length > this.config.maxConcurrent) {
+        throw new ConcurrencyExceededError(occupied, this.config.maxConcurrent, admit.length);
+      }
+
+      const totalHigh = Number(admit.reduce((sum, m) => sum + m.band.highUsd, 0).toFixed(2));
+
+      if (this.config.budgetUsd > 0) {
+        // Per-provider ceilings are checked on the panel's demand at that
+        // provider, not on one member's. Two members on one backend is one bill.
+        const wantedPerProvider = new Map<ProviderId, number>();
+        for (const m of admit) {
+          wantedPerProvider.set(m.provider, (wantedPerProvider.get(m.provider) ?? 0) + m.band.highUsd);
+        }
+        for (const [provider, wanted] of wantedPerProvider) {
+          const ceiling = this.config.providerBudgetsUsd[provider] ?? 0;
+          if (ceiling > 0) {
+            const spentHere = await this.committedFor(provider);
+            if (spentHere + wanted > ceiling) {
+              throw new BudgetExceededError(spentHere, ceiling, this.config.budgetWindowHours, wanted);
+            }
+          }
+        }
+        const snapshot = await this.budget();
+        if (snapshot.committedUsd + totalHigh > snapshot.budgetUsd) {
+          throw new BudgetExceededError(
+            snapshot.committedUsd,
+            snapshot.budgetUsd,
+            snapshot.windowHours,
+            totalHigh,
+          );
+        }
+      }
+
+      // Both counters, for every member, before the lock releases.
+      const records: RunRecord[] = [];
+      for (const m of admit) {
+        const id = newRunId();
+        const at = new Date().toISOString();
+        const model = this.modelFor?.(m.provider, args.tier);
+        const record: RunRecord = {
+          id,
+          interactionId: '',
+          state: args.collaborativePlanning ? 'planning' : 'running',
+          tier: args.tier,
+          ...(model ? { model } : {}),
+          archetype: args.archetype,
+          question: args.question.slice(0, 20_000),
+          prompt: args.prompt.slice(0, 200_000),
+          promptWasPreEngineered: args.preEngineered,
+          provider: m.provider,
+          panelId,
+          shape: args.shape ?? 'deep',
+          ...(args.window ? { window: args.window } : {}),
+          ...(args.wideSpec ? { wideSpec: args.wideSpec } : {}),
+          fingerprint: m.fingerprint,
+          createdAt: at,
+          updatedAt: at,
+          lastProgressAt: at,
+          estimatedCostUsd: m.band.highUsd,
+          tags: [...(args.tags ?? [])],
+          planApproved: !args.collaborativePlanning,
+          reportChars: 0,
+          sourceCount: 0,
+          imageCount: 0,
+          reasoningSteps: 0,
+          streamedChars: 0,
+          searches: 0,
+          urlsFetched: 0,
+          corpusQueries: 0,
+          codeRuns: 0,
+          streamAbandoned: false,
+          toolsUsed: args.tools.map((t) => t.type),
+          corpusStores: args.tools.flatMap((t) =>
+            t.type === 'file_search' ? [...t.fileSearchStoreNames] : [],
+          ),
+          ...(args.label ? { label: args.label } : {}),
+        };
+        await this.store.saveRun(record);
+        await this.store.appendLedger({
+          at,
+          runId: id,
+          tier: args.tier,
+          estimatedCostUsd: m.band.highUsd,
+          provider: m.provider,
+          ...(args.label ? { label: args.label } : {}),
+        });
+        records.push(record);
+      }
+      return { deduped, records, reservedUsd: totalHigh };
+    });
+
+    const started: StartRunResult[] = reserved.deduped.map((run) => ({ run, deduped: true }));
+    const failed: { provider: ProviderId; error: string }[] = [];
+
+    for (const record of reserved.records) {
+      const client = clients.get(record.provider);
+      if (!client) continue;
+      try {
+        started.push(await this.launch(record, { ...args, provider: record.provider }, client));
+      } catch (e: unknown) {
+        // `launch` has already marked the record failed and journalled why. The
+        // panel keeps going: the members that started are already being billed
+        // and stranding them would waste the money this refusal did not save.
+        failed.push({ provider: record.provider, error: e instanceof Error ? e.message : String(e) });
+      }
+    }
+
+    for (const result of started) {
+      if (result.deduped) continue;
+      await this.store.appendJournal(
+        result.run.id,
+        'note',
+        `Panel member ${result.run.provider} of ${String(members.length)}, panel ${panelId}. ` +
+          'Agreement between members is not corroboration; support is counted in independent registrable domains.',
+      );
+    }
+
+    return { panelId, started, failed, reservedUsd: reserved.reservedUsd };
+  }
+
+  /** Every run belonging to a panel, oldest first. */
+  async panelMembers(panelId: string): Promise<readonly RunRecord[]> {
+    const runs = await this.store.listRuns();
+    return runs.filter((r) => r.panelId === panelId).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   }
 
   /**
@@ -731,7 +1014,74 @@ export class Runner {
     }
 
     await this.store.saveRun(next);
+    if (next.panelId && TERMINAL_STATES.includes(next.state)) {
+      // Best-effort and free. A merge that throws must not un-complete a report
+      // that has already been bought and written to disk.
+      try {
+        await this.synthesisePanel(next.panelId);
+      } catch {
+        await this.store.appendJournal(
+          run.id,
+          'note',
+          'The automatic panel merge failed. Run `research_synthesise` over the member run ids by hand.',
+        );
+      }
+    }
     return next;
+  }
+
+  /**
+   * Merge a panel's reports the moment its last member settles.
+   *
+   * This is the point of a panel, and leaving it for the caller to remember is
+   * how a five-member panel that read the same ten pages gets reported as five
+   * agreeing backends. `mergeEvidence` counts support in independent registrable
+   * domains and `describeOverlap` says so when the fan-out taught you little, so
+   * the operator is told what the extra money bought before they read anything.
+   *
+   * Deliberately the deterministic merge only. It costs nothing, so it can fire
+   * on every panel without a reservation; the model-written distillation stays
+   * behind `research_synthesise` with `distil: 'model'`, where it is asked for.
+   * Written once: a note already on the journal means another member finished
+   * first and did this.
+   */
+  private async synthesisePanel(panelId: string): Promise<void> {
+    const members = await this.panelMembers(panelId);
+    if (members.length < 2) return;
+    if (!members.every((m) => TERMINAL_STATES.includes(m.state))) return;
+
+    const completed = members.filter((m) => m.state === 'completed');
+    const anchor = members[0];
+    if (!anchor) return;
+    const existing = await this.store.readJournal(anchor.id);
+    if (existing.some((e) => e.kind === 'note' && e.message.startsWith(PANEL_MERGE_PREFIX))) return;
+
+    const lines: string[] = [];
+    if (completed.length < 2) {
+      lines.push(
+        `${PANEL_MERGE_PREFIX} ${String(completed.length)} of ${String(members.length)} members completed, ` +
+          'so there is nothing to merge. Nothing was charged for this check.',
+      );
+    } else {
+      const evidence: RunEvidence[] = [];
+      for (const m of completed) {
+        const markdown = await this.store.readReport(m.id);
+        if (markdown) evidence.push({ runId: m.id, provider: m.provider, ...(m.model ? { model: m.model } : {}), markdown });
+      }
+      if (evidence.length < 2) return;
+      const merged = mergeEvidence(evidence);
+      lines.push(
+        `${PANEL_MERGE_PREFIX} ${String(evidence.length)} members, ` +
+          `${String(merged.sources.length)} distinct sources across ${String(merged.independentDomains)} independent registrable domains.`,
+        '',
+        describeOverlap(merged),
+        '',
+        `Full merged registry: \`research_synthesise\` with runIds ${completed.map((m) => m.id).join(', ')}.`,
+      );
+    }
+
+    const note = lines.join('\n');
+    for (const m of members) await this.store.appendJournal(m.id, 'note', note);
   }
 
   /**

@@ -44,6 +44,16 @@ export const RunRecordSchema = z.object({
    */
   provider: z.enum(['gemini', 'perplexity', 'openai', 'xai', 'local']).default('gemini'),
   /**
+   * The panel this run belongs to, when it was started as one member of one.
+   *
+   * A panel is several runs sharing this id rather than one record with
+   * members. Each backend has its own interaction id, its own report, its own
+   * lifecycle and its own ledger line, and one record cannot hold two of any of
+   * those. Optional, so every record written before panels existed still parses
+   * and every single-provider run stays exactly what it was.
+   */
+  panelId: z.string().max(64).optional(),
+  /**
    * The exact model that produced the report, as the backend names it.
    *
    * Optional because runs recorded before this field existed have no way to

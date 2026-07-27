@@ -15,7 +15,9 @@ Every tool description is also visible to an agent at runtime via `tools/list`, 
 
 ### `research_plan`, free
 
-You get the engineered prompt, the archetype it picked, cost and duration bands, your budget position, and a **contract fingerprint**. It spends nothing. Call it first for anything non-trivial; it's where you catch a badly scoped question before it costs you $7.
+You get the engineered prompt, the archetype it picked, cost and duration bands, your budget position, the **panel** that would run, and a **contract fingerprint**. It spends nothing. Call it first for anything non-trivial; it's where you catch a badly scoped question before it costs you $7.
+
+The panel section prints member by member, free lane separately from paid, with a cost against each and a total, and it prints *before* the fingerprint so you can see what you're being asked to commit to. It also names every configured backend it left out and why. Name a `provider` and there is no panel to print, so the section is omitted.
 
 | Parameter | Type | Notes |
 |---|---|---|
@@ -51,7 +53,19 @@ flowchart LR
 
 The ledger is written *before* the interaction, so a crash between the two over-counts rather than under-counts. That's the safe direction for a spend gate.
 
-Set `DOSSIER_REQUIRE_CONTRACT=true` to make the plan-then-start handshake mandatory. Worth doing on any server an autonomous agent can reach.
+**Without an explicit `provider`, this starts a panel.** Every capable CLI you already pay for joins free, and an API backend joins when the question calls for what it is distinctively good at. See [how Dossier picks](providers/README.md#how-dossier-picks) for the lanes and the signals.
+
+A panel runs the same three gates, but over the whole membership at once rather than member by member:
+
+- **Dedupe** is per member. A member with an identical run already inside the TTL is handed that run and is not charged again; the rest still start.
+- **Concurrency** must fit the whole panel. A panel of five needs five slots at once, and is refused whole rather than admitted in part.
+- **Budget** reserves the **sum** of every member's worst case in one critical section, before any member starts. A panel that can't be afforded in full starts nothing, writes no ledger line, and tells you the whole figure it needed.
+
+Each member comes back as its own run id, bound by a shared panel id. `research_status`, `research_read`, `research_tail` and `research_budget` all work per member exactly as they do for a single run. Every member is attempted once; a call that spends money is never retried.
+
+When the last member reaches a terminal state the panel is merged automatically with `research_synthesise`'s free deterministic pass, and the result including the overlap warning is written to every member's journal. Read it with `research_tail`. Agreement between members is not corroboration, and support is counted in independent registrable domains.
+
+Set `DOSSIER_REQUIRE_CONTRACT=true` to make the plan-then-start handshake mandatory. Worth doing on any server an autonomous agent can reach. The fingerprint binds the whole membership, so a plan for a three-backend panel won't start a two-backend one.
 
 ### `research_approve_plan`
 

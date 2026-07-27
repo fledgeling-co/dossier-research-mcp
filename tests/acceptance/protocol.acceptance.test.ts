@@ -296,3 +296,40 @@ describe('PLAN-04: an explicit provider is reported, not just honoured', () => {
     expect(backend).not.toMatch(/you asked for this one/);
   });
 });
+
+describe('PANEL-17: research_plan prints the panel before the fingerprint', () => {
+  // Hermetic mode reports every provider not-configured, so the panel this
+  // harness assembles is always the empty one. That is the point of asserting
+  // here: the shape of the section and its position relative to the contract
+  // handshake are machine-independent, while membership is not. Membership
+  // lives in tests/panel.test.ts against scripted providers.
+  it('shows a panel section and a question profile, above the fingerprint', async () => {
+    const result = await mcp.callTool('research_plan', {
+      question: 'Which vendors shipped an MCP research server since 2025, and what do they charge?',
+    });
+    const lines = result.text.split('\n');
+    const panelAt = lines.findIndex((l) => l.includes('**Panel**'));
+    const profileAt = lines.findIndex((l) => l.includes('**Question profile**'));
+    const printAt = lines.findIndex((l) => l.includes('**Contract fingerprint**'));
+
+    expect(panelAt).toBeGreaterThanOrEqual(0);
+    expect(profileAt).toBeGreaterThan(panelAt);
+    // The panel is what the fingerprint is issued over, so it has to be
+    // readable before the caller is asked to commit to it.
+    expect(printAt).toBeGreaterThan(profileAt);
+    expect(lines[profileAt]).toMatch(/enumeration|time-bound|breadth/);
+  });
+
+  it('says the panel is empty rather than inventing a member', async () => {
+    const result = await mcp.callTool('research_plan', { question: 'Who leads this market?' });
+    expect(result.text).toMatch(/\*\*Panel\*\*: empty/);
+  });
+
+  it('prints no panel at all when one backend was named', async () => {
+    const result = await mcp.callTool('research_plan', {
+      question: 'Who leads this market?',
+      provider: 'gemini',
+    });
+    expect(result.text).not.toMatch(/\*\*Panel\*\*/);
+  });
+});

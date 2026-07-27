@@ -8,6 +8,28 @@ This project follows [semantic versioning](https://semver.org/). Until 1.0 the m
 
 ## [Unreleased]
 
+### Added
+
+- **`research_start` without a `provider` now assembles a panel instead of picking one backend.** One brief goes to every backend that belongs on the question, in three lanes. Lane 1 is free: every coding CLI that is installed, signed in and capable of the shape you asked for. It is the floor, and it runs with no API keys configured at all. Lane 2 is paid, and an API backend joins only when a key exists *and* the question calls for what that backend is distinctively good at. Lane 3 is a crawl, and the panel can only ever recommend one: Mode B stays behind `DOSSIER_BROWSER_PROVIDER` and Dossier drives no browser.
+
+  **Capability is screened before billing and before the profile.** A backend that cannot enforce a date window does not join a date-bound panel merely because it is free. This is the same rule that has governed single-provider routing since 0.5.1, applied to the panel by sharing the same screening pass rather than by reimplementing it.
+
+  Membership is driven by a **question profile** read off the question on top of the existing archetype classifier: enumeration, time bound, social, primary literature, named sites, legal or regulatory, breadth. Signals are additive, so a question that is both time-bound and legal gets the backend each one implies. The profile is keyword and archetype work only, with no model call, because it runs inside `research_plan` and `research_plan` is free.
+
+  Two judgements are deliberate and not derived from the signals. Gemini and Perplexity lean towards joining whenever a key exists, Gemini because it is the most comprehensive backend available and Perplexity because at roughly $0.29 a measured run it is cheap enough that omitting it rarely saves anything worth having. And xAI is never the only backend concluding on a legal or regulatory question, because its own documentation describes it as suited to finding things rather than to concluding them. Naming it explicitly in `DOSSIER_PROVIDERS` overrides that, because an instruction outranks a guard whose job is to second-guess an automatic choice.
+
+  **A panel reserves the sum of its members' worst cases before any member starts, not member by member as it goes.** A panel that cannot be afforded in full starts nothing at all, writes no ledger line, and reports the whole figure it needed rather than the amount by which the next member missed. Half a panel is a worse answer than one good backend and it has already spent money to be worse. The same rule covers concurrency: a panel of five needs five slots at once and is refused whole.
+
+  **A panel of one is a legitimate outcome** and is reported as a result rather than as a fallback.
+
+  Each member is its own run, bound by a shared panel id, so `research_status`, `research_read`, `research_tail` and `research_budget` work per member with no change. A member that deduplicates onto an identical existing run is handed it and is not charged again while the rest still start; a member that refuses at create time is reported without stranding the members already billed. Every member is attempted once, through the same `attemptOnceThenSettle` path as a single run.
+
+  **`research_plan` now prints the panel** member by member with a cost against each, free lane separately from paid, with a total and the question profile, before the contract fingerprint is issued. It names every configured backend it left out and why. The fingerprint binds the whole membership, so a plan for a three-backend panel will not start a two-backend one.
+
+  **When every member reaches a terminal state the panel is merged automatically** with `research_synthesise`'s free deterministic pass, and the result is written to every member's journal. The overlap warning matters more here, not less: five backends that read the same ten pages is the corroboration trap at five times the price, and it now surfaces at the moment the panel finishes rather than when someone remembers to ask. Agreement between members is still not corroboration, and support is still counted in independent registrable domains.
+
+  Naming a `provider` is unchanged in every respect and still starts exactly one run on exactly the path it always took, with no panel id.
+
 ## [0.7.0] - 2026-07-26
 
 ### Added

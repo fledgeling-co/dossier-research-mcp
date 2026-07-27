@@ -14,10 +14,12 @@ import {
   type AgentsClient,
 } from './gemini/agents.js';
 import { resolveClient, type DeepResearchClient, type ResearchToolSpec } from './gemini/client.js';
-import { ProviderRegistry } from './providers/registry.js';
+import { ProviderRegistry, type PanelDecision } from './providers/registry.js';
 import { describeShaping, shapeRequest } from './providers/options.js';
 import { PROVIDER_IDS, type ProviderId, type Shape } from './providers/types.js';
 import { estimateCost, estimateDuration, formatCostBand, formatDuration } from './gemini/cost.js';
+import type { CostBand } from './gemini/cost.js';
+import { describeSignals, profileQuestion } from './research/profile.js';
 import { AGENT_BY_TIER, RESEARCH_TIERS } from './gemini/types.js';
 import { ARCHETYPE_NAMES, ARCHETYPE_OVERRIDES, selectArchetype, type Archetype } from './research/archetypes.js';
 import { renderScorecard, scoreCitations, verifyCitations } from './research/citations.js';
@@ -228,6 +230,68 @@ function requireProviderClient(deps: ServerDeps, id: ProviderId): void {
   }
 }
 
+/**
+ * How a panel is written into the contract fingerprint.
+ *
+ * The handshake binds the backend because a plan that priced Gemini and a start
+ * that ran OpenAI are different purchases. A panel is the same argument at
+ * larger scale: a plan that priced two members and a start that ran five is a
+ * different bill, so the whole membership goes into the key. Sorted, because the
+ * order the lanes happened to produce is not part of what was bought.
+ */
+export function panelContractId(members: readonly ProviderId[]): string {
+  return `panel:${[...members].sort().join('+')}`;
+}
+
+/**
+ * Print a panel the way the money is actually spent: lane by lane, member by
+ * member, with a cost each and a total, before any fingerprint is issued.
+ *
+ * The free lane is shown separately from the paid one on purpose. Without that
+ * split the reader cannot see what the money is buying over and above what their
+ * subscriptions already cover, which is the whole question a panel raises.
+ */
+export function renderPanel(panel: PanelDecision): string[] {
+  const money = (band: CostBand): string => (band.highUsd === 0 ? '$0.00' : formatCostBand(band));
+  const lines: string[] = [];
+
+  if (panel.members.length === 0) {
+    lines.push('- **Panel**: empty. No configured backend belongs on this question.');
+  } else {
+    lines.push(
+      `- **Panel**: ${String(panel.members.length)} backend${panel.members.length === 1 ? '' : 's'}` +
+        ` (${String(panel.free.length)} free, ${String(panel.paid.length)} paid): ` +
+        `${money(panel.total)} in total. Reserved in full at the top of that band before any member starts.`,
+    );
+  }
+
+  if (panel.free.length > 0) {
+    lines.push('  - *Free lane* (subscription quota already paid for, which Dossier cannot meter):');
+    for (const m of panel.free) lines.push(`    - **${m.provider.label}**, ${money(m.cost)}. ${m.reason}`);
+  }
+  if (panel.paid.length > 0) {
+    lines.push('  - *Paid lane* (billed to an API key, on this question profile):');
+    for (const m of panel.paid) lines.push(`    - **${m.provider.label}**, ${money(m.cost)}. ${m.reason}`);
+  }
+  if (panel.members.length > 0) {
+    lines.push(`  - **Total worst case**: $${panel.total.highUsd.toFixed(2)}. An estimate band, never a quote.`);
+  }
+
+  lines.push(`- **Question profile**: ${describeSignals(panel.profile)} (archetype: ${panel.profile.archetype}).`);
+  if (panel.crawl) {
+    lines.push(
+      `- **Crawl lane**: recommended, not enabled. ${panel.crawl.why}` +
+        (panel.crawl.sites.length > 0 ? ` Sites named: ${panel.crawl.sites.join(', ')}.` : '') +
+        ' Dossier drives no browser; set DOSSIER_BROWSER_PROVIDER and drive it yourself if you want those pages read.',
+    );
+  }
+  if (panel.rejected.length > 0) {
+    lines.push(`- **Not on the panel**: ${panel.rejected.map((r) => `${r.id} (${r.why})`).join('; ')}`);
+  }
+  for (const note of panel.notes) lines.push(`\n> [!NOTE]\n> ${note}`);
+  return lines;
+}
+
 function requireClient(deps: ServerDeps): DeepResearchClient {
   if (!deps.client) {
     throw new UserError(
@@ -402,10 +466,25 @@ export function createServer(deps: ServerDeps): FastMCP {
         planReview: args.collaborativePlanning,
         estimateInput: { tier: args.tier, tools: tools.map((x) => x.type) },
       });
+      // The panel this question would assemble. Read from the question itself,
+      // free, and shown before a fingerprint exists, which is the whole safety
+      // story for paid backends joining automatically.
+      const panel = deps.providers.assemblePanel({
+        shape: 'deep',
+        corpus: (args.corpusStores?.length ?? 0) > 0,
+        planReview: args.collaborativePlanning,
+        estimateInput: { tier: args.tier, tools: tools.map((x) => x.type) },
+        profile: profileQuestion(args.question),
+      });
       // The contract binds the backend too. A plan that priced Gemini and a
       // start that ran OpenAI are different purchases, and the handshake exists
-      // to stop exactly that kind of substitution going unnoticed.
-      const plannedProvider = args.provider ?? routingForPlan.provider?.id;
+      // to stop exactly that kind of substitution going unnoticed. A panel binds
+      // the whole membership for the same reason.
+      const plannedProvider = args.provider
+        ? args.provider
+        : panel.members.length > 0
+          ? panelContractId(panel.members.map((m) => m.provider.id))
+          : routingForPlan.provider?.id;
       const fp = runner.fingerprintFor({
         prompt: resolved.prompt,
         tier: args.tier,
@@ -457,11 +536,15 @@ export function createServer(deps: ServerDeps): FastMCP {
         `- **Tools**: ${tools.map((t) => t.type).join(', ')}`,
         `- **Plan review**: ${args.collaborativePlanning ? 'ON — you will approve a plan before the run executes' : 'OFF — the run executes autonomously'}`,
         `- **Budget**: $${budget.committedUsd.toFixed(2)} committed of $${budget.budgetUsd.toFixed(2)} in the last ${budget.windowHours}h; $${budget.remainingUsd.toFixed(2)} remaining.`,
-        `- **Backend**: ${overridden ? `${deps.providers.get(plannedProvider!)?.label ?? plannedProvider} — you asked for this one, so routing was not consulted` : routing.provider ? `${routing.provider.label} — ${routing.reason}` : 'none available'}`,
+        `- **Backend**: ${overridden && args.provider ? `${deps.providers.get(args.provider)?.label ?? args.provider} — you asked for this one, so routing was not consulted` : routing.provider ? `${routing.provider.label} — ${routing.reason}` : 'none available'}`,
         ...(overridden || !routing.runnerUp ? [] : [`- **Runner-up**: ${routing.runnerUp.label}`]),
         ...(!overridden && routing.rejected.length > 0
           ? [`- **Not eligible**: ${routing.rejected.map((r) => `${r.id} (${r.why})`).join('; ')}`]
           : []),
+        // Naming a provider is an instruction, so the panel it describes is that
+        // one backend. Assembling and printing a wider one would advertise a
+        // purchase `research_start` is not going to make.
+        ...(overridden ? [] : renderPanel(panel)),
         `- **Contract fingerprint**: \`${fp}\``,
         ...(resolved.warnings ?? []).map((w: string) => `\n> [!WARNING]\n> ${w}`),
         '',
@@ -484,7 +567,7 @@ export function createServer(deps: ServerDeps): FastMCP {
   server.addTool({
     name: 'research_start',
     description:
-      'Start a Deep Research run. THIS SPENDS MONEY (~$1-3 fast, ~$3-7 max) and cannot be undone once the agent begins searching. Returns a run handle immediately — the run then proceeds in the background for 4-60 minutes and survives your disconnect. Identical requests inside the dedupe window return the existing run instead of paying twice.',
+      'Start a Deep Research run. THIS SPENDS MONEY (~$1-3 fast, ~$3-7 max) and cannot be undone once the agent begins searching. Returns a run handle immediately — the run then proceeds in the background for 4-60 minutes and survives your disconnect. Identical requests inside the dedupe window return the existing run instead of paying twice. Without an explicit `provider` this assembles a PANEL: every capable CLI you already pay for, plus any API backend whose distinctive strength the question calls for. The whole panel is reserved before any member starts, `research_plan` prints it member by member with a cost each, and each member is its own run handle. Name a `provider` to run exactly one backend.',
     annotations: {
       title: 'Start a research run (spends money)',
       readOnlyHint: false,
@@ -513,7 +596,7 @@ export function createServer(deps: ServerDeps): FastMCP {
         .enum(PROVIDER_IDS)
         .optional()
         .describe(
-          'Which backend runs this. Omit to let Dossier route on capability (a hard requirement like a date window or an editable plan eliminates backends that cannot do it, then cost breaks the tie). Run `research_doctor` to see what is configured.',
+          'Run exactly ONE backend, named. Omit it to assemble a panel instead: capability is filtered first (a date window or an editable plan eliminates backends that cannot enforce it), then every capable CLI you already pay for joins free, then an API backend joins when the question calls for what it is distinctively good at. Run `research_doctor` to see what is configured.',
         ),
       attachments: z
         .array(
@@ -551,13 +634,26 @@ export function createServer(deps: ServerDeps): FastMCP {
         planReview: args.collaborativePlanning,
         estimateInput: { tier: args.tier, tools: tools.map((x) => x.type) },
       });
-      const chosen = args.provider ?? routing.provider?.id ?? 'gemini';
+      // Naming a provider is still an instruction and still produces exactly one
+      // run, on exactly the path it always took. Everything else assembles a
+      // panel, which is a panel of one whenever only one backend belongs.
+      const panel = args.provider
+        ? null
+        : deps.providers.assemblePanel({
+            shape: 'deep',
+            corpus: (args.corpusStores?.length ?? 0) > 0,
+            planReview: args.collaborativePlanning,
+            estimateInput: { tier: args.tier, tools: tools.map((x) => x.type) },
+            profile: profileQuestion(args.question),
+          });
+      const members = panel?.members.map((m) => m.provider.id) ?? [];
+      const chosen = args.provider ?? (members.length > 0 ? members[0]! : (routing.provider?.id ?? 'gemini'));
       const expected = runner.fingerprintFor({
         prompt: resolved.prompt,
         tier: args.tier,
         tools,
         collaborativePlanning: args.collaborativePlanning,
-        provider: chosen,
+        provider: members.length > 0 ? panelContractId(members) : chosen,
         ...(args.attachments ? { attachments: args.attachments } : {}),
       });
 
@@ -570,6 +666,65 @@ export function createServer(deps: ServerDeps): FastMCP {
         throw new UserError(
           `Contract mismatch — the arguments changed since \`research_plan\`. Expected ${expected}, got ${args.contractFingerprint}. Re-plan, or drop contractFingerprint to start from these arguments.`,
         );
+      }
+
+      if (panel && members.length > 0) {
+        // Every member's credentials are checked before anything is reserved.
+        // A panel that finds out at member four that member five has no key has
+        // already spent money it cannot take back.
+        for (const id of members) requireProviderClient(deps, id);
+        log.info('Starting a research panel', {
+          tier: args.tier,
+          archetype: resolved.archetype,
+          members: members.join('+'),
+        });
+        const result = await runner.startPanel({
+          question: args.question,
+          prompt: resolved.prompt,
+          archetype: resolved.archetype,
+          tier: args.tier,
+          tools,
+          collaborativePlanning: args.collaborativePlanning,
+          thinkingSummaries: true,
+          visualization: true,
+          preEngineered: resolved.preEngineered,
+          members,
+          ...(args.label ? { label: args.label } : {}),
+          ...(args.tags ? { tags: args.tags } : {}),
+          ...(args.attachments ? { attachments: args.attachments } : {}),
+        });
+        const budgetAfter = await runner.budget();
+        const fresh = result.started.filter((s) => !s.deduped);
+        const reused = result.started.filter((s) => s.deduped);
+        return [
+          members.length === 1
+            ? `**Panel of one started.** ${panel.members[0]?.provider.label ?? members[0]} is the only backend that belongs on this question, which is a result and not a fallback.`
+            : `**Panel of ${String(members.length)} started.** One brief, ${String(members.length)} backends, each run separately.`,
+          '',
+          `- Panel: \`${result.panelId}\``,
+          ...result.started.map(
+            (s) =>
+              `- \`${s.run.id}\`: ${deps.providers.get(s.run.provider)?.label ?? s.run.provider}, ` +
+              `$${s.run.estimatedCostUsd.toFixed(2)} worst case, ${s.run.state}` +
+              (s.deduped ? ' (de-duplicated onto an existing run; nothing new was charged for it)' : ''),
+          ),
+          ...result.failed.map((f) => `- ${f.provider} did not start: ${f.error}`),
+          '',
+          `- **Reserved**: $${result.reservedUsd.toFixed(2)} for ${String(fresh.length)} new run${fresh.length === 1 ? '' : 's'}` +
+            (reused.length > 0 ? ` (${String(reused.length)} de-duplicated, and not charged again)` : '') +
+            '. The whole panel was reserved at the top of its band before any member started; an estimate, never a quote.',
+          `- **Budget after this panel**: $${budgetAfter.remainingUsd.toFixed(2)} of $${budgetAfter.budgetUsd.toFixed(2)} left in the next ${String(budgetAfter.windowHours)}h.`,
+          ...(result.failed.length > 0
+            ? [
+                '',
+                `> [!WARNING]\n> ${String(result.failed.length)} member${result.failed.length === 1 ? '' : 's'} did not start. The rest are running and are already being billed; re-running this question will de-duplicate onto them and pay only for the missing ones.`,
+              ]
+            : []),
+          '',
+          members.length > 1
+            ? 'Do NOT block on this. Each member is its own run: `research_status { runId }` and `research_read { runId }` work per member. When every member finishes, the panel is merged automatically and the overlap warning is written to each member\'s journal. Read it with `research_tail { runId }`. Agreement between members is not corroboration; support is counted in independent registrable domains.'
+            : 'Do NOT block on this. Check back with `research_status { runId }`, or replay progress with `research_tail { runId }`. The run continues if you disconnect and if this server restarts.',
+        ].join('\n');
       }
 
       requireProviderClient(deps, chosen);
