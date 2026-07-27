@@ -7,7 +7,177 @@
     {
       "caseId": "consent-wall-quarterly-figures",
       "verdict": "unreadable",
-      "note": "The supplied text is a cookie-consent/privacy banner (consent options, partner count, policy links) with no article body, so the claim cannot be assessed from it."
+      "note": "The supplied text is a cookie-consent/privacy banner only ('We value your privacy', partner count, Accept all / Reject all / Manage preferences). No article body is present, so the revenue claim cannot be checked against this page."
+    },
+    {
+      "caseId": "cve-2021-44228-2-15-0-rce",
+      "verdict": "contradicts",
+      "quote": "Apache Log4j2 2.0-beta9 through 2.15.0 (excluding security releases 2.12.2, 2.12.3, and 2.3.1) JNDI features used in configuration, log messages, and parameters do not protect against attacker controlled LDAP and other JNDI related endpoints. An attacker who can control log messages or log message parameters can execute arbitrary code loaded from LDAP servers when message lookup substitution is enabled. From log4j 2.15.0, this behavior has been disabled by default.",
+      "note": "The page contradicts the claim on two counts. First, 2.15.0 is not vulnerable in the way asserted: the description states the behaviour 'has been disabled by default' from 2.15.0. Second, the page conditions code execution on an attacker who can control log messages or parameters AND on message lookup substitution being enabled, which is incompatible with 'any server running' Log4j2. The page also confines the flaw to log4j-core."
+    },
+    {
+      "caseId": "cve-2021-44228-affects-log4net",
+      "verdict": "contradicts",
+      "quote": "Note that this vulnerability is specific to log4j-core and does not affect log4net, log4cxx, or other Apache Logging Services projects.",
+      "note": "The NVD description explicitly states the opposite of the claim: the vulnerability is scoped to log4j-core and does NOT affect log4net or log4cxx."
+    },
+    {
+      "caseId": "cve-2021-44228-cvss31-score",
+      "verdict": "supports",
+      "quote": "Base\n\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t Score:     10.0 CRITICAL",
+      "note": "The NVD page's CVSS 3.x section states a base score of 10.0 CRITICAL with vector CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H, from both NIST NVD and CISA-ADP, matching the claim including the 3.1 version."
+    },
+    {
+      "caseId": "cve-2021-44228-nvd-cvss4",
+      "verdict": "contradicts",
+      "quote": "CVSS 4.0 Severity and Vector Strings: NIST: NVD  N/A  NVD assessment not yet provided.",
+      "note": "The page shows no NVD CVSS v4.0 score at all: the v4.0 row reads N/A with 'NVD assessment not yet provided.' The 10.0 CRITICAL figure on this page is the NVD CVSS 3.x base score (vector CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H), with CVSS 2.0 at 9.3 HIGH. The claim attributes a v4.0 score to NVD that the page explicitly says does not exist."
+    },
+    {
+      "caseId": "cve-2021-44228-score-9-8",
+      "verdict": "contradicts",
+      "quote": "Base Score: 10.0 CRITICAL   Vector: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H",
+      "note": "The NVD page for CVE-2021-44228 gives a CVSS 3.x base score of 10.0 CRITICAL (vector prefixed CVSS:3.1), from both NIST NVD and the CISA-ADP entry, not 9.8. The only 9.x figure on the page is the CVSS 2.0 score of 9.3 HIGH, a different scoring version."
+    },
+    {
+      "caseId": "deeptrace-303-queries",
+      "verdict": "not_addressed",
+      "quote": "Using automated extraction pipelines for popular public models (e.g., GPT-4.5/5, this http URL , Perplexity, Copilot/Bing, Gemini) and an LLM-judge with validated agreement to human raters, we evaluate both web-search engines and deep-research configurations.",
+      "note": "The arXiv abstract page is fully readable but states no query count and no system count. It names five example model families as examples, never nine systems, and 303 appears nowhere on the page; the specific figures would be in the PDF, not this listing."
+    },
+    {
+      "caseId": "deeptrace-eight-dimensions",
+      "verdict": "supports",
+      "quote": "We introduce DeepTRACE, a novel sociotechnically grounded audit framework that turns prior community-identified failure cases into eight measurable dimensions spanning answer text, sources, and citations.",
+      "note": "The abstract states the claim verbatim, including the count of eight dimensions and the three spans (answer text, sources, citations)."
+    },
+    {
+      "caseId": "deeptrace-judge-agreement",
+      "verdict": "partially_supports",
+      "quote": "Using automated extraction pipelines for popular public models (e.g., GPT-4.5/5, this http URL , Perplexity, Copilot/Bing, Gemini) and an LLM-judge with validated agreement to human raters, we evaluate both web-search engines and deep-research configurations.",
+      "note": "The abstract confirms DeepTRACE uses an LLM judge and describes its agreement with human raters as 'validated', but the page gives no figure or characterisation of that agreement as 'strong'. Only the abstract and metadata are present here; the full text is not."
+    },
+    {
+      "caseId": "deeptrace-perplexity-unsupported",
+      "verdict": "partially_supports",
+      "quote": "Deep-research configurations reduce overconfidence and can attain high citation thoroughness, but they remain highly one-sided on debate queries and still exhibit large fractions of unsupported statements, with citation accuracy ranging from 40--80% across systems.",
+      "note": "The abstract states the weaker general form: deep-research configurations exhibit large fractions of unsupported statements, and Perplexity is listed among the evaluated systems. The specific figure of 97.5% and its attribution to Perplexity's deep research configuration appear nowhere in the page text, which is the abstract landing page only (full text is behind the PDF/HTML links)."
+    },
+    {
+      "caseId": "deeptrace-submitted-date",
+      "verdict": "supports",
+      "quote": "[Submitted on 2 Sep 2025]",
+      "note": "The arXiv abstract page for arXiv:2509.04499 (DeepTRACE) states the submission date directly as '[Submitted on 2 Sep 2025]', and the submission history confirms '[v1] Tue, 2 Sep 2025 00:32:38 UTC'."
+    },
+    {
+      "caseId": "linkedin-feed-ai-posts",
+      "verdict": "unreadable",
+      "note": "Page text is a LinkedIn sign-in wall (login form, 'New to LinkedIn? Join now', cookie/user-agreement links) with no article content; no post-volume figure or any substantive text is present to judge the claim against."
+    },
+    {
+      "caseId": "mdn-404-always-frustrates",
+      "verdict": "partially_supports",
+      "quote": "404 errors on a website can lead to a poor user experience for your visitors, so the number of broken links (internal and external) should be minimized to prevent frustration for readers.",
+      "note": "The page states a weaker version: 404s *can* lead to a poor user experience (not that every 404 drives visitors away), and broken links *should be minimized* (not eliminated). The page also treats 404s as a normal, expected status, showing how to serve a custom 404 page rather than urging their elimination."
+    },
+    {
+      "caseId": "mdn-404-nginx-example",
+      "verdict": "contradicts",
+      "quote": "For the Apache server, you can specify a path to a custom 404 page in a .htaccess file.",
+      "note": "The page's only custom-404-page configuration example is for Apache (ErrorDocument 404 /notfound.html in .htaccess); nginx is never mentioned anywhere in the text."
+    },
+    {
+      "caseId": "mdn-410-gone",
+      "verdict": "supports",
+      "quote": "A 404 status code only indicates that the resource is missing without indicating if this is temporary or permanent.\nIf a resource is permanently removed, servers should send the   410 Gone   status instead.",
+      "note": "The page is MDN's 404 Not Found reference and states the 410 Gone recommendation for permanently removed resources verbatim in its introduction, matching both the source (MDN) and the substance of the claim."
+    },
+    {
+      "caseId": "rfc2119-bcp-14",
+      "verdict": "supports",
+      "quote": "Request for Comments: 2119                            Harvard University\nBCP: 14                                                       March 1997",
+      "note": "The header block states RFC 2119, BCP 14, March 1997, and names S. Bradner as author (Harvard University); the author's address section confirms Scott Bradner."
+    },
+    {
+      "caseId": "rfc2119-eight-key-words",
+      "verdict": "contradicts",
+      "quote": "The key words \"MUST\", \"MUST NOT\", \"REQUIRED\", \"SHALL\", \"SHALL NOT\", \"SHOULD\", \"SHOULD NOT\", \"RECOMMENDED\",  \"MAY\", and \"OPTIONAL\" in this document are to be interpreted as described in RFC 2119.",
+      "note": "The document enumerates ten key words in its boilerplate list (MUST, MUST NOT, REQUIRED, SHALL, SHALL NOT, SHOULD, SHOULD NOT, RECOMMENDED, MAY, OPTIONAL), not eight. Section 4 additionally introduces \"NOT RECOMMENDED\", which is absent from that list. Nowhere does the page state a count of eight."
+    },
+    {
+      "caseId": "rfc2119-rfc8174-update",
+      "verdict": "not_addressed",
+      "note": "The page is the readable full text of RFC 2119 (March 1997) itself. It never mentions RFC 8174 or any updating document, and it does not restrict the key words to upper case: it only observes that the words 'are often capitalized' and, in section 6, uses lower-case 'must'/'must not' with normative force. Being the subject of the claim is not the same as stating it."
+    },
+    {
+      "caseId": "rfc6265-cookie-count-limits",
+      "verdict": "not_addressed",
+      "quote": "6.1. Limits ....................................................27",
+      "note": "The supplied text is RFC 6265 but is truncated partway into Section 5 (User Agent Requirements); it never reaches Section 6.1 'Limits', which is the section the table of contents lists and where any per-domain/total cookie storage figures would appear. The numbers 50 and 3000 appear nowhere in the text given, and no sentence states a minimum number of cookies a user agent should store. The document is readable, so this is a missing-claim result rather than an unreadable page."
+    },
+    {
+      "caseId": "rfc6265-obsoletes-2109",
+      "verdict": "contradicts",
+      "quote": "Obsoletes: 2965                                               April 2011",
+      "note": "The page contradicts both halves of the claim: RFC 6265 obsoletes RFC 2965, not RFC 2109 (the introduction explicitly says RFC 2109 \"has already been obsoleted by [RFC2965]\" and requests only that its status change to Historic), and the publication date shown in the header, running footers and copyright notice is April 2011, not April 2012."
+    },
+    {
+      "caseId": "rfc6265-requires-4096",
+      "verdict": "not_addressed",
+      "note": "The supplied text is readable RFC 6265 content but is truncated partway into Section 5; it contains no statement of a per-cookie byte limit. Section 6.1 'Limits' appears only as a table-of-contents entry ('6.1. Limits ....27'), with none of its body text present, so nothing here states a 4096-byte minimum or its normative strength."
+    },
+    {
+      "caseId": "rfc6265-samesite",
+      "verdict": "contradicts",
+      "quote": "cookie-av         = expires-av / max-age-av / domain-av /\n                     path-av / secure-av / httponly-av /\n                     extension-av",
+      "note": "The page is the full text of RFC 6265 and it enumerates the attributes it defines: Expires, Max-Age, Domain, Path, Secure and HttpOnly. Neither the table of contents (5.2.1-5.2.6, 4.1.2.1-4.1.2.6) nor the Set-Cookie grammar contains SameSite or any of Strict/Lax/None, so the document defining these attributes states a set that excludes the claimed one."
+    },
+    {
+      "caseId": "rfc6265-truncated-byte-limit",
+      "verdict": "not_addressed",
+      "note": "The supplied text is only RFC 6265's header, abstract, status/copyright notices and a table of contents truncated at section 4.2.2. The per-cookie size guidance lives in section 6.1 (Limits), which is not present here, so the 4096-byte figure appears nowhere in the text given. The page is readable and is the right document, but it does not contain the claim."
+    },
+    {
+      "caseId": "sciencedirect-blocked-article",
+      "verdict": "unreadable",
+      "quote": "There was a problem providing the content you requested",
+      "note": "ScienceDirect served a Cloudflare error interstitial (CPE00001 / CLOUDFLARE_ERROR_1000S_BOX) instead of the article. The body contains only the error notice, support links and boilerplate footer; no article content is present, so the claim about an 18 percentage point improvement in task completion cannot be checked against this text."
+    },
+    {
+      "caseId": "semver-build-metadata-same-version",
+      "verdict": "partially_supports",
+      "quote": "Build metadata MUST be ignored when determining version precedence. Thus two versions that differ only in the build metadata, have the same precedence. Examples: 1.0.0-alpha+001, 1.0.0+20130313144700, 1.0.0-beta+exp.sha.5114f85, 1.0.0+21AF26D3----117B344092BD.",
+      "note": "The page states the general rule the claim rests on (build metadata is ignored for precedence, so versions differing only in build metadata have the same precedence), and the spec title 'Semantic Versioning 2.0.0' is present. But the specific pair 1.0.0+001 and 1.0.0+002 does not appear, and the page says such versions have the same PRECEDENCE, not that they are 'the same version' — clause 3 ('the contents of that version MUST NOT be modified') and the grammar treat build metadata as part of the version string. Weaker/narrower version of the claim only."
+    },
+    {
+      "caseId": "semver-leading-zeroes-all",
+      "verdict": "partially_supports",
+      "quote": "Numeric identifiers MUST NOT include leading zeroes.",
+      "note": "The page states the prohibition only for numeric identifiers: the version core (\"X, Y, and Z are non-negative integers, and MUST NOT contain leading zeroes\") and numeric pre-release identifiers. It does not extend it to every identifier: the build metadata rule requires only ASCII alphanumerics/hyphens and non-emptiness, the BNF allows <build identifier> ::= <digits> (which permits leading zeroes), and the page's own example 1.0.0-alpha+001 is given as valid. So the narrower claim is stated; the universal 'every identifier' version is not."
+    },
+    {
+      "caseId": "semver-major-increment",
+      "verdict": "supports",
+      "quote": "Given a version number MAJOR.MINOR.PATCH, increment the: MAJOR version when you make incompatible API changes",
+      "note": "The page's Summary states the claim verbatim, and item 8 of the specification restates it as a normative rule: \"Major version X (X.y.z | X > 0) MUST be incremented if any backward incompatible changes are introduced to the public API.\""
+    },
+    {
+      "caseId": "semver-prerelease-higher-precedence",
+      "verdict": "contradicts",
+      "quote": "Pre-release versions have a lower precedence than the associated normal version.",
+      "note": "The page states the opposite of the claim. Item 9 of the specification says pre-release versions have LOWER precedence than the associated normal version, and the precedence section repeats it: \"When major, minor, and patch are equal, a pre-release version has lower precedence than a normal version: Example: 1.0.0-alpha < 1.0.0.\""
+    },
+    {
+      "caseId": "semver-v-prefix-valid",
+      "verdict": "contradicts",
+      "quote": "No, “v1.2.3” is not a semantic version. However, prefixing a semantic version with a “v” is a common way (in English) to indicate it is a version number.",
+      "note": "The page's FAQ explicitly asks \"Is “v1.2.3” a semantic version?\" and answers no; the BNF grammar likewise starts a valid semver at <version core> with no leading \"v\". The claim is directly incompatible with the source."
+    },
+    {
+      "caseId": "x-home-daily-active-users",
+      "verdict": "unreadable",
+      "quote": "JavaScript is not available. We've detected that JavaScript is disabled in this browser.",
+      "note": "The fetched body is x.com's JavaScript-disabled interstitial plus a generic error message and footer links; no article or report content was returned, so the claim cannot be assessed against this page."
     }
   ],
   "failures": []
