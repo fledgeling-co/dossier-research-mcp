@@ -92,7 +92,7 @@ URL building is a trust boundary because the identifier came out of a model. The
 - **Read:** Zod-parsed. A malformed cache entry is discarded and re-fetched, not trusted.
 - **Never cached:** `unchecked`. Caching a transient outage freezes it into a permanent verdict, which is the first rule wearing a different hat.
 - **Single flight:** an in-process map keyed the same way, so concurrent cells that miss together issue one request. Cross-process locking is **out of scope and stated as such**: the harness is one process, and a lock for a case that does not arise is the speculative abstraction `CLAUDE.md` forbids.
-- **Limiter:** one shared minimum gap per registry, applied across all workers. Defaults: Crossref 100ms (it advertises 10/s on the polite pool and the advertised value is honoured when present), arXiv 3s (its stated terms), NCBI 350ms (3/s without a key), OpenLibrary 1s, NVD 6s (5 per 30s without a key). Sleep is injected so tests do not wait.
+- **Limiter:** one shared minimum gap per registry, applied across all callers rather than per caller. Defaults: Crossref 200ms on the public pool and 100ms when a contact address puts it in the polite one, arXiv 3s (its stated terms), NCBI 350ms (3/s without a key), OpenLibrary 1s, NVD 6s (5 per 30s without a key). **The advertised limit is not read**, because `safeFetch` surfaces no response headers and widening it to do so is not worth the security surface; the static gaps are at or below what each service publishes. Sleep is injected so tests do not wait.
 
 ### 6. The collector (`bench/src/citations/collect.ts`)
 
@@ -184,48 +184,48 @@ Export from `bench/src/score/index.ts` and a new `bench/src/citations/index.ts`.
 
 | AC | Criterion |
 |---|---|
-| **CITE-01** | A known-good DOI scores `present` |
-| **CITE-02** | A well-formed but non-existent DOI scores `absent`, and only when the handle directory confirms it |
-| **CITE-03** | A DOI absent from Crossref but present in the handle directory scores `present`, never `absent` |
-| **CITE-04** | Every registry transport failure, timeout, 429 and 5xx scores `unchecked` |
-| **CITE-05** | An `unchecked` answer is excluded from the denominator of every rate |
-| **CITE-06** | An `unchecked` answer is never written to the cache |
-| **CITE-07** | The same identifier across many reports is looked up once, and concurrent misses collapse onto one request |
-| **CITE-08** | A cache entry is written atomically and Zod-parsed on read; a corrupt entry is discarded, not trusted |
-| **CITE-09** | The per-registry minimum gap is respected across concurrent workers, and Crossref's advertised limit is honoured when it sends one |
-| **CITE-10** | Crossref is addressed with the polite-pool `mailto` parameter |
-| **CITE-11** | A PMID answer is decided by the body's `error` key, not by the 200 status |
-| **CITE-12** | A CVE answer is decided by `totalResults`, not by the 200 status |
-| **CITE-13** | An ISBN result is labelled catalogue presence in both directions, and a checksum failure is `invalid`, never `absent` |
-| **CITE-14** | An arXiv id is extracted with its version stripped, and a 429 is `unchecked` |
-| **CITE-15** | A bare number is not a PMID without its context word or host |
-| **CITE-16** | An identifier containing a path-traversal segment is refused before any request is built |
-| **CITE-17** | Identifiers are found in the report's prose as well as in its linked addresses |
-| **CITE-18** | Containment reports `supported` only when every checkable token is present |
-| **CITE-19** | A statement with no checkable token is `unchecked`, never `unsupported` |
-| **CITE-20** | A truncated page body with no match is `unchecked`, never `unsupported` |
-| **CITE-21** | `28.6%` matches `28.6 percent`, and `1,200` matches `1200` |
-| **CITE-22** | Containment is labelled as containment in the result and never as claim verification |
-| **CITE-23** | An anchor present in the page's `id`/`name` set is honest; absent is missing |
-| **CITE-24** | A text fragment, a PDF page fragment and a non-HTML body are `not-applicable` or `unchecked`, never `missing` |
-| **CITE-25** | Statement segmentation ignores fenced code, headings and table separators, and does not split on a decimal or a common abbreviation |
-| **CITE-26** | A citation in the gap after a sentence terminator attaches to the preceding statement |
-| **CITE-27** | Citation accuracy is `Σ(C⊙F)/Σ(C)` and is null when nothing is cited |
-| **CITE-28** | Citation thoroughness is `Σ(C⊙F)/Σ(F)` over all pairs, and is null when the pair budget binds |
-| **CITE-29** | Source necessity is the source side of a minimum vertex cover, deterministic under the pinned ordering |
-| **CITE-30** | Source necessity reports that it is tie-dependent, and `uniquelyCitedSources` is reported beside it |
-| **CITE-31** | Uncited sources are the empty columns of the citation matrix |
-| **CITE-32** | Unsupported statements are counted over cited statements, and the divergence from the published definition is stated |
-| **CITE-33** | The relevance-dependent dimensions are reported unavailable with a reason, never approximated |
-| **CITE-34** | Citation accuracy and citation volume are separate numbers on every result, including the unmeasurable arm |
-| **CITE-35** | The support oracle's name rides on every result |
-| **CITE-36** | The judged oracle is reachable by injection and no model is imported on the default path |
-| **CITE-37** | Scoring is pure: `bench/src/score/*` imports no filesystem and no network, asserted by reading the modules' own source |
-| **CITE-38** | The same report and snapshot score identically twice |
-| **CITE-39** | A report with no citations is `unmeasurable / no-citations` and still reports volume |
-| **CITE-40** | With every network call failing, collection still returns a complete snapshot |
-| **CITE-41** | A truncated page body is carried as truncated through collection into the containment verdict |
-| **CITE-42** | Number and text matching goes through BENCH-09's shared primitives, so the two slices cannot disagree about a thousands separator |
+| **INTEG-01** | A known-good DOI scores `present` |
+| **INTEG-02** | A well-formed but non-existent DOI scores `absent`, and only when the handle directory confirms it |
+| **INTEG-03** | A DOI absent from Crossref but present in the handle directory scores `present`, never `absent` |
+| **INTEG-04** | Every registry transport failure, timeout, 429 and 5xx scores `unchecked` |
+| **INTEG-05** | An `unchecked` answer is excluded from the denominator of every rate |
+| **INTEG-06** | An `unchecked` answer is never written to the cache |
+| **INTEG-07** | The same identifier across many reports is looked up once, and concurrent misses collapse onto one request |
+| **INTEG-08** | A cache entry is written atomically and Zod-parsed on read; a corrupt entry is discarded, not trusted |
+| **INTEG-09** | The per-registry minimum gap is respected across concurrent callers, and Crossref's gap reflects which pool the configured contact address puts the caller in |
+| **INTEG-10** | Crossref is addressed with the polite-pool `mailto` parameter |
+| **INTEG-11** | A PMID answer is decided by the body's `error` key, not by the 200 status |
+| **INTEG-12** | A CVE answer is decided by `totalResults`, not by the 200 status |
+| **INTEG-13** | An ISBN result is labelled catalogue presence in both directions, and a checksum failure is `invalid`, never `absent` |
+| **INTEG-14** | An arXiv id is extracted with its version stripped, and a 429 is `unchecked` |
+| **INTEG-15** | A bare number is not a PMID without its context word or host |
+| **INTEG-16** | An identifier containing a path-traversal segment is refused before any request is built |
+| **INTEG-17** | Identifiers are found in the report's prose as well as in its linked addresses |
+| **INTEG-18** | Containment reports `supported` only when every checkable token is present |
+| **INTEG-19** | A statement with no checkable token is `unchecked`, never `unsupported` |
+| **INTEG-20** | A truncated page body with no match is `unchecked`, never `unsupported` |
+| **INTEG-21** | `28.6%` matches `28.6 percent`, and `1,200` matches `1200` |
+| **INTEG-22** | Containment is labelled as containment in the result and never as claim verification |
+| **INTEG-23** | An anchor present in the page's `id`/`name` set is honest; absent is missing |
+| **INTEG-24** | A text fragment, a PDF page fragment and a non-HTML body are `not-applicable` or `unchecked`, never `missing` |
+| **INTEG-25** | Statement segmentation ignores fenced code, headings and table separators, and does not split on a decimal or a common abbreviation |
+| **INTEG-26** | A citation in the gap after a sentence terminator attaches to the preceding statement |
+| **INTEG-27** | Citation accuracy is `Σ(C⊙F)/Σ(C)` and is null when nothing is cited |
+| **INTEG-28** | Citation thoroughness is `Σ(C⊙F)/Σ(F)` over all pairs, and is null when the pair budget binds |
+| **INTEG-29** | Source necessity is the source side of a minimum vertex cover, deterministic under the pinned ordering |
+| **INTEG-30** | Source necessity reports that it is tie-dependent, and `uniquelyCitedSources` is reported beside it |
+| **INTEG-31** | Uncited sources are the empty columns of the citation matrix |
+| **INTEG-32** | Unsupported statements are counted over cited statements, and the divergence from the published definition is stated |
+| **INTEG-33** | The relevance-dependent dimensions are reported unavailable with a reason, never approximated |
+| **INTEG-34** | Citation accuracy and citation volume are separate numbers on every result, including the unmeasurable arm |
+| **INTEG-35** | The support oracle's name rides on every result |
+| **INTEG-36** | The judged oracle is reachable by injection and no model is imported on the default path |
+| **INTEG-37** | Scoring is pure: `bench/src/score/*` imports no filesystem and no network, asserted by reading the modules' own source |
+| **INTEG-38** | The same report and snapshot score identically twice |
+| **INTEG-39** | A report with no citations is `unmeasurable / no-citations` and still reports volume |
+| **INTEG-40** | With every network call failing, collection still returns a complete snapshot |
+| **INTEG-41** | A truncated page body is carried as truncated through collection into the containment verdict |
+| **INTEG-42** | Number and text matching goes through BENCH-09's shared primitives, so the two slices cannot disagree about a thousands separator |
 
 ## Verify
 

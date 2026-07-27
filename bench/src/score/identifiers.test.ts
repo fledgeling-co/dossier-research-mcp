@@ -17,7 +17,7 @@ import {
  * to detect. The self-identifying-grammar rule is what those tests defend.
  */
 
-describe('extraction (CITE-17)', () => {
+describe('extraction (INTEG-17)', () => {
   it('finds a DOI in prose as well as in a link', () => {
     const found = extractIdentifiers(
       'The paper [Nature](https://doi.org/10.1038/nature12373) reports it, and so does doi:10.1145/3442188.',
@@ -51,7 +51,7 @@ describe('extraction (CITE-17)', () => {
   });
 });
 
-describe('the self-identifying-grammar rule (CITE-15)', () => {
+describe('the self-identifying-grammar rule (INTEG-15)', () => {
   it('does not read a bare number as a PMID', () => {
     const found = extractIdentifiers('Revenue reached 23636398 dollars in 2024, up from 1200.');
     expect(found.filter((f) => f.kind === 'pmid')).toEqual([]);
@@ -73,7 +73,7 @@ describe('the self-identifying-grammar rule (CITE-15)', () => {
   });
 });
 
-describe('arXiv (CITE-14)', () => {
+describe('arXiv (INTEG-14)', () => {
   it('strips the version suffix, since the API resolves the base id', () => {
     expect(stripArxivVersion('2509.04499v3')).toBe('2509.04499');
     const found = extractIdentifiers('arXiv:2509.04499v3 and https://arxiv.org/abs/2509.04499');
@@ -91,7 +91,7 @@ describe('arXiv (CITE-14)', () => {
   });
 });
 
-describe('ISBN checksums (CITE-13)', () => {
+describe('ISBN checksums (INTEG-13)', () => {
   it('accepts a valid thirteen-digit and ten-digit number', () => {
     expect(isbnChecksumValid('9780262033848')).toBe(true);
     expect(isbnChecksumValid('0306406152')).toBe(true);
@@ -117,7 +117,7 @@ describe('ISBN checksums (CITE-13)', () => {
   });
 });
 
-describe('path traversal (CITE-16)', () => {
+describe('path traversal (INTEG-16)', () => {
   it('recognises a traversal segment', () => {
     expect(hasTraversalSegment('10.1000/../secret')).toBe(true);
     expect(hasTraversalSegment('10.1000/./secret')).toBe(true);

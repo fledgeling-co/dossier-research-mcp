@@ -46,7 +46,7 @@ function run(
 
 const ok = (body: string): RegistryResponse => ({ status: 200, body });
 
-describe('DOI (CITE-01, CITE-02, CITE-03)', () => {
+describe('DOI (INTEG-01, INTEG-02, INTEG-03)', () => {
   it('scores present when Crossref holds it, without a second call', () => {
     const result = run('doi', '10.1038/nature12373', [ok('{"status":"ok"}')]);
     expect(result.status).toBe('present');
@@ -88,7 +88,7 @@ describe('DOI (CITE-01, CITE-02, CITE-03)', () => {
   });
 });
 
-describe('the polite pool (CITE-10)', () => {
+describe('the polite pool (INTEG-10)', () => {
   it('carries the contact address when one is configured', () => {
     const [crossref] = steps('doi', '10.1038/nature12373', { crossrefMailto: 'x@example.com' });
     expect(crossref?.url).toContain('mailto=x%40example.com');
@@ -100,7 +100,7 @@ describe('the polite pool (CITE-10)', () => {
   });
 });
 
-describe('transport failures are never evidence (CITE-04)', () => {
+describe('transport failures are never evidence (INTEG-04)', () => {
   const failures: readonly RegistryResponse[] = [
     { status: 0, body: '', error: 'connect ETIMEDOUT' },
     { status: 429, body: 'Rate exceeded.' },
@@ -126,7 +126,7 @@ describe('transport failures are never evidence (CITE-04)', () => {
   });
 });
 
-describe('arXiv (CITE-14)', () => {
+describe('arXiv (INTEG-14)', () => {
   const feed = (total: number): string =>
     `<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom"><opensearch:totalResults>${String(total)}</opensearch:totalResults></feed>`;
 
@@ -143,7 +143,7 @@ describe('arXiv (CITE-14)', () => {
   });
 });
 
-describe('PMID (CITE-11)', () => {
+describe('PMID (INTEG-11)', () => {
   it('is decided by the error key in the body, not by the 200 status', () => {
     const present = ok('{"header":{},"result":{"uids":["23636398"],"23636398":{"uid":"23636398","source":"Nature"}}}');
     const absent = ok('{"header":{},"result":{"uids":["999999999"],"999999999":{"uid":"999999999","error":"cannot get document summary"}}}');
@@ -156,14 +156,14 @@ describe('PMID (CITE-11)', () => {
   });
 });
 
-describe('CVE (CITE-12)', () => {
+describe('CVE (INTEG-12)', () => {
   it('is decided by the result count, not by the 200 status', () => {
     expect(run('cve', 'CVE-2021-44228', [ok('{"totalResults":1,"vulnerabilities":[{}]}')]).status).toBe('present');
     expect(run('cve', 'CVE-2021-99999', [ok('{"totalResults":0,"vulnerabilities":[]}')]).status).toBe('absent');
   });
 });
 
-describe('ISBN (CITE-13)', () => {
+describe('ISBN (INTEG-13)', () => {
   it('labels both directions as catalogue presence, never as the book existing', () => {
     const present = run('isbn', '9780262033848', [ok('{"ISBN:9780262033848":{"bib_key":"ISBN:9780262033848"}}')]);
     expect(present.status).toBe('present');
@@ -181,7 +181,7 @@ describe('ISBN (CITE-13)', () => {
   });
 });
 
-describe('URL building (CITE-16)', () => {
+describe('URL building (INTEG-16)', () => {
   it('refuses a DOI carrying a traversal segment before building a URL', () => {
     const built = plan('doi', '10.1000/../secret');
     expect(isRefusal(built)).toBe(true);

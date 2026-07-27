@@ -67,17 +67,33 @@ export function containmentOracle(): SupportOracle {
   };
 }
 
+/** The identity of one (statement, source) pair in a recorded verdict table. */
+export function supportPairKey(statementIndex: number, sourceUrl: string): string {
+  return `${String(statementIndex)} ${sourceUrl}`;
+}
+
 /**
- * The judged variant, for whoever wants the stronger check.
+ * The judged variant, as a lookup over verdicts recorded earlier.
  *
- * Deliberately not wired to any model here. The benchmark's governing rule is
- * that no model sits in the scoring loop, and BENCH-10 exists to measure how
- * much that costs rather than to assume it costs nothing.
+ * Deliberately **not** a live model call. A model call is asynchronous and this
+ * scorer is synchronous and pure, so wiring one in here would break both
+ * properties and make the judged path unrepeatable over a stored report. The
+ * judging belongs in a collection pass, beside the fetching, with its verdicts
+ * persisted; this turns those verdicts back into an oracle so BENCH-10 can run
+ * the two against one corpus and score the gap.
+ *
+ * A pair with no recorded verdict is `unchecked`, never `unsupported`. The same
+ * rule as everywhere else: a judgement nobody made is not evidence against a
+ * citation.
  */
-export function judgedOracle(
-  judge: (statement: Statement, source: SourceEvidence | undefined) => SupportVerdict,
-): SupportOracle {
-  return { name: 'judged', judge };
+export function judgedOracle(recorded: ReadonlyMap<string, SupportVerdict>): SupportOracle {
+  return {
+    name: 'judged',
+    judge: (statement, source) =>
+      source === undefined
+        ? 'unchecked'
+        : (recorded.get(supportPairKey(statement.index, source.url)) ?? 'unchecked'),
+  };
 }
 
 /**
@@ -97,9 +113,18 @@ export interface CitationEvidenceView {
   }[];
 }
 
-/** Counted separately from every rate, always. */
+/**
+ * Counted separately from every rate, always.
+ *
+ * Every field is a count or a ratio of counts, and none of them is a quality
+ * score. `statements` excludes the rows of an evidence table or bibliography,
+ * which are listed in `sourceListRows` instead: a bibliography row is not a
+ * claim, and counting it as one both inflates this number and makes every
+ * source look cited.
+ */
 export interface CitationVolume {
   readonly statements: number;
+  readonly sourceListRows: number;
   readonly citedStatements: number;
   readonly sources: number;
   readonly citationEdges: number;
@@ -205,12 +230,14 @@ function volumeOf(
   citationEdges: number,
   citedStatements: number,
 ): CitationVolume {
+  const considered = statements.filter((s) => !s.inSourceList).length;
   return {
-    statements: statements.length,
+    statements: considered,
+    sourceListRows: statements.length - considered,
     citedStatements,
     sources: sources.length,
     citationEdges,
-    citationsPerStatement: statements.length === 0 ? null : citationEdges / statements.length,
+    citationsPerStatement: considered === 0 ? null : citationEdges / considered,
     citationsPerCitedStatement: citedStatements === 0 ? null : citationEdges / citedStatements,
   };
 }
@@ -237,6 +264,8 @@ export function scoreCitationIntegrity(
   let citationEdges = 0;
   let citedStatements = 0;
   statements.forEach((statement, i) => {
+    // A bibliography row lists a source; it does not cite one for a claim.
+    if (statement.inSourceList) return;
     let any = false;
     for (const raw of statement.citedUrls) {
       const j = sourceIndex.get(canonicaliseUrl(raw));
@@ -284,9 +313,9 @@ export function scoreCitationIntegrity(
       // Past the budget only the cited pairs are judged. Thoroughness reports
       // null in that case rather than being computed over a corner of the
       // matrix and published as though it covered all of it.
+      if (statement.inSourceList) return 'unchecked';
       if (exceeded && cites[i]?.[j] !== true) return 'unchecked';
-      const verdict = oracle.judge(statement, pageByUrl.get(url));
-      return verdict;
+      return oracle.judge(statement, pageByUrl.get(url));
     }),
   );
 
@@ -373,11 +402,16 @@ export function scoreCitationIntegrity(
       `every one of the ${String(registryTotal.unchecked)} identifier lookups came back unchecked, so no registry rate is reported. An unreachable registry is never evidence that a reference was fabricated`,
     );
   }
+  if (metrics.citationsUnchecked > 0) {
+    notes.push(
+      `${String(metrics.citationsUnchecked)} of ${String(metrics.citationEdges)} citations could not be checked at all, usually because the cited page did not load or was cut short, and they are excluded from citation accuracy rather than counted as wrong`,
+    );
+  }
   notes.push(
-    'unsupported statements are counted over CITED statements. The published definition uses relevant statements, and deciding relevance needs a judgement this path deliberately does not have',
+    'the published denominators are RELEVANT statements. Deciding relevance needs a judgement this path deliberately does not have, so the denominators here are the statements whose support could be decided, and statements nothing could be decided about are reported separately',
   );
   notes.push(
-    'source necessity is the size of a minimum vertex cover of the citation graph over the number of sources listed, which is canonical. A low figure means the report attached far more sources than its statements needed, which is the over-citing this term exists to catch',
+    'source necessity is computed over the SUPPORT matrix, as the paper defines it, and is the source side of one minimum vertex cover. A minimum cover is not unique and its source side can differ between two covers of equal size, so the figure reproduces but is not canonical; uniquelyCitedSources is reported beside it and cannot vary',
   );
 
   return {

@@ -575,49 +575,49 @@ The sharpest instrument in the benchmark, and the one whose wrong answer is most
 
 | AC | Criterion (from the contract) | Test | Status |
 |---|---|---|---|
-| **CITE-01** | A known-good DOI scores `present` | unit: `registries` | ✓ |
-| **CITE-02** | A well-formed but non-existent DOI scores `absent`, and only once the handle directory confirms it | unit: `registries` | ✓ |
-| **CITE-03** | A DOI absent from Crossref but present in the handle directory scores `present`, never `absent` | unit: `registries`, `collect` | ✓ |
-| **CITE-04** | Every registry transport failure, timeout, 429 and 5xx scores `unchecked` | unit: `registries`, `collect` | ✓ |
-| **CITE-05** | An `unchecked` answer is excluded from the denominator of every rate | unit: `citations` | ✓ |
-| **CITE-06** | An `unchecked` answer is never written to the cache | unit: `cache`, `collect` | ✓ |
-| **CITE-07** | The same identifier across many reports is looked up once, and concurrent misses collapse onto one request | unit: `collect` | ✓ |
-| **CITE-08** | A cache entry is written atomically and Zod-parsed on read; a corrupt entry is discarded, not trusted | unit: `cache` | ✓ |
-| **CITE-09** | The per-registry minimum gap is respected across concurrent workers, and Crossref's advertised limit is honoured when it sends one | unit: `cache` | ✓ |
-| **CITE-10** | Crossref is addressed with the polite-pool `mailto` parameter | unit: `registries` | ✓ |
-| **CITE-11** | A PMID answer is decided by the body's `error` key, not by the 200 status | unit: `registries` | ✓ |
-| **CITE-12** | A CVE answer is decided by `totalResults`, not by the 200 status | unit: `registries` | ✓ |
-| **CITE-13** | An ISBN result is labelled catalogue presence in both directions, and a checksum failure is `invalid`, never `absent` | unit: `registries`, `identifiers` | ✓ |
-| **CITE-14** | An arXiv id is extracted with its version stripped, and a 429 is `unchecked` | unit: `identifiers`, `registries` | ✓ |
-| **CITE-15** | A bare number is not a PMID without its context word or host | unit: `identifiers` | ✓ |
-| **CITE-16** | An identifier carrying a path-traversal segment is refused before any request is built | unit: `registries` | ✓ |
-| **CITE-17** | Identifiers are found in the report's prose as well as in its linked addresses | unit: `identifiers` | ✓ |
-| **CITE-18** | Containment reports `supported` only when every checkable token is present | unit: `containment` | ✓ |
-| **CITE-19** | A statement with no checkable token is `unchecked`, never `unsupported` | unit: `containment` | ✓ |
-| **CITE-20** | A truncated page body with no match is `unchecked`, never `unsupported` | unit: `containment` | ✓ |
-| **CITE-21** | `28.6%` matches `28.6 percent`, and `1,200` matches `1200` | unit: `containment` | ✓ |
-| **CITE-22** | Containment is labelled as containment in the result and never as claim verification | unit: `citations` | ✓ |
-| **CITE-23** | An anchor present in the page's `id`/`name` set is honest; absent is missing | unit: `containment` | ✓ |
-| **CITE-24** | A text fragment, a PDF page fragment and a non-HTML body are `not-applicable` or `unchecked`, never `missing` | unit: `containment` | ✓ |
-| **CITE-25** | Statement segmentation ignores fenced code, headings and table separators, and does not split on a decimal or a common abbreviation | unit: `matrix` | ✓ |
-| **CITE-26** | A citation in the gap after a sentence terminator attaches to the preceding statement | unit: `matrix` | ✓ |
-| **CITE-27** | Citation accuracy is the elementwise product over the citation total, and is null when nothing is cited | unit: `matrix` | ✓ |
-| **CITE-28** | Citation thoroughness is that product over the support total across all pairs, and is null when the pair budget binds | unit: `matrix` | ✓ |
-| **CITE-29** | Source necessity is the size of a minimum vertex cover of the citation graph, which is canonical, and a report citing every source for every statement scores low on it | unit: `matrix` | ✓ |
-| **CITE-30** | `uniquelyCitedSources` is reported beside necessity and counts the sources a report relies on alone | unit: `matrix` | ✓ |
-| **CITE-31** | Uncited sources are the empty columns of the citation matrix | unit: `matrix` | ✓ |
-| **CITE-32** | Unsupported statements are counted over cited statements, and the divergence from the published definition is stated | unit: `matrix`, `citations` | ✓ |
-| **CITE-33** | The relevance-dependent dimensions are reported unavailable with a reason, never approximated | unit: `citations` | ✓ |
-| **CITE-34** | Citation accuracy and citation volume are separate numbers on every result, including the unmeasurable arm | unit: `citations` | ✓ |
-| **CITE-35** | The support oracle's name rides on every result | unit: `citations` | ✓ |
-| **CITE-36** | The judged oracle is reachable by injection and no model is imported on the default path | unit: `citations` | ✓ |
-| **CITE-37** | Scoring is pure: every module under `bench/src/score/` imports no filesystem and no network, asserted by reading their own source | unit: `citations` | ✓ |
-| **CITE-38** | The same report and snapshot score identically twice | unit: `citations` | ✓ |
-| **CITE-39** | A report with no citations is `unmeasurable / no-citations` and still reports volume | unit: `citations` | ✓ |
-| **CITE-40** | With every network call failing, collection still returns a complete snapshot | unit: `collect` | ✓ |
-| **CITE-41** | A truncated page body is carried as truncated through collection into the containment verdict | unit: `collect`, `containment` | ✓ |
-| **CITE-42** | Number and text matching goes through the shared primitives, so two slices cannot disagree about a thousands separator | unit: `containment` | ✓ |
-| **CITE-43** | An evidence snapshot read back from disk is Zod-parsed, and a malformed one is refused rather than scored against | unit: `evidence` | ✓ |
+| **INTEG-01** | A known-good DOI scores `present` | unit: `registries` | ✓ |
+| **INTEG-02** | A well-formed but non-existent DOI scores `absent`, and only once the handle directory confirms it | unit: `registries` | ✓ |
+| **INTEG-03** | A DOI absent from Crossref but present in the handle directory scores `present`, never `absent` | unit: `registries`, `collect` | ✓ |
+| **INTEG-04** | Every registry transport failure, timeout, 429 and 5xx scores `unchecked` | unit: `registries`, `collect` | ✓ |
+| **INTEG-05** | An `unchecked` answer is excluded from the denominator of every rate | unit: `citations` | ✓ |
+| **INTEG-06** | An `unchecked` answer is never written to the cache | unit: `cache`, `collect` | ✓ |
+| **INTEG-07** | The same identifier across many reports is looked up once, and concurrent misses collapse onto one request | unit: `collect` | ✓ |
+| **INTEG-08** | A cache entry is written atomically and Zod-parsed on read; a corrupt entry is discarded, not trusted | unit: `cache` | ✓ |
+| **INTEG-09** | The per-registry minimum gap is respected across concurrent callers, and Crossref's gap reflects which pool the configured contact address puts the caller in | unit: `cache` | ✓ |
+| **INTEG-10** | Crossref is addressed with the polite-pool `mailto` parameter | unit: `registries` | ✓ |
+| **INTEG-11** | A PMID answer is decided by the body's `error` key, not by the 200 status | unit: `registries` | ✓ |
+| **INTEG-12** | A CVE answer is decided by `totalResults`, not by the 200 status | unit: `registries` | ✓ |
+| **INTEG-13** | An ISBN result is labelled catalogue presence in both directions, and a checksum failure is `invalid`, never `absent` | unit: `registries`, `identifiers` | ✓ |
+| **INTEG-14** | An arXiv id is extracted with its version stripped, and a 429 is `unchecked` | unit: `identifiers`, `registries` | ✓ |
+| **INTEG-15** | A bare number is not a PMID without its context word or host | unit: `identifiers` | ✓ |
+| **INTEG-16** | An identifier carrying a path-traversal segment is refused before any request is built | unit: `registries` | ✓ |
+| **INTEG-17** | Identifiers are found in the report's prose as well as in its linked addresses | unit: `identifiers` | ✓ |
+| **INTEG-18** | Containment reports `supported` only when every checkable token is present | unit: `containment` | ✓ |
+| **INTEG-19** | A statement with no checkable token is `unchecked`, never `unsupported` | unit: `containment` | ✓ |
+| **INTEG-20** | A truncated page body with no match is `unchecked`, never `unsupported` | unit: `containment` | ✓ |
+| **INTEG-21** | `28.6%` matches `28.6 percent`, and `1,200` matches `1200` | unit: `containment` | ✓ |
+| **INTEG-22** | Containment is labelled as containment in the result and never as claim verification | unit: `citations` | ✓ |
+| **INTEG-23** | An anchor present in the page's `id`/`name` set is honest; absent is missing | unit: `containment` | ✓ |
+| **INTEG-24** | A text fragment, a PDF page fragment and a non-HTML body are `not-applicable` or `unchecked`, never `missing` | unit: `containment` | ✓ |
+| **INTEG-25** | Statement segmentation ignores fenced code, headings and table separators, and does not split on a decimal or a common abbreviation | unit: `matrix` | ✓ |
+| **INTEG-26** | A citation in the gap after a sentence terminator attaches to the preceding statement | unit: `matrix` | ✓ |
+| **INTEG-27** | Citation accuracy is the elementwise product over the citation total, and is null when nothing is cited | unit: `matrix` | ✓ |
+| **INTEG-28** | Citation thoroughness is that product over the support total across all pairs, and is null when the pair budget binds | unit: `matrix` | ✓ |
+| **INTEG-29** | Source necessity is the size of a minimum vertex cover of the citation graph, which is canonical, and a report citing every source for every statement scores low on it | unit: `matrix` | ✓ |
+| **INTEG-30** | `uniquelyCitedSources` is reported beside necessity and counts the sources a report relies on alone | unit: `matrix` | ✓ |
+| **INTEG-31** | Uncited sources are the empty columns of the citation matrix | unit: `matrix` | ✓ |
+| **INTEG-32** | Unsupported statements are counted over cited statements, and the divergence from the published definition is stated | unit: `matrix`, `citations` | ✓ |
+| **INTEG-33** | The relevance-dependent dimensions are reported unavailable with a reason, never approximated | unit: `citations` | ✓ |
+| **INTEG-34** | Citation accuracy and citation volume are separate numbers on every result, including the unmeasurable arm | unit: `citations` | ✓ |
+| **INTEG-35** | The support oracle's name rides on every result | unit: `citations` | ✓ |
+| **INTEG-36** | The judged oracle is reachable by injection and no model is imported on the default path | unit: `citations` | ✓ |
+| **INTEG-37** | Scoring is pure: every module under `bench/src/score/` imports no filesystem and no network, asserted by reading their own source | unit: `citations` | ✓ |
+| **INTEG-38** | The same report and snapshot score identically twice | unit: `citations` | ✓ |
+| **INTEG-39** | A report with no citations is `unmeasurable / no-citations` and still reports volume | unit: `citations` | ✓ |
+| **INTEG-40** | With every network call failing, collection still returns a complete snapshot | unit: `collect` | ✓ |
+| **INTEG-41** | A truncated page body is carried as truncated through collection into the containment verdict | unit: `collect`, `containment` | ✓ |
+| **INTEG-42** | Number and text matching goes through the shared primitives, so two slices cannot disagree about a thousands separator | unit: `containment` | ✓ |
+| **INTEG-43** | An evidence snapshot read back from disk is Zod-parsed, and a malformed one is refused rather than scored against | unit: `evidence` | ✓ |
 
 ### The paid project
 

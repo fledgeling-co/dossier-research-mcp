@@ -60,7 +60,7 @@ describe('token extraction', () => {
   });
 });
 
-describe('generosity about form (CITE-21, CITE-42)', () => {
+describe('generosity about form (INTEG-21, INTEG-42)', () => {
   it('matches a percentage written as words', () => {
     const result = containment('Share reached 28.6%.', page({ text: 'It reached 28.6 percent.' }));
     expect(result.verdict).toBe('supported');
@@ -80,7 +80,7 @@ describe('generosity about form (CITE-21, CITE-42)', () => {
   });
 });
 
-describe('the verdict rule (CITE-18, CITE-19, CITE-20)', () => {
+describe('the verdict rule (INTEG-18, INTEG-19, INTEG-20)', () => {
   it('is supported only when every checkable token appears', () => {
     const supported = containment(
       'Adoption reached 28.6% in 2024.',
@@ -135,7 +135,7 @@ describe('the verdict rule (CITE-18, CITE-19, CITE-20)', () => {
   });
 });
 
-describe('anchor honesty (CITE-23, CITE-24)', () => {
+describe('anchor honesty (INTEG-23, INTEG-24)', () => {
   it('is honest when the page declares the anchor', () => {
     const result = anchorHonesty('https://example.com/a#results', page({ anchors: ['results'] }));
     expect(result.verdict).toBe('honest');
