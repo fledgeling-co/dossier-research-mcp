@@ -1,4 +1,4 @@
-import { parse as parseYaml } from 'yaml';
+import { parse as parseYaml, type DocumentOptions, type SchemaOptions } from 'yaml';
 import {
   STALE_AFTER_DAYS,
   taskFileSchema,
@@ -156,7 +156,10 @@ export interface LoadCorpusOptions {
  * Pinned explicitly so a dependency bump that changes the default cannot
  * silently re-open any of this.
  */
-const YAML_OPTIONS = { version: '1.2', schema: 'core' } as const;
+export const YAML_OPTIONS = {
+  version: '1.2',
+  schema: 'core',
+} as const satisfies DocumentOptions & SchemaOptions;
 
 const DAY_MS = 86_400_000;
 
@@ -190,6 +193,12 @@ export function loadCorpus(
   entries: readonly TaskFileEntry[],
   options: LoadCorpusOptions,
 ): TaskCorpus {
+  // `taskFileSchema` rejects an Invalid Date too; doing it here as well means a
+  // corpus of zero entries, which never reaches the schema, still refuses a
+  // reference date that would have made every staleness answer nonsense.
+  if (Number.isNaN(options.now.getTime())) {
+    throw new TypeError('loadCorpus needs a valid reference date; received an Invalid Date');
+  }
   const schema = taskFileSchema(options.now);
   const nowDay = utcDayOrdinal(options.now);
 

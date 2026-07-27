@@ -20,6 +20,7 @@ export type {
   BenchTaskFile,
   CellRef,
   ConflictingFigure,
+  ConflictingValue,
   Enumeration,
   ExpectedRefusal,
   FringeClaim,
@@ -31,7 +32,7 @@ export type {
   Tolerance,
 } from './schema.js';
 
-export { loadCorpus, TaskCorpusError } from './corpus.js';
+export { loadCorpus, TaskCorpusError, YAML_OPTIONS } from './corpus.js';
 export type {
   ApplicableMetrics,
   BenchTask,

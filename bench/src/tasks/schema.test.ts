@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
+  GOLD_FACT_KINDS,
+  GoldFactSchema,
   MAX_FLAT_GOLD_FACTS,
+  MAX_GRID_GOLD_FACTS,
+  TASK_CATEGORIES,
   taskFileSchema,
   utcDayOrdinal,
   utcDayOrdinalFromIsoDate,
+  type TaskCategory,
 } from './schema.js';
 
 /**
@@ -502,6 +507,443 @@ describe('TASKFMT-18 and TASKFMT-19 the enumeration grid', () => {
       }),
     );
     expect(result.success).toBe(true);
+  });
+});
+
+describe('TASKFMT-16 a fringe claim carries the wording that marks a rejection', () => {
+  const fringe = (over: Record<string, unknown> = {}): Record<string, unknown> => ({
+    claim: 'The figure was restated downward in secret.',
+    distinguishingTerm: 'secret restatement',
+    source,
+    ...over,
+  });
+
+  it('parses rejection cues and defaults them to an empty list', () => {
+    const withCues = schema.safeParse(
+      task({
+        category: 'settled-with-fringe',
+        fringeClaims: [fringe({ rejectionCues: ['no evidence', 'debunked'] })],
+      }),
+    );
+    expect(withCues.success).toBe(true);
+    if (withCues.success) {
+      expect(withCues.data.fringeClaims[0]?.rejectionCues).toEqual(['no evidence', 'debunked']);
+    }
+
+    const without = schema.safeParse(
+      task({ category: 'settled-with-fringe', fringeClaims: [fringe()] }),
+    );
+    expect(without.success).toBe(true);
+    if (without.success) expect(without.data.fringeClaims[0]?.rejectionCues).toEqual([]);
+  });
+
+  it('requires a fringe claim to carry a source, so a disputed label is adjudicable', () => {
+    const noSource = fringe();
+    delete noSource['source'];
+    expect(
+      schema.safeParse(task({ category: 'settled-with-fringe', fringeClaims: [noSource] })).success,
+    ).toBe(false);
+  });
+
+  it('caps the rejection cue list', () => {
+    const over = fringe({ rejectionCues: Array(31).fill('cue') });
+    expect(
+      schema.safeParse(task({ category: 'settled-with-fringe', fringeClaims: [over] })).success,
+    ).toBe(false);
+  });
+});
+
+describe('the clustering key for the statistics', () => {
+  it('accepts a topic slug and leaves it undefined when absent', () => {
+    const withTopic = schema.safeParse(task({ topic: 'semiconductor-revenue' }));
+    expect(withTopic.success).toBe(true);
+    if (withTopic.success) expect(withTopic.data.topic).toBe('semiconductor-revenue');
+
+    const without = schema.safeParse(task());
+    expect(without.success).toBe(true);
+    if (without.success) expect(without.data.topic).toBeUndefined();
+  });
+
+  it('rejects a topic that is not a slug, so two spellings cannot be two clusters', () => {
+    for (const topic of ['Semiconductor Revenue', 'UPPER', '-leading', '']) {
+      expect(schema.safeParse(task({ topic })).success).toBe(false);
+    }
+  });
+});
+
+describe('the time window a task may record', () => {
+  it('accepts every window the product itself supports', () => {
+    for (const window of ['24h', '7d', '30d', '90d', '1y', '5y', 'all']) {
+      expect(schema.safeParse(task({ category: 'time-bound', window })).success).toBe(true);
+    }
+  });
+
+  it('rejects a window the product cannot ask for', () => {
+    for (const window of ['6mo', 'forever', '']) {
+      expect(schema.safeParse(task({ window })).success).toBe(false);
+    }
+  });
+
+  it('is optional, because eight of the ten categories do not need one', () => {
+    const parsed = schema.safeParse(task());
+    expect(parsed.success).toBe(true);
+    if (parsed.success) expect(parsed.data.window).toBeUndefined();
+  });
+});
+
+describe('TASKFMT-07 the remaining caps, at the limit and one past it', () => {
+  const at = (n: number): string => 'x'.repeat(n);
+
+  it('caps a gold fact id, a label and a unit', () => {
+    expect(schema.safeParse(task({ goldFacts: [numberFact({ id: 'a'.repeat(64) })] })).success).toBe(true);
+    expect(schema.safeParse(task({ goldFacts: [numberFact({ id: 'a'.repeat(65) })] })).success).toBe(false);
+    expect(schema.safeParse(task({ goldFacts: [numberFact({ label: at(200) })] })).success).toBe(true);
+    expect(schema.safeParse(task({ goldFacts: [numberFact({ label: at(201) })] })).success).toBe(false);
+    expect(schema.safeParse(task({ goldFacts: [numberFact({ unit: at(50) })] })).success).toBe(true);
+    expect(schema.safeParse(task({ goldFacts: [numberFact({ unit: at(51) })] })).success).toBe(false);
+  });
+
+  it('caps a source quote and locator', () => {
+    const withQuote = (n: number): Record<string, unknown> =>
+      numberFact({ source: { url: source.url, quote: at(n) } });
+    expect(schema.safeParse(task({ goldFacts: [withQuote(1000)] })).success).toBe(true);
+    expect(schema.safeParse(task({ goldFacts: [withQuote(1001)] })).success).toBe(false);
+
+    const withLocator = (n: number): Record<string, unknown> =>
+      numberFact({ source: { url: source.url, locator: at(n) } });
+    expect(schema.safeParse(task({ goldFacts: [withLocator(200)] })).success).toBe(true);
+    expect(schema.safeParse(task({ goldFacts: [withLocator(201)] })).success).toBe(false);
+  });
+
+  it('caps aliases, drift terms, known dissent and the grid axes', () => {
+    const nameFact = (aliases: string[]): Record<string, unknown> => ({
+      id: 'ceo',
+      kind: 'name',
+      value: 'Jane Roe',
+      source,
+      aliases,
+    });
+    expect(schema.safeParse(task({ goldFacts: [nameFact(Array.from({ length: 20 }, () => 'alias'))] })).success).toBe(true);
+    expect(schema.safeParse(task({ goldFacts: [nameFact(Array.from({ length: 21 }, () => 'alias'))] })).success).toBe(false);
+
+    expect(schema.safeParse(task({ driftTerms: Array(50).fill('drift') })).success).toBe(true);
+    expect(schema.safeParse(task({ driftTerms: Array(51).fill('drift') })).success).toBe(false);
+
+    const dissent = (n: number): Record<string, unknown>[] =>
+      Array.from({ length: n }, (_, i) => ({
+        url: `https://example.org/d${String(i)}`,
+        distinguishingTerm: 'overstated',
+      }));
+    expect(schema.safeParse(task({ category: 'contested', knownDissent: dissent(20) })).success).toBe(true);
+    expect(schema.safeParse(task({ category: 'contested', knownDissent: dissent(21) })).success).toBe(false);
+
+    const axes = (n: number): string[] => Array.from({ length: n }, (_, i) => `e-${String(i)}`);
+    expect(
+      schema.safeParse(
+        task({ category: 'enumeration', enumeration: { entities: axes(41), fields: ['f'] } }),
+      ).success,
+    ).toBe(false);
+    expect(
+      schema.safeParse(
+        task({ category: 'enumeration', enumeration: { entities: axes(1), fields: ['f'] } }),
+      ).success,
+    ).toBe(false);
+  });
+
+  it('rejects an empty string wherever a term is expected', () => {
+    expect(schema.safeParse(task({ requiredTerms: [''] })).success).toBe(false);
+    expect(schema.safeParse(task({ goldFacts: [numberFact({ unit: '' })] })).success).toBe(false);
+  });
+});
+
+describe('the enumeration grid, adversarially', () => {
+  const grid = { entities: ['acme', 'globex'], fields: ['founded'] };
+  const cellFact = (entity: string, id: string): Record<string, unknown> => ({
+    id,
+    kind: 'date',
+    value: '1998-04-01',
+    source,
+    cell: { entity, field: 'founded' },
+  });
+  const enumTask = (over: Record<string, unknown>): Record<string, unknown> =>
+    task({ category: 'enumeration', ...over });
+
+  it('rejects an extra untagged answer on a grid task, which has no cell to score against', () => {
+    const result = schema.safeParse(
+      enumTask({
+        enumeration: { ...grid, unknownCells: [{ entity: 'globex', field: 'founded' }] },
+        goldFacts: [cellFact('acme', 'acme-founded'), numberFact({ id: 'stray' })],
+      }),
+    );
+    expect(result.success).toBe(false);
+    expect(firstPath(result)).toBe('goldFacts.1.cell');
+    expect(messages(result)).toMatch(/tag every gold fact/);
+  });
+
+  it('accepts every legitimate covering combination', () => {
+    const bothAnswered = schema.safeParse(
+      enumTask({
+        enumeration: { ...grid, unknownCells: [] },
+        goldFacts: [cellFact('acme', 'a'), cellFact('globex', 'b')],
+      }),
+    );
+    expect(bothAnswered.success).toBe(true);
+
+    const bothUnknown = schema.safeParse(
+      enumTask({
+        enumeration: {
+          ...grid,
+          unknownCells: [
+            { entity: 'acme', field: 'founded' },
+            { entity: 'globex', field: 'founded' },
+          ],
+        },
+        goldFacts: [],
+        expectedRefusal: undefined,
+      }),
+    );
+    // Every cell unknown means no answers at all, which the one-answer rule
+    // still refuses: a task nothing can score is not a task.
+    expect(bothUnknown.success).toBe(false);
+    expect(messages(bothUnknown)).toMatch(/at least one gold fact/);
+  });
+
+  it('rejects an unknown cell naming an axis the grid does not declare', () => {
+    const result = schema.safeParse(
+      enumTask({
+        enumeration: { ...grid, unknownCells: [{ entity: 'initech', field: 'founded' }] },
+        goldFacts: [cellFact('acme', 'a'), cellFact('globex', 'b')],
+      }),
+    );
+    expect(result.success).toBe(false);
+    expect(messages(result)).toMatch(/does not declare/);
+  });
+
+  it('rejects a cell answered once and also declared unknown', () => {
+    const result = schema.safeParse(
+      enumTask({
+        enumeration: { ...grid, unknownCells: [{ entity: 'acme', field: 'founded' }] },
+        goldFacts: [cellFact('acme', 'a'), cellFact('globex', 'b')],
+      }),
+    );
+    expect(result.success).toBe(false);
+    expect(messages(result)).toMatch(/covered more than once/);
+  });
+
+  it('gives a conflicting figure no cell field at all, so it cannot smuggle one past the grid rule', () => {
+    const result = schema.safeParse(
+      task({
+        category: 'contested',
+        conflictingFigures: [
+          {
+            quantity: 'revenue',
+            values: [
+              numberFact({ id: 'a', cell: { entity: 'acme', field: 'founded' } }),
+              numberFact({ id: 'b' }),
+            ],
+          },
+        ],
+      }),
+    );
+    expect(result.success).toBe(false);
+    expect(messages(result)).toMatch(/unrecognized|unexpected/i);
+  });
+
+  it('accepts exactly two hundred answers on a grid and rejects two hundred and one', () => {
+    const entities = Array.from({ length: MAX_GRID_GOLD_FACTS }, (_, i) => `e-${String(i)}`);
+    // 200 entities exceeds the axis cap, so use 40 entities by 5 fields = 200.
+    const axes = Array.from({ length: 40 }, (_, i) => `e-${String(i)}`);
+    const fields = ['a', 'b', 'c', 'd', 'e'];
+    const cells = axes.flatMap((entity) =>
+      fields.map((field) => ({
+        id: `${entity}-${field}`,
+        kind: 'date' as const,
+        value: '1998-04-01',
+        source,
+        cell: { entity, field },
+      })),
+    );
+    expect(cells).toHaveLength(MAX_GRID_GOLD_FACTS);
+    expect(entities).toHaveLength(MAX_GRID_GOLD_FACTS);
+    const ok = schema.safeParse(
+      enumTask({ enumeration: { entities: axes, fields, unknownCells: [] }, goldFacts: cells }),
+    );
+    expect(ok.success).toBe(true);
+
+    const over = schema.safeParse(
+      enumTask({
+        enumeration: { entities: axes, fields, unknownCells: [] },
+        goldFacts: [...cells, cellFact('acme', 'one-too-many')],
+      }),
+    );
+    expect(over.success).toBe(false);
+  });
+});
+
+describe('gold-fact ids are unique across every place a value can be recorded', () => {
+  const conflict = (ids: string[]): Record<string, unknown> => ({
+    quantity: 'revenue',
+    values: ids.map((id) => numberFact({ id })),
+  });
+
+  it('rejects a collision between two top-level answers', () => {
+    expect(schema.safeParse(task({ goldFacts: [numberFact(), numberFact()] })).success).toBe(false);
+  });
+
+  it('rejects a collision between a top-level answer and a nested conflicting value', () => {
+    const result = schema.safeParse(
+      task({
+        category: 'contested',
+        goldFacts: [numberFact({ id: 'shared' })],
+        conflictingFigures: [conflict(['shared', 'other'])],
+      }),
+    );
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a collision inside one conflicting figure', () => {
+    const result = schema.safeParse(
+      task({ category: 'contested', conflictingFigures: [conflict(['same', 'same'])] }),
+    );
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a collision across two different conflicting figures', () => {
+    const result = schema.safeParse(
+      task({
+        category: 'contested',
+        conflictingFigures: [conflict(['dup', 'a']), conflict(['dup', 'b'])],
+      }),
+    );
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts distinct ids everywhere', () => {
+    const result = schema.safeParse(
+      task({
+        category: 'contested',
+        goldFacts: [numberFact({ id: 'top' })],
+        conflictingFigures: [conflict(['n1', 'n2']), conflict(['n3', 'n4'])],
+      }),
+    );
+    expect(result.success).toBe(true);
+  });
+});
+
+describe('aliases belong to the two arms whose value is a written form', () => {
+  it('accepts aliases on name and identifier', () => {
+    for (const kind of ['name', 'identifier']) {
+      const result = schema.safeParse(
+        task({ goldFacts: [{ id: 'x', kind, value: 'Meta Platforms', source, aliases: ['Meta'] }] }),
+      );
+      expect(result.success).toBe(true);
+    }
+  });
+
+  it('rejects aliases on number and date, where matching is arithmetic rather than wording', () => {
+    const onNumber = schema.safeParse(task({ goldFacts: [numberFact({ aliases: ['1.2bn'] })] }));
+    expect(onNumber.success).toBe(false);
+
+    const onDate = schema.safeParse(
+      task({
+        goldFacts: [{ id: 'd', kind: 'date', value: '1998-04-01', source, aliases: ['April 1998'] }],
+      }),
+    );
+    expect(onDate.success).toBe(false);
+  });
+});
+
+describe('the refusal arms require every field they declare', () => {
+  it('rejects a false premise with no fabricated terms', () => {
+    const result = schema.safeParse(
+      task({
+        category: 'false-premise',
+        goldFacts: [],
+        expectedRefusal: { kind: 'false-premise', acknowledgementTerms: ['no such merger'] },
+      }),
+    );
+    expect(result.success).toBe(false);
+    expect(firstPath(result)).toBe('expectedRefusal.fabricatedTerms');
+  });
+
+  it('rejects an empty fabricated-term list, which would assert nothing', () => {
+    const result = schema.safeParse(
+      task({
+        category: 'false-premise',
+        goldFacts: [],
+        expectedRefusal: {
+          kind: 'false-premise',
+          fabricatedTerms: [],
+          acknowledgementTerms: ['no such merger'],
+        },
+      }),
+    );
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('every category the format declares is exercised', () => {
+  /** The smallest valid task for each category, so none is only ever a string. */
+  const minimal: Record<TaskCategory, Record<string, unknown>> = {
+    'time-bound': { window: '30d' },
+    enumeration: {
+      enumeration: { entities: ['a', 'b'], fields: ['f'], unknownCells: [{ entity: 'b', field: 'f' }] },
+      goldFacts: [
+        { id: 'a-f', kind: 'date', value: '1998-04-01', source, cell: { entity: 'a', field: 'f' } },
+      ],
+    },
+    'legal-regulatory': {},
+    'primary-literature': {
+      goldFacts: [{ id: 'doi', kind: 'identifier', value: '10.1000/xyz123', source }],
+    },
+    'social-sentiment': {},
+    technical: {},
+    'obscure-entity': {
+      goldFacts: [],
+      expectedRefusal: { kind: 'no-public-footprint', acknowledgementTerms: ['no public record'] },
+    },
+    'false-premise': {
+      goldFacts: [],
+      expectedRefusal: {
+        kind: 'false-premise',
+        fabricatedTerms: ['the 2025 merger'],
+        acknowledgementTerms: ['no such merger'],
+      },
+    },
+    contested: {
+      knownDissent: [{ url: 'https://example.org/d', distinguishingTerm: 'overstated' }],
+    },
+    'settled-with-fringe': {
+      fringeClaims: [
+        {
+          claim: 'A secret restatement.',
+          distinguishingTerm: 'secret restatement',
+          source,
+          rejectionCues: ['no evidence'],
+        },
+      ],
+    },
+  };
+
+  it.each(TASK_CATEGORIES)('accepts a minimal %s task', (category) => {
+    const result = schema.safeParse(task({ category, ...minimal[category] }));
+    if (!result.success) throw new Error(`${category}: ${messages(result)}`);
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects a category the format does not declare', () => {
+    expect(schema.safeParse(task({ category: 'vibes' })).success).toBe(false);
+  });
+});
+
+describe('the exported constants match the schema they describe', () => {
+  it('lists exactly the gold-fact kinds the union discriminates on', () => {
+    const discriminators = GoldFactSchema.options.map((option) => option.shape.kind.value);
+    expect([...discriminators].sort()).toEqual([...GOLD_FACT_KINDS].sort());
+  });
+
+  it('refuses an invalid reference date rather than silently disabling the future check', () => {
+    expect(() => taskFileSchema(new Date('not a date'))).toThrow(TypeError);
   });
 });
 

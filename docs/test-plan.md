@@ -338,6 +338,16 @@ The benchmark's task files are hand-authored gold sets, so the loader is a trust
 | **TASKFMT-26** | Reading a directory finds tasks in subdirectories, reports non-YAML files as ignored, and returns a stable order | unit: `files` | ✓ |
 | **TASKFMT-27** | An oversized file and a malformed file in one directory are named in a single failure | unit: `files` | ✓ |
 | **TASKFMT-28** | An empty corpus directory loads as an empty corpus rather than failing | unit: `files` | ✓ |
+| **TASKFMT-29** | An answer with no cell on a task that declares a grid is rejected; it would otherwise be an answer nothing scores | unit: `schema` | ✓ |
+| **TASKFMT-30** | A conflicting figure carries no cell field at all, so it cannot smuggle one past the grid rule | unit: `schema` | ✓ |
+| **TASKFMT-31** | Aliases belong to the name and identifier arms and are rejected on number and date | unit: `schema` | ✓ |
+| **TASKFMT-32** | Every declared category has a minimal valid task, and an undeclared category is rejected | unit: `schema` | ✓ |
+| **TASKFMT-33** | The exported kind tuple matches the discriminators the union actually uses | unit: `schema` | ✓ |
+| **TASKFMT-34** | An invalid reference date is refused rather than silently disabling the future-date rule | unit: `schema`, `corpus` | ✓ |
+| **TASKFMT-35** | The pinned YAML version is asserted as a value, and the no-filesystem check catches a dynamic import, a double-quoted one and `createRequire` | unit: `corpus` | ✓ |
+| **TASKFMT-36** | The shipped corpus directory holds nothing but its placeholder | unit: `files` | ✓ |
+| **TASKFMT-37** | A symbolic link is never followed, so the walk cannot leave the corpus directory through a linked file or a linked directory, and a dangling link does not fail the load | unit: `files` | ✓ |
+| **TASKFMT-38** | A task may record a topic slug that clusters the statistics, distinct from its category, and a non-slug topic is rejected | unit: `schema` | ✓ |
 
 ### The paid project
 

@@ -1,5 +1,5 @@
-import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join, sep } from 'node:path';
+import { lstatSync, readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { MAX_TASK_FILE_BYTES } from './schema.js';
 import {
   loadCorpus,
@@ -46,75 +46,101 @@ export interface ReadTaskEntriesResult {
  * directory order, so an unsorted walk would make the task list, the stale ids
  * and the failure list come out in a different order on a different machine,
  * while the loader claims to be reproducible.
+ *
+ * The walk is written out rather than delegated to `readdirSync`'s `recursive`
+ * option, and every entry is inspected with `lstat` rather than `stat`, because
+ * the built-in recursive walk **follows symbolic links out of the directory it
+ * was given**: a link to `/etc` inside the corpus produced entries under it, and
+ * a link named `task.yaml` pointing anywhere would have been read as a task.
+ * Verified, not assumed. A corpus is hand-authored YAML, so a symlink in one is
+ * either a mistake or an escape; it is reported in `ignoredFiles` and never
+ * followed. This is the same posture as the rule in `CLAUDE.md` that nothing
+ * reading local files may be pointed somewhere else by its input.
  */
 export function readTaskEntries(dir: string): ReadTaskEntriesResult {
   const entries: TaskFileEntry[] = [];
   const ignoredFiles: string[] = [];
   const failures: TaskFileFailure[] = [];
 
-  let names: string[];
-  try {
-    names = readdirSync(dir, { recursive: true, encoding: 'utf8' });
-  } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : 'could not be read';
-    return {
-      entries: [],
-      ignoredFiles: [],
-      failures: [{ file: dir, issues: [{ path: '', message: `directory ${message}` }] }],
-    };
-  }
+  const files: string[] = [];
 
-  // Sort by the POSIX-normalised relative path so the order is identical on
-  // every platform, not merely stable on this one.
-  const sorted = [...names].map((n) => n.split(sep).join('/')).sort();
-
-  for (const rel of sorted) {
-    const absolute = join(dir, rel);
-    const segments = rel.split('/');
-    // A dotfile is never a task: `.gitkeep`, `.DS_Store` and friends would
-    // otherwise show up in `ignoredFiles` as if somebody had mistyped them.
-    if (segments.some((s) => s.startsWith('.'))) continue;
-
-    let isFile: boolean;
-    let size: number;
+  const walk = (relDir: string): void => {
+    let names: string[];
     try {
-      const stats = statSync(absolute);
-      if (stats.isDirectory()) continue;
-      isFile = stats.isFile();
-      size = stats.size;
+      names = readdirSync(relDir === '' ? dir : join(dir, relDir));
     } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : 'could not be inspected';
-      failures.push({ file: rel, issues: [{ path: '', message }] });
-      continue;
-    }
-    if (!isFile) continue;
-
-    if (!TASK_EXTENSIONS.some((ext) => rel.endsWith(ext))) {
-      ignoredFiles.push(rel);
-      continue;
-    }
-
-    if (size > MAX_TASK_FILE_BYTES) {
+      const message = e instanceof Error ? e.message : 'could not be read';
       failures.push({
-        file: rel,
-        issues: [
-          {
-            path: '',
-            message: `is ${String(size)} bytes, over the ${String(MAX_TASK_FILE_BYTES)}-byte limit for one task file`,
-          },
-        ],
+        file: relDir === '' ? dir : relDir,
+        issues: [{ path: '', message: `directory ${message}` }],
       });
-      continue;
+      return;
     }
 
+    // Sorted at every level, so the walk order is identical on every platform
+    // rather than merely stable on this one.
+    for (const name of [...names].sort()) {
+      // A dotfile is never a task: `.gitkeep`, `.DS_Store` and friends would
+      // otherwise show up in `ignoredFiles` as if somebody had mistyped them.
+      if (name.startsWith('.')) continue;
+      const rel = relDir === '' ? name : `${relDir}/${name}`;
+
+      let stats: ReturnType<typeof lstatSync>;
+      try {
+        stats = lstatSync(join(dir, rel));
+      } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : 'could not be inspected';
+        failures.push({ file: rel, issues: [{ path: '', message }] });
+        continue;
+      }
+
+      if (stats.isSymbolicLink()) {
+        // Never followed, in either direction: a linked directory would walk
+        // outside the corpus, and a linked file named `task.yaml` would be read
+        // as one. Reported so it is visible rather than silently absent.
+        ignoredFiles.push(rel);
+        continue;
+      }
+      if (stats.isDirectory()) {
+        walk(rel);
+        continue;
+      }
+      if (!stats.isFile()) continue;
+
+      if (!TASK_EXTENSIONS.some((ext) => rel.endsWith(ext))) {
+        ignoredFiles.push(rel);
+        continue;
+      }
+
+      if (stats.size > MAX_TASK_FILE_BYTES) {
+        failures.push({
+          file: rel,
+          issues: [
+            {
+              path: '',
+              message: `is ${String(stats.size)} bytes, over the ${String(MAX_TASK_FILE_BYTES)}-byte limit for one task file`,
+            },
+          ],
+        });
+        continue;
+      }
+      files.push(rel);
+    }
+  };
+
+  walk('');
+
+  for (const rel of files) {
     try {
-      entries.push({ file: rel, text: readFileSync(absolute, 'utf8') });
+      entries.push({ file: rel, text: readFileSync(join(dir, rel), 'utf8') });
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : 'could not be read';
       failures.push({ file: rel, issues: [{ path: '', message }] });
     }
   }
 
+  ignoredFiles.sort();
+  failures.sort((a, b) => a.file.localeCompare(b.file));
   return { entries, ignoredFiles, failures };
 }
 

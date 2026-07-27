@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { STALE_AFTER_DAYS } from './schema.js';
-import { loadCorpus, TaskCorpusError, type TaskFileEntry } from './corpus.js';
+import { loadCorpus, TaskCorpusError, YAML_OPTIONS, type TaskFileEntry } from './corpus.js';
 
 /**
  * The loader, driven entirely from strings.
@@ -68,10 +68,32 @@ describe('TASKFMT-01 and TASKFMT-22 the loader is pure and needs no filesystem',
     expect(corpus.tasks[0]?.goldFacts[0]?.kind).toBe('number');
   });
 
+  /**
+   * Any way a module can reach the filesystem, not just the static import.
+   *
+   * The first version of this check tested one quoted form and would have gone
+   * on passing after somebody added `await import('node:fs/promises')`, which
+   * makes it a check that reads as enforcement and is not.
+   */
+  const FS_REACH =
+    /(?:from|import|require)\s*\(?\s*['"](?:node:)?fs(?:\/promises)?['"]|createRequire/;
+
   it('imports nothing from the filesystem, so purity is structural rather than promised', () => {
     const source = readFileSync(new URL('./corpus.ts', import.meta.url), 'utf8');
-    expect(source).not.toMatch(/from 'node:fs'/);
-    expect(source).not.toMatch(/require\('node:fs'\)/);
+    expect(source).not.toMatch(FS_REACH);
+  });
+
+  it('would catch a filesystem import added later, in any of its forms', () => {
+    for (const smuggled of [
+      "import { readFileSync } from 'node:fs';",
+      'import { readFileSync } from "node:fs";',
+      "import { readFile } from 'node:fs/promises';",
+      "void import('node:fs/promises');",
+      "const fs = require('fs');",
+      "import { createRequire } from 'node:module';",
+    ]) {
+      expect(smuggled).toMatch(FS_REACH);
+    }
   });
 
   it('loads an empty corpus rather than failing on one', () => {
@@ -301,6 +323,22 @@ describe('TASKFMT-23 and TASKFMT-24 the YAML version is pinned', () => {
   });
 });
 
+describe('the pinned YAML options are a lock, not a comment', () => {
+  it('states the exact version and schema the format depends on', () => {
+    expect(YAML_OPTIONS).toEqual({ version: '1.2', schema: 'core' });
+  });
+});
+
+describe('an invalid reference date is refused rather than silently ignored', () => {
+  it('refuses it even for an empty corpus, which never reaches the schema', () => {
+    expect(() => loadCorpus([], { now: new Date('not a date') })).toThrow(TypeError);
+  });
+
+  it('refuses it for a real corpus too', () => {
+    expect(() => loadCorpus([entry('a.yaml', yaml())], { now: new Date(NaN) })).toThrow(TypeError);
+  });
+});
+
 describe('TASKFMT-20 each task reports which measures it can support', () => {
   it('marks a plain factual task accuracy-and-calibration eligible and nothing else', () => {
     const corpus = loadCorpus([entry('a.yaml', yaml())], { now: NOW });
@@ -336,6 +374,33 @@ describe('TASKFMT-20 each task reports which measures it can support', () => {
     expect(metrics?.refusal).toBe(true);
     expect(metrics?.accuracy).toBe(false);
     expect(metrics?.calibration).toBe(false);
+  });
+
+  it('marks enumeration completeness eligible only for a task that declares a grid', () => {
+    const text = [
+      'id: founding-dates',
+      'category: enumeration',
+      'question: When were each of these companies founded?',
+      'asOf: 2026-01-10',
+      `reverifiedAt: ${daysBefore(5)}`,
+      'enumeration:',
+      '  entities: [acme, globex]',
+      '  fields: [founded]',
+      '  unknownCells:',
+      '    - { entity: globex, field: founded }',
+      'goldFacts:',
+      '  - id: acme-founded',
+      '    kind: date',
+      "    value: '1998-04-01'",
+      '    cell: { entity: acme, field: founded }',
+      '    source:',
+      '      url: https://example.gov/report',
+      '',
+    ].join('\n');
+    const corpus = loadCorpus([entry('a.yaml', text)], { now: NOW });
+    expect(corpus.tasks[0]?.applicableMetrics.enumerationCompleteness).toBe(true);
+    expect(loadCorpus([entry('b.yaml', yaml())], { now: NOW }).tasks[0]?.applicableMetrics
+      .enumerationCompleteness).toBe(false);
   });
 
   it('marks relevance eligible only when the task recorded required terms', () => {

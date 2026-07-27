@@ -225,10 +225,15 @@ export type GoldFact = z.infer<typeof GoldFactSchema>;
 /**
  * The numeric arm on its own, for conflicting figures.
  *
- * Extracted by filtering the union's options rather than by redeclaring the
- * shape, so the two can never drift apart.
+ * Derived from the union's own option rather than redeclared, so the two cannot
+ * drift apart, with `cell` omitted. A conflicting figure is a disagreeing pair,
+ * never an answer to a grid cell, and leaving `cell` on it created a hole: the
+ * grid-coverage rule only walks top-level answers, so a nested value could carry
+ * a duplicate, undeclared or grid-less cell tag that nothing rejected. Removing
+ * the field removes the class instead of testing around it.
  */
 export const NumericGoldFactSchema = GoldFactSchema.options[0];
+export const ConflictingValueSchema = NumericGoldFactSchema.omit({ cell: true });
 
 /** A documented dissenting position, recorded so due weight can be checked. */
 export const KnownDissentSchema = z.strictObject({
@@ -253,8 +258,9 @@ export type KnownDissent = z.infer<typeof KnownDissentSchema>;
  */
 export const ConflictingFigureSchema = z.strictObject({
   quantity: term(300),
-  values: z.array(NumericGoldFactSchema).min(2).max(10),
+  values: z.array(ConflictingValueSchema).min(2).max(10),
 });
+export type ConflictingValue = z.infer<typeof ConflictingValueSchema>;
 export type ConflictingFigure = z.infer<typeof ConflictingFigureSchema>;
 
 /**
@@ -369,6 +375,13 @@ export function utcDayOrdinalFromIsoDate(iso: string): number {
  * reference date produce the same result, twice, on any machine.
  */
 export function taskFileSchema(now: Date): z.ZodType<BenchTaskFile> {
+  // An Invalid Date makes every comparison below `false`, which would silently
+  // disable the future-date rule rather than failing. CP §6.14: guard
+  // `new Date(externalInput)` at the boundary rather than letting a poisoned
+  // value flow downstream.
+  if (Number.isNaN(now.getTime())) {
+    throw new TypeError('taskFileSchema needs a valid reference date; received an Invalid Date');
+  }
   const nowDay = utcDayOrdinal(now);
 
   return z
@@ -389,6 +402,21 @@ export function taskFileSchema(now: Date): z.ZodType<BenchTaskFile> {
        * true last week, and only the second date says anything about rot.
        */
       reverifiedAt: z.iso.date(),
+      /**
+       * What this task is *about*, as a slug, for clustering the statistics.
+       *
+       * Added after the design of record was amended on 27 July 2026: reporting
+       * a paired difference over a corpus of ten categories of ten related
+       * tasks needs clustered standard errors, because tasks sharing a subject
+       * are not independent samples and treating them as such can understate
+       * the error by up to a factor of three. The cluster key has to live on the
+       * task, and nothing else here can carry it: `category` is what a task
+       * *tests*, which is a coarser and different thing from what it is about.
+       *
+       * Optional. A task that does not set one clusters by its category, which
+       * is the honest fallback rather than treating it as its own cluster.
+       */
+      topic: slug(80).optional(),
       /**
        * The time window the question should be asked over.
        *
@@ -570,7 +598,19 @@ export function taskFileSchema(now: Date): z.ZodType<BenchTaskFile> {
         };
 
         task.goldFacts.forEach((fact, i) => {
-          if (fact.cell) noteCell(fact.cell, ['goldFacts', i, 'cell']);
+          if (fact.cell) {
+            noteCell(fact.cell, ['goldFacts', i, 'cell']);
+            return;
+          }
+          // An untagged answer on a grid task belongs to no cell, so nothing
+          // scores it and the completeness count silently disagrees with the
+          // number of answers. Rejected rather than ignored.
+          ctx.addIssue({
+            code: 'custom',
+            path: ['goldFacts', i, 'cell'],
+            message:
+              'a task that declares an enumeration grid must tag every gold fact with the cell it answers',
+          });
         });
         task.enumeration.unknownCells.forEach((cell, i) => {
           noteCell(cell, ['enumeration', 'unknownCells', i]);
@@ -614,6 +654,7 @@ export interface BenchTaskFile {
   readonly question: string;
   readonly asOf: string;
   readonly reverifiedAt: string;
+  readonly topic?: string | undefined;
   readonly window?: (typeof WINDOWS)[number] | undefined;
   readonly goldFacts: readonly GoldFact[];
   readonly requiredTerms: readonly string[];

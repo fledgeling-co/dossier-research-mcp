@@ -23,6 +23,7 @@ id: acme-fy25-revenue          # lowercase slug, unique across the whole corpus
 category: technical            # one of the ten below
 question: What revenue did Acme report for the year ended 31 December 2025?
 
+topic: acme-financials         # optional. Clusters the statistics; see below
 asOf: 2026-01-10               # the date the gold was true
 reverifiedAt: 2026-07-01       # when a human last checked it. Not the same date
 
@@ -55,6 +56,7 @@ goldFacts:
 | `question` | yes | What the backend is asked. 10 to 2000 characters. |
 | `asOf` | yes | `YYYY-MM-DD`. The date the gold was true. May be in the future, because a rule can take effect later. |
 | `reverifiedAt` | yes | `YYYY-MM-DD`. When a human last confirmed it. May not be in the future. |
+| `topic` | no | A slug naming what the task is about, used to cluster the statistics. Distinct from `category`, which is what the task tests. A task without one clusters by its category. |
 | `window` | no | A time window the question should be asked over, one of `24h` `7d` `30d` `90d` `1y` `5y` `all`. Read by the run harness, by no scorer, and anchored to `asOf` rather than to the clock at run time. |
 | `goldFacts` | see below | The answers a correct report must contain. |
 | `requiredTerms` | no | Terms a competent answer cannot avoid using. Matched literally. |
@@ -182,6 +184,12 @@ goldFacts:
 Every cell of `entities` by `fields` must be covered exactly once, either by a gold fact tagged with that cell or by an entry in `unknownCells`. That is what turns "every cell filled or explicitly marked unknown" into a check rather than an aspiration: a report inventing a value for a declared-unknown cell is wrong, and one that says it could not find it is right.
 
 Entity and field labels must each be free of duplicates. Two identically named rows collapse onto one cell, so an apparently complete grid would cover fewer cells than it declares.
+
+## Why `topic` is separate from `category`
+
+`category` is what a task tests. `topic` is what it is about. A hundred tasks across ten categories are not a hundred independent samples: ten tasks about one company share a subject, and reporting a paired difference over them as if they were independent can understate the error by up to a factor of three. The statistics therefore cluster, and the cluster key has to be recorded per task because nothing can infer it afterwards.
+
+Set it when several tasks share a subject. Leave it off when a task stands alone, and it clusters by its category, which is the honest fallback rather than pretending the task is its own cluster.
 
 ## How many answers a task may carry
 

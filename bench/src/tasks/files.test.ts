@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -103,6 +103,45 @@ describe('TASKFMT-26 reading a corpus directory', () => {
   });
 });
 
+describe('a symlink never takes the walk outside the corpus directory', () => {
+  it('does not follow a linked file, even when it is named like a task', () => {
+    const outside = corpusDir();
+    writeFileSync(join(outside, 'secret.yaml'), 'id: not-a-task\n', 'utf8');
+    const dir = corpusDir();
+    write(dir, 'one.yaml', taskYaml('one'));
+    symlinkSync(join(outside, 'secret.yaml'), join(dir, 'linked.yaml'));
+
+    const { entries, ignoredFiles } = readTaskEntries(dir);
+    expect(entries.map((e) => e.file)).toEqual(['one.yaml']);
+    expect(ignoredFiles).toEqual(['linked.yaml']);
+  });
+
+  it('does not descend through a linked directory', () => {
+    const outside = corpusDir();
+    mkdirSync(join(outside, 'nested'), { recursive: true });
+    writeFileSync(join(outside, 'nested', 'elsewhere.yaml'), 'id: not-a-task\n', 'utf8');
+    const dir = corpusDir();
+    write(dir, 'one.yaml', taskYaml('one'));
+    symlinkSync(outside, join(dir, 'linkdir'));
+
+    const { entries, ignoredFiles } = readTaskEntries(dir);
+    expect(entries.map((e) => e.file)).toEqual(['one.yaml']);
+    expect(ignoredFiles).toEqual(['linkdir']);
+    expect(ignoredFiles.some((f) => f.includes('elsewhere'))).toBe(false);
+  });
+
+  it('reports a broken link rather than failing the whole load on it', () => {
+    const dir = corpusDir();
+    write(dir, 'one.yaml', taskYaml('one'));
+    symlinkSync(join(dir, 'does-not-exist'), join(dir, 'dangling.yaml'));
+
+    const { entries, ignoredFiles, failures } = readTaskEntries(dir);
+    expect(entries).toHaveLength(1);
+    expect(ignoredFiles).toEqual(['dangling.yaml']);
+    expect(failures).toEqual([]);
+  });
+});
+
 describe('TASKFMT-27 an adapter failure joins the loader failures', () => {
   it('refuses a file over the size limit, naming it and its size', () => {
     const dir = corpusDir();
@@ -157,5 +196,13 @@ describe('TASKFMT-28 an empty corpus directory', () => {
     const dir = corpusDir();
     write(dir, '.gitkeep', '');
     expect(loadCorpusFromDirectory(dir, { now: NOW }).tasks).toEqual([]);
+  });
+});
+
+describe('the shipped corpus directory', () => {
+  it('holds nothing but its placeholder, because authoring the corpus is a separate item', () => {
+    const shipped = new URL('../../tasks/', import.meta.url);
+    const names = readdirSync(shipped);
+    expect(names).toEqual(['.gitkeep']);
   });
 });
