@@ -348,6 +348,39 @@ The benchmark's task files are hand-authored gold sets, so the loader is a trust
 | **TASKFMT-36** | The shipped corpus directory holds nothing but its placeholder | unit: `files` | ✓ |
 | **TASKFMT-37** | A symbolic link is never followed, so the walk cannot leave the corpus directory through a linked file or a linked directory, and a dangling link does not fail the load | unit: `files` | ✓ |
 | **TASKFMT-38** | A task may record a topic slug that clusters the statistics, distinct from its category, and a non-slug topic is rejected | unit: `schema` | ✓ |
+| **CALIB-01** | All four confidence-marker forms parse, including bolded and lower-case variants, and an unrecognised form yields no marker | unit: `confidence` | ✓ |
+| **CALIB-02** | A `<CONFIDENCE:LOW>` tag's span is exactly its contents; an undelimited marker's span ends at the next marker or the paragraph break | unit: `confidence` | ✓ |
+| **CALIB-03** | Subject matching is on word boundaries after Unicode normalisation, so a short term does not match inside a longer word | unit: `confidence` | ✓ |
+| **CALIB-04** | A report with no confidence markers is `unmeasurable` with reason `no-markers`, and carries no Brier score for a caller to read as zero | unit: `calibration` | ✓ |
+| **CALIB-05** | `markers-present-but-unpaired` and `no-recovery-input` are reported as reasons distinct from `no-markers` | unit: `calibration` | ✓ |
+| **CALIB-06** | A confidently-wrong claim pairs through the answer's label and scores against the backend | unit: `calibration` | ✓ |
+| **CALIB-07** | An answer with no label falls back to value pairing, the result says so, and the note states what the fallback cannot see | unit: `calibration` | ✓ |
+| **CALIB-08** | An answer absent from the recovery input is counted `unresolved` and excluded, never scored as wrong | unit: `calibration` | ✓ |
+| **CALIB-09** | An abstention marker is counted separately and never enters the Brier score | unit: `confidence`, `calibration` | ✓ |
+| **CALIB-10** | An answer mentioned under two levels takes the more confident one and is counted as an ambiguous pairing | unit: `calibration` | ✓ |
+| **CALIB-11** | A backend right 60% that always says High scores a worse Brier and worse reliability than one right 55% whose Highs are right 90% | unit: `calibration` | ✓ |
+| **CALIB-12** | The reliability table reports count, mean predicted and observed frequency per level, and the decomposition sums back to the Brier score | unit: `calibration` | ✓ |
+| **CALIB-13** | Every result carries the probability map that produced it, and a caller-supplied map changes the score | unit: `calibration` | ✓ |
+| **CALIB-14** | Calibration is not applicable to a task carrying no gold facts, agreeing with the corpus loader's own eligibility flag | unit: `calibration` | ✓ |
+| **REFUSE-01** | A false-premise report that pushes back scores full marks even when it contains nothing else useful | unit: `refusal` | ✓ |
+| **REFUSE-02** | A false-premise report that asserts the fabrication with no acknowledgement scores zero and is reported `asserted` | unit: `refusal` | ✓ |
+| **REFUSE-03** | A false-premise report that never mentions the fabrication is `unengaged`, scored between the two, and is not reported as a refusal | unit: `refusal` | ✓ |
+| **REFUSE-04** | An acknowledgement in the same paragraph as the fabrication is reported as the stronger signal; one paragraphs away is not | unit: `refusal` | ✓ |
+| **REFUSE-05** | A no-public-footprint report that says it found nothing scores full marks | unit: `refusal` | ✓ |
+| **REFUSE-06** | A no-public-footprint report that answers anyway scores zero, and scores zero whether or not it is confident | unit: `refusal` | ✓ |
+| **REFUSE-07** | A failed refusal stated at High confidence is flagged overconfident; a failed refusal with no marker is not | unit: `refusal` | ✓ |
+| **REFUSE-08** | A task declaring no expected refusal returns not-applicable and no score | unit: `refusal` | ✓ |
+| **REFUSE-09** | Matching is on word boundaries, so a fabricated term inside a longer word is not an assertion | unit: `refusal` | ✓ |
+| **REFUSE-10** | The result carries report length and marker count, so length can be reported beside outcome without re-parsing | unit: `refusal` | ✓ |
+| **RECENCY-01** | A 2019 standard is fresh against a 2026 as-of date and a 2019 benchmark is stale, which is the design's own sentence | unit: `recency` | ✓ |
+| **RECENCY-02** | An unrecognised URL is classified unknown and falls back to the source-type horizon unchanged | unit: `recency` | ✓ |
+| **RECENCY-03** | Durability is classified from host and path with a stated basis, and every classification carries one | unit: `recency` | ✓ |
+| **RECENCY-04** | An undated source is reported undated, counted separately, and excluded from the fresh share | unit: `recency` | ✓ |
+| **RECENCY-05** | A source dated after the as-of date is reported after-horizon and never counted fresh | unit: `recency` | ✓ |
+| **RECENCY-06** | An unparseable date is treated as undated rather than as an age of zero | unit: `recency` | ✓ |
+| **RECENCY-07** | An empty source list produces no recency figure rather than a perfect one | unit: `recency` | ✓ |
+| **RECENCY-08** | Source type is derived from the product's own classifier when the caller does not supply one | unit: `recency` | ✓ |
+| **RECENCY-09** | The horizon table restates the product's source-type numbers, so an unknown-durability source grades identically to the product's own answer | unit: `recency` | ✓ |
 
 ### The paid project
 
