@@ -114,6 +114,10 @@ docs/                   the documentation set; README is the approachable entry 
   bench/detector-eval.md  whether this product's own checking works. A labelled
                         corpus, a confusion matrix per arm, and every projection
                         between one detector's vocabulary and another's
+  bench/combinations.md   scoring every combination rather than every backend:
+                        why a combination never has to be run, the three overlap
+                        measures and why none of them is a target, and the
+                        three-axis frontier
   releasing.md          the tag-triggered publish flow
   deep-research-api-vs-agent.md   which Gemini surface fits which job
   providers/            per-provider guides (Gemini, Perplexity, OpenAI, xAI,
@@ -198,6 +202,15 @@ bench/                  the benchmark. NOT compiled into dist/ and NOT published
                         confusion matrix. capture.ts and judge.ts touch the
                         outside and are manual; everything else is pure and runs
                         in the gate. docs/bench/detector-eval.md
+  src/combine/          every COMBINATION of backends, scored by merging cells
+                        already bought, so the whole 2^N lattice costs nothing
+                        and touches no network. `member.ts` holds the panel
+                        independence invariant the approach rests on and refuses
+                        a member that saw another; `overlap.ts` measures what was
+                        bought twice three ways and gives none of them a
+                        direction; `frontier.ts` has a closed three-axis shape,
+                        which is what keeps overlap out of a ranking.
+                        docs/bench/combinations.md
   detector/             the labelled corpus: claims paired with frozen page text,
                         each carrying why it was labelled as it was
 ```
