@@ -643,6 +643,43 @@ The sharpest instrument in the benchmark, and the one whose wrong answer is most
 | **GROUND-17** | `research_plan` and `research_start` normalise the grounding identically, so a repeated run id does not fork the contract fingerprint | `grounding` acceptance | ✓ |
 | **GROUND-18** | A malformed run id comes back as a handled tool error and the server keeps answering | `grounding` acceptance | ✓ |
 
+### BENCH-08 — reporting and comparison
+
+The read side of the benchmark, and the one surface where the product's own argument could appear as its own failure: a confident ranking derived from too little evidence. Every row runs against values rather than a disk, except the CLI rows, which use a temporary directory. Nothing here reaches a network, a model or a wallet. The suffix names the file under `bench/src/report/`.
+
+| AC | Criterion (from the contract) | Test | Status |
+|---|---|---|---|
+| **REPORT-01** | With one repetition per cell, every number renders and **no ranking** is emitted | unit: `rank`, `render` | ✓ |
+| **REPORT-02** | A withheld ranking names which of the four conditions failed, and the spread floor it needed | unit: `rank` | ✓ |
+| **REPORT-03** | A category holding fewer than the configured minimum tasks is named and left unscored | unit: `aggregate`, `render` | ✓ |
+| **REPORT-04** | A backend that completed fewer than the minimum tasks in a scorable category is withheld separately, with its completion rate | unit: `aggregate` | ✓ |
+| **REPORT-05** | The minimum tasks per category is configurable and is printed on every report | unit: `aggregate`, `render` | ✓ |
+| **REPORT-06** | Every metric value carries its sample size, and its group's completion rate travels with it | unit: `render` | ✓ |
+| **REPORT-07** | Completion rate counts recorded failures, and a failed cell reaches no metric denominator | unit: `harvest`, `aggregate` | ✓ |
+| **REPORT-08** | A `not-applicable` scorer arm becomes `null` with its reason, never a zero | unit: `harvest` | ✓ |
+| **REPORT-09** | Citation accuracy and citation volume are separate columns wherever either appears | unit: `render`, `metrics` | ✓ |
+| **REPORT-10** | A volume metric is never rankable, enforced by the registry rather than by convention | unit: `metrics`, `rank` | ✓ |
+| **REPORT-11** | The registry `unchecked` count and share appear before any score, with BENCH-03's caveat | unit: `render` | ✓ |
+| **REPORT-12** | The corpus stale count and share appear before any score | unit: `render` | ✓ |
+| **REPORT-13** | Median cost and median wall clock appear beside every backend's scores | unit: `render`, `aggregate` | ✓ |
+| **REPORT-14** | The spread floor is BENCH-02's `spreadEligibility`, and the withheld reason is that function's own wording | unit: `spread` | ✓ |
+| **REPORT-15** | A spread is withheld below the floor and reported at or above it, over completed repetitions rather than requested ones | unit: `spread`, `aggregate` | ✓ |
+| **REPORT-16** | Quartiles follow one named definition, checked against a hand-computed fixture | unit: `spread` | ✓ |
+| **REPORT-17** | Aggregation is two-stage: repetitions within a task, then tasks within a category, so a large category cannot dominate | unit: `aggregate` | ✓ |
+| **REPORT-18** | A backend's overall figure covers only scorable categories, and names the ones excluded | unit: `aggregate`, `render` | ✓ |
+| **REPORT-19** | Adjacent backends whose observed spreads overlap are reported tied, not ordered, and the note says the check is descriptive rather than significance | unit: `rank` | ✓ |
+| **REPORT-20** | `calibration-brier` orders ascending; every other quality metric orders descending | unit: `rank` | ✓ |
+| **REPORT-21** | Recency renders unavailable with the missing-publication-date reason, never as zero and never omitted | unit: `harvest`, `render` | ✓ |
+| **REPORT-22** | A cell with no citation evidence snapshot renders the citation metrics unavailable with a reason, and is not scored zero | unit: `harvest` | ✓ |
+| **REPORT-23** | Rendering is pure: every module under `bench/src/report/` except the CLI imports no filesystem and no network, asserted by reading their own source | unit: `render` | ✓ |
+| **REPORT-24** | The same cells and corpus render byte-identically twice | unit: `render` | ✓ |
+| **REPORT-25** | A category in the corpus that no backend ran still appears, rather than vanishing | unit: `aggregate` | ✓ |
+| **REPORT-26** | An unknown CLI flag is refused rather than ignored, and a malformed as-of date is rejected | unit: `report-cli` | ✓ |
+| **REPORT-27** | The CLI renders end to end from a temporary cell store, corpus and report file, and writes the report to stdout | unit: `report-cli` | ✓ |
+| **REPORT-28** | A cell whose report file is missing is reported as a pipeline gap, distinct from a backend failure | unit: `harvest`, `report-cli` | ✓ |
+| **REPORT-29** | Failure kinds are counted and named per backend, so a rate-limited backend is distinguishable from a broken one | unit: `aggregate`, `render` | ✓ |
+| **REPORT-30** | The JSON format carries every number the markdown does, so a later metric needs no re-run | unit: `render` | ✓ |
+
 ### The paid project
 
 `tests/paid/` spends real money against the live API, so it is a **separate vitest project that is deliberately excluded from `test:all` and therefore from the gate**. It cannot block a deploy. It needs both `DOSSIER_PAID_TESTS=1` and a real `GEMINI_API_KEY`, and skips itself entirely without them.
