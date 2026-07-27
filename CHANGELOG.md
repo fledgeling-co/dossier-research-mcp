@@ -8,6 +8,8 @@ This project follows [semantic versioning](https://semver.org/). Until 1.0 the m
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-07-27
+
 ### Fixed
 
 - **The same question, on the same backend, twice, was one paid run.** The dedupe fingerprint carried the prompt, tier, tools, plan-review flag, attachments, provider, shape and window, and no repetition index, so a deliberate repeat inside the dedupe window collapsed onto the first run. Nothing was wrong for ordinary use, where that is the protection working. It mattered the moment anyone wanted to measure variance: five repeats returned one report five times, and any spread computed from them was a single sample reported as five.
@@ -409,7 +411,8 @@ Four defects that a full hermetic suite passed and one real API call each found.
 
 - First release. Gemini Deep Research wrapped so an agent can drive it safely: durable runs that survive a disconnect, a spend gate that reserves the worst case before the call, and outline-first reading so a 60,000-token report never lands inline.
 
-[Unreleased]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.6.0...v0.7.0
