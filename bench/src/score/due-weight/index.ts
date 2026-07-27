@@ -151,6 +151,8 @@ export const DUE_WEIGHT_LIMITS = {
   rejectionProximity: `A fringe claim counts as rejected when one of its recorded rejection cues appears within ${String(PROXIMITY_CHARS)} characters of any mention of its distinguishing term. One rejected mention is enough, so a report that dismissed the claim and then listed its source again is not penalised.`,
   fringeTermOnly:
     'The false-balance guard reads the distinguishing term only, never the fringe source URL. A URL-only mention gives nothing to measure a rejection cue against, so it could not be scored either way without guessing.',
+  guardNotExercised:
+    'The false-balance guard scored without being exercised: no report in this set raised any recorded fringe claim, so nothing put the guard to the question. That is the correct outcome for a backend that did not hedge, and it is also what a backend that answered nothing produces, so read it beside dissent recall rather than on its own.',
   harmonicOverall:
     'The overall is the harmonic mean of the metric means, each metric counting once regardless of how many tasks fed it. That is what stops a perfect hedger, which scores 1 on recall and 0 on the guard, averaging out to a passing grade.',
 } as const;
@@ -235,6 +237,18 @@ export interface FringeFinding {
 
 export interface FalseBalanceGuard {
   readonly score: number;
+  /**
+   * How many recorded fringe claims the report raised at all, however it framed
+   * them.
+   *
+   * Reported because a perfect guard score is ambiguous on its own. A report
+   * that says nothing scores 1 here, correctly — it did not present a fringe
+   * claim as contested — but so does a report that engaged with the question
+   * properly, and those are not the same thing. Zero surfaced across a whole run
+   * means the guard passed **without ever being exercised**, which the summary
+   * says out loud rather than letting a clean column imply a test that happened.
+   */
+  readonly surfaced: number;
   readonly findings: readonly FringeFinding[];
 }
 
@@ -428,7 +442,12 @@ function scoreFalseBalance(task: BenchTask, normalised: string): Measured<FalseB
 
   const findings = task.fringeClaims.map((c) => scoreOneFringe(c, normalised));
   const total = findings.reduce((sum, f) => sum + f.score, 0);
-  return { measured: true, score: total / findings.length, findings };
+  return {
+    measured: true,
+    score: total / findings.length,
+    surfaced: findings.filter((f) => f.outcome !== 'not-surfaced').length,
+    findings,
+  };
 }
 
 /**
@@ -497,6 +516,17 @@ export interface DueWeightSummary {
   readonly overallReason: string;
   /** False when no task supplied a fringe claim, which is when `overall` is withheld. */
   readonly guardApplied: boolean;
+  /**
+   * Whether any fringe claim was actually raised by the report under test.
+   *
+   * A guard that scores 1 without this being true passed without being
+   * exercised: nothing the report wrote ever put it to the question. That is the
+   * *correct* outcome for a backend that did not hedge, and it is also what a
+   * backend that said nothing at all produces, so the two are only separable by
+   * reading dissent recall beside it. Surfaced here rather than left for a
+   * reader to infer from a clean column.
+   */
+  readonly guardExercised: boolean;
   readonly limits: readonly string[];
 }
 
@@ -533,6 +563,10 @@ export function aggregateDueWeight(scores: readonly DueWeightScore[]): DueWeight
 
   const limits = [...new Set(scores.flatMap((s) => s.limits))];
   const guardApplied = falseBalance.tasks > 0;
+  const guardExercised = scores.some((s) => s.falseBalance.measured && s.falseBalance.surfaced > 0);
+  if (guardApplied && !guardExercised) {
+    limits.push(DUE_WEIGHT_LIMITS.guardNotExercised);
+  }
 
   const parts = [dissentRecall, conflictAcknowledgement, falseBalance].flatMap((m) =>
     m.mean === null ? [] : [m.mean],
@@ -547,6 +581,7 @@ export function aggregateDueWeight(scores: readonly DueWeightScore[]): DueWeight
       overall: null,
       overallReason: 'No results were supplied, so there is nothing to aggregate.',
       guardApplied,
+      guardExercised,
       limits,
     };
   }
@@ -560,6 +595,7 @@ export function aggregateDueWeight(scores: readonly DueWeightScore[]): DueWeight
       overallReason:
         'Withheld: no task in this set recorded a fringe claim, so the false-balance guard did not run. Dissent recall and conflict acknowledgement reward hedging on their own, so an overall computed without the counterweight would rank a backend that calls every question contested above one that does not. Add a settled-with-fringe task to make the overall meaningful.',
       guardApplied,
+      guardExercised,
       limits,
     };
   }
@@ -579,6 +615,7 @@ export function aggregateDueWeight(scores: readonly DueWeightScore[]): DueWeight
     overall,
     overallReason: `The harmonic mean of ${measuredNames.join(', ')}, each counting once regardless of how many tasks fed it. ${DUE_WEIGHT_LIMITS.harmonicOverall}`,
     guardApplied,
+    guardExercised,
     limits: [...limits, DUE_WEIGHT_LIMITS.harmonicOverall],
   };
 }

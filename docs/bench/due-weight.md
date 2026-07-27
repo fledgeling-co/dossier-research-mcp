@@ -73,6 +73,8 @@ Per recorded fringe claim:
 
 Mentioning a fringe claim in order to dismiss it is correct behaviour, and on a bare string search it is indistinguishable from presenting it as contested. `rejectionCues` on the task is what makes the category scoreable at all.
 
+**A perfect guard score is ambiguous on its own, so the summary also reports `guardExercised`.** A report that says nothing at all scores 1 here, and correctly: it did not present a fringe claim as contested. So does a report that engaged with the question properly. The two are only separable by reading dissent recall beside the guard, which is exactly what the overall does. `guardExercised` is false when no report in the set raised any recorded fringe claim, which means the guard passed without anything ever putting it to the question, and a limit says so rather than letting a clean column imply a test that happened.
+
 ## The limits, stated
 
 Every one of these travels in the scorer's own output as well as living here, because a limit in a document nobody opens is not a limit anyone knows about.

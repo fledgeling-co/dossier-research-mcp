@@ -216,6 +216,31 @@ describe('the false-balance guard is the counterweight', () => {
   });
 });
 
+describe('a guard score is not the same as a guard that ran', () => {
+  // DUEWT-21
+  it('reports the guard as exercised only when a report actually raised a fringe claim', () => {
+    expect(run(hedgeEverything).guardExercised).toBe(true);
+    // The honest backend names the claim in order to dismiss it, which is still
+    // putting the guard to the question.
+    expect(run(weighEvidence).guardExercised).toBe(true);
+  });
+
+  // DUEWT-21
+  it('scores a silent backend perfectly on the guard, and says the guard never ran', () => {
+    // A report that says nothing did not present a fringe claim as contested,
+    // so 1.0 is literally correct — and it is also what a useless backend
+    // produces. The summary refuses to let that clean column stand alone.
+    const silent = run(() => ({ text: '' }));
+    expect(silent.falseBalance.mean).toBe(1);
+    expect(silent.guardApplied).toBe(true);
+    expect(silent.guardExercised).toBe(false);
+    expect(silent.limits.some((l) => l.includes('without being exercised'))).toBe(true);
+    // And the overall still refuses to reward it, because recall is zero.
+    expect(silent.dissentRecall.mean).toBe(0);
+    expect(silent.overall).toBe(0);
+  });
+});
+
 describe('the overall is withheld when the guard did not run', () => {
   // DUEWT-14
   it('reports no overall, and says why, on a corpus with no fringe task', () => {
