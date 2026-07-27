@@ -49,14 +49,14 @@ BENCH-09 is hand-authoring work and is the long pole in wall-clock terms. It sta
 | ID | Title | Deps | Status | Branch | Outcome |
 |---|---|---|---|---|---|
 | BENCH-01 | Task format, gold-set schema and loader | none | **Merged** | `ai/bench-01` | 853 tests green; found 4 cross-brief defects |
-| BENCH-02 | The run harness | 01 | **Running** | | |
-| BENCH-03 | Citation integrity scorers | 01 | **Running** | | |
-| BENCH-04 | Accuracy and relevance scorers | 01 | **Running** | | |
-| BENCH-05 | Due weight, viewpoint coverage | 01 | **Running** | | |
-| BENCH-06 | Calibration and refusal correctness | 01 | **Running** | | |
-| BENCH-07 | Source quality and syndication | 01 | **Running** | | |
+| BENCH-02 | The run harness | 01 | **Resumed** | | |
+| BENCH-03 | Citation integrity scorers | 01 | Paused | | |
+| BENCH-04 | Accuracy and relevance scorers | 01 | Paused | | |
+| BENCH-05 | Due weight, viewpoint coverage | 01 | Paused | | |
+| BENCH-06 | Calibration and refusal correctness | 01 | **Resumed** | | |
+| BENCH-07 | Source quality and syndication | 01 | Paused | | |
 | BENCH-08 | Reporting and comparison | 02, scorers | Blocked | | |
-| BENCH-09 | The seed task corpus | 01 | **Running** | | |
+| BENCH-09 | The seed task corpus | 01 | **Resumed** | | |
 | BENCH-10 | Self-eval of Dossier's own checking | 01, 03 | Blocked | | |
 | BENCH-11 | Which combination is best | 02, scorers | Blocked | | |
 | BENCH-12 | A finished report is an input to the next one | none | Queued | | |
@@ -103,3 +103,13 @@ Merges are serialized by the orchestrator, one branch at a time, so conflicts in
 - **27 Jul, wave 2 dispatched** — Seven runners: BENCH-02, 03, 04, 05, 06, 07 and 09, all unblocked by the BENCH-01 merge. Each carries the defects BENCH-01 verified in its area, so nobody rediscovers them: 02 fixes the repetition dedupe and settles the stale-task contradiction, 06 inherits recency as an orphan whose assumed rule does not exist, 07 gets the corrected function name.
 
   Merges stay serialized here. All seven will touch `docs/test-plan.md` and `CHANGELOG.md`, which is expected and is why they append rather than rewrite; conflicts are resolved at merge, one branch at a time, not raced in the worktrees.
+
+## Concurrency limit, learned the hard way
+
+**Seven concurrent Opus runners exhausted the account binding.** All seven died within minutes on `503 all-accounts-exhausted`, a capacity error rather than a fault in any of them. The ship-fleet skill permits eight slots; this account does not sustain seven.
+
+**Resume and dispatch in batches of three.** That is the operating limit for this repo until something says otherwise.
+
+Nothing was lost, but the cost was real: four worktrees held uncommitted source and no branch had a single commit, so a restart meant re-deriving work already done. Every resumed runner is now told to **commit early**. An uncommitted worktree is exactly what a capacity error takes.
+
+- **27 Jul, wave 2 died and was resumed in batches** — All seven failed on capacity. Six specs and three plans survived on disk, and four worktrees held uncommitted source. Resumed BENCH-02, 06 and 09 first, being the three furthest along and therefore with the most at risk. BENCH-03, 04, 05 and 07 are paused pending a free batch. BENCH-03 reported before dying that Codex registry probes gave three findings that change its design, which is worth collecting when it resumes.
