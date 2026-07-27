@@ -132,6 +132,16 @@ bench/                  the benchmark. NOT compiled into dist/ and NOT published
   src/tasks/corpus.ts   the pure synchronous loader. Imports no filesystem, on
                         purpose, so a scorer is testable without one
   src/tasks/files.ts    the only part that reads a disk
+  src/score/prose.ts       the report's text with every citation form stripped, and
+                        the negation rule; a denied figure is still a figure
+  src/score/units.ts       canonical units; percent, percentage points, basis
+                        points and each currency never collapse together
+  src/score/numbers.ts     every way a model writes one figure, and the decimal
+                        shift that makes scaling exact
+  src/score/dates.ts       the accepted written date forms, compared as UTC days
+  src/score/accuracy.ts    was each recorded answer actually stated; produces the
+                        recovery record calibration takes as an input
+  src/score/relevance.ts   required-term coverage minus drift. Crude on purpose
   src/score/confidence.ts  the confidence markers a report states, and what each governs
   src/score/calibration.ts pairs a stated confidence with the outcome; Brier + reliability
   src/score/refusal.ts     the two families where the right answer is not an answer

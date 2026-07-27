@@ -16,6 +16,19 @@ This project follows [semantic versioning](https://semver.org/). Until 1.0 the m
 
   **An outline is not the report**, and that distinction is the load-bearing one: an outline gives every heading and no content, which is exactly what makes it feel like having read. Outline, summary and grep reads are recorded and never counted toward coverage. Coverage counts distinct sections rather than calls, so re-reading one section while composing does not read as having covered a report.
 
+- **Accuracy and relevance scoring for the benchmark, in `bench/src/score/`.** Accuracy decides, per recorded answer, whether a report actually stated it; relevance decides whether the report is about the right subject at all. Both are pure functions over a report's text and a loaded task, and neither reads a file, calls a network or asks a model anything. Documented in [`docs/bench/scoring.md`](docs/bench/scoring.md).
+
+  **A gold fact missed on formatting was the failure worth engineering against.** `1.2 billion`, `1,200,000,000` and `1.2B` are one figure, and a scorer that knows one spelling of it reports every backend as worse than it is while saying nothing about why. Scaling therefore shifts a decimal point in a string rather than multiplying: `1.005 * 1e6` is `1004999.9999999999` and `0.267 * 1e9` is `267000000.00000003`, either of which fails an exact tolerance for reasons having nothing to do with research. Those cases were found by sweeping real figures rather than guessed, after the first draft of the test asserted `1.1 * 1e6` was inexact, which it is not.
+
+  **A right figure with the wrong unit scores zero, not partial credit**, which is the reason the task format requires a unit. Units are canonicalised and never converted, and percent, percentage points, basis points and each currency stay distinct because those are the confusions being caught. A unit the lexicon has never heard of is its own class, so an author unit like `questions` or `CVSS v3.1 base score` works without a place in a global table. A figure with *no* unit beside it still counts and is reported as `unstated`: the corpus carries units no report will ever write out, and refusing them would be a false negative in the category where false negatives are most expensive.
+
+  **Matching runs over prose, never citations.** Every citation form the existing extractor recognises is stripped first, including bare URLs and link text that is a bare hostname, because a backend that pasted a URL containing the figure did no reasoning. A test reads the forms out of the extractor rather than trusting a hand-written list to stay in step with it.
+
+  **A value found only inside a denial is not recovered.** "Revenue was not 1.2 billion" contains the figure. The rule is a fixed cue list scoped to a clause and reported as exactly that rather than as comprehension; `no` is deliberately not a cue, because "no fewer than 303" asserts 303.
+
+  Relevance is required-term coverage minus a drift penalty, clamped, with coverage and drift also reported separately. It is crude on purpose: it only separates an answer about the right subject from one that is not, and accuracy decides whether it is correct.
+
+  The accuracy scorer's output is the recovery record the calibration scorer already took as an input, keyed by the answer id the task format requires for exactly that seam.
 
 ### Fixed
 

@@ -1,8 +1,93 @@
-# Calibration, refusal correctness and recency
+# Accuracy, relevance, calibration, refusal correctness and recency
 
-Three of the benchmark's scored dimensions, in `bench/src/score/`. Every function here is pure, synchronous, and takes a report's text plus a loaded task. Nothing reads a file, nothing calls a network, and nothing calls a model, because the rule governing the whole benchmark is that every score is computed by code from a gold set fixed before the run.
+Five of the benchmark's scored dimensions, in `bench/src/score/`. Every function here is pure, synchronous, and takes a report's text plus a loaded task. Nothing reads a file, nothing calls a network, and nothing calls a model, because the rule governing the whole benchmark is that every score is computed by code from a gold set fixed before the run.
 
 The task format these read is [`task-format.md`](task-format.md). The design is [`docs/plan/benchmark.md`](../plan/benchmark.md).
+
+## Accuracy
+
+Did the report actually state the answers the gold set records? The score is the share recovered.
+
+Two failure modes make this harder than a string search, and both are silent.
+
+### Number formats are where the false negatives live
+
+`1.2 billion`, `1,200,000,000` and `1.2B` are one figure. A scorer that knows one spelling of it measures prose style rather than research quality, and reports every backend as worse than it is with nothing in the output to say why. So the reader handles comma grouping, plain and decimal forms, exponents, currency symbols and codes before the number, scale words and suffixes after it, and the ambiguity between them.
+
+**Scaling shifts a decimal point in a string rather than multiplying.** `1.005 * 1e6` is `1004999.9999999999`, `0.267 * 1e9` is `267000000.00000003`, and either would fail an exact tolerance for reasons having nothing to do with research. Those cases were found by sweeping real two- and three-decimal figures, not guessed: the first draft of the test asserted `1.1 * 1e6` was inexact, and it is not.
+
+**Nothing here emits exponential notation.** `String(1e21)` and `(1e21).toFixed(0)` are both `1e+21`, and a benchmark that prints that has misreported its own gold set.
+
+**An ambiguous suffix is read every plausible way.** `450m` is 450 million and it is 450 metres. Both readings are produced and a fact matches if either fits, because the expensive error here is the false negative and an ambiguity the report genuinely left open should not be resolved against the backend.
+
+### A right figure with the wrong unit scores zero
+
+Not partial credit. The unit is why the task format requires one on every numeric answer.
+
+The rule is mechanical, and it is the whole of `units.ts`:
+
+- Units are **canonicalised, never converted**. Kilometres do not satisfy a gold in metres; conversion would put arithmetic inside a match test.
+- Percent, percentage points and basis points are three units, and two currencies are two units. Those are the confusions being caught, so they can never canonicalise together. Lookup is longest-form-first, which is why `percentage points` is never read as `percentage`.
+- A unit the lexicon has never heard of is **its own class**, so an author unit like `questions` compares equal to itself and unequal to everything else.
+- A gold unit may carry its own scale word. `1.2` with unit `USD billions` and `$1.2bn` in a report are one fact.
+
+**Unstated is not wrong.** A figure with no recognised unit written beside it still counts, and is reported as `unstated` rather than as equal to a stated one. The corpus really does carry units like `CVSS v3.1 base score` that no report will ever write out, and refusing those would be a false negative in the category where false negatives are most expensive. A figure carrying a *recognised different* unit is refused outright.
+
+### Citations are not prose
+
+Matching runs over the report's prose with every citation form stripped: markdown link destinations, images, CommonMark autolinks, reference definitions, bare URLs and `cite` tags. That is every form `extractCitedUrls` recognises, and a test reads them out of that module rather than trusting this list to stay in step.
+
+Link *text* is kept, because "as Reuters reported" is prose the model wrote. Text that is itself a bare hostname is dropped with its URL, because `[arxiv.org](https://arxiv.org/...)` is this repo's own citation style and the visible half is part of the citation.
+
+Without this, a backend that pasted a URL containing the figure would score for reasoning it never did.
+
+### A denied figure is still a figure
+
+"Revenue was not 1.2 billion" contains `1.2 billion`. A value found only inside a denial is not recovered; one plain occurrence anywhere is enough.
+
+The scope is the clause containing the match, bounded by a contrast word and by a ten-word window, against a fixed cue list. `no` on its own is deliberately absent: "no fewer than 303 questions" asserts 303, and catching it would invent a false negative.
+
+This is a cue list, not comprehension. It cannot see "the claim that revenue reached 1.2 billion is disputed", and the result says so in its notes rather than implying it read the sentence. `ignoreNegation` re-runs a corpus with the rule off, so its effect is measured rather than argued about.
+
+### Dates
+
+The accepted written forms are enumerated rather than handed to `Date.parse`, which accepts a bare year as a date and differs between engines. `2026-07-08`, `2026/07/08`, `8 July 2026`, `July 8, 2026`, three-letter months and ordinal suffixes all match. A month and year with no day does not: naming the month is not finding the day.
+
+`03/04/2026` is genuinely ambiguous, so both readings are produced and either may match, with the ambiguity carried on the result. Guessing a locale would score one convention's reports better than the other's.
+
+### Tolerance
+
+| Arm | Test |
+|---|---|
+| `exact` | within `1e-12` relative. A float-noise allowance, not a width |
+| `absolute` | `abs(reported - gold) <= value` |
+| `relative` | `abs(reported - gold) <= fraction * abs(gold)`. At a gold of zero this has no width and behaves as equality, which is noted on the result rather than left to be discovered |
+| `significantFigures` | both sides rounded to the stated digits, then compared |
+
+### What it returns
+
+`not-applicable` when the task records no gold facts, never a zero: a refusal task carries no answers, and a zero in that denominator reports every backend as worse than it is. Otherwise the share recovered, a per-answer verdict with the reason in words, and the **recovery record keyed by answer id** that `scoreCalibration` takes as its input. That record is the reason answer ids are required by the task format.
+
+Staleness is not consulted. A stale task loads, is scored, and is counted as stale by the run harness, which prints the count before the run.
+
+## Relevance
+
+Is the report about the right subject at all? The naive version of this needs a model to read it, and the design forbids one, so the measurement moves to authoring time: the author records the required terms a competent answer cannot avoid and the drift terms that mean it wandered.
+
+```
+coverage   = required terms present / required terms recorded
+drift      = drift terms present / drift terms recorded     (zero when none are recorded)
+score      = clamp(coverage - weight * drift, 0, 1)          (weight 1 by default)
+```
+
+Each term counts once whether it appears once or forty times. `coverage` and `drift` are both returned beside the score, because a collapsed number hides what its components say and a reader who disagrees with the weight can recompute without re-running anything.
+
+**It is crude on purpose and must stay crude.** Its whole job is to separate an answer about the right subject from one that is not; whether the answer is correct is accuracy's question. Upgrading this into something that needs a model would give up the property that makes the benchmark re-runnable for free.
+
+Two smaller rules. Terms match over prose rather than citations, or a required term like `containerd` would score coverage for every URL a report cited. And **negation is deliberately not applied here**, unlike in accuracy: a report saying "this is not about Kubernetes" has raised Kubernetes, and polarity changes whether an *answer* is right rather than whether a subject came up.
+
+A term is matched literally, on word boundaries. A report using a synonym the author did not record scores nothing for it, and the result says so rather than hiding it. `not-applicable` when the task records no required terms.
+
 
 ## Calibration
 
@@ -172,11 +257,21 @@ An unreadable **as-of** date throws. It is the caller's argument rather than the
 ## Using them
 
 ```ts
-import { scoreCalibration, scoreRefusal, scoreRecency } from '../../bench/src/score/index.js';
+import {
+  scoreAccuracy,
+  scoreRelevance,
+  scoreCalibration,
+  scoreRefusal,
+  scoreRecency,
+} from '../../bench/src/score/index.js';
 
-const calibration = scoreCalibration(report, task, { revenue: true, headcount: false });
+const accuracy = scoreAccuracy(report, task);
+const relevance = scoreRelevance(report, task);
+const calibration = scoreCalibration(report, task, accuracy.recovery);
 const refusal = scoreRefusal(report, task);
 const recency = scoreRecency(citedSources, task.asOf);
 ```
 
-Every one of the three returns a discriminated union on `status`, so a caller has to handle the not-applicable and unmeasurable cases rather than reading a number that was never computed.
+Accuracy runs before calibration, because calibration cannot grade a stated confidence without knowing whether the answer it governs was right, and it deliberately does not work that out for itself.
+
+Every one of the five returns a discriminated union on `status`, so a caller has to handle the not-applicable and unmeasurable cases rather than reading a number that was never computed.
