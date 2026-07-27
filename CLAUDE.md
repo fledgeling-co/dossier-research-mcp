@@ -97,6 +97,8 @@ docs/                   the documentation set; README is the approachable entry 
   test-plan.md          the AC-traceability matrix
   bench/task-format.md  the benchmark task format, for whoever hand-writes a gold set
   bench/scoring.md      what the scorers measure, and what each number cannot mean
+  bench/run-harness.md  the matrix, the spend refusal, resume, and why the
+                        harness is built rather than adopted from promptfoo
   releasing.md          the tag-triggered publish flow
   deep-research-api-vs-agent.md   which Gemini surface fits which job
   providers/            per-provider guides (Gemini, Perplexity, OpenAI, xAI,
@@ -133,6 +135,14 @@ bench/                  the benchmark. NOT compiled into dist/ and NOT published
   src/score/calibration.ts pairs a stated confidence with the outcome; Brier + reliability
   src/score/refusal.ts     the two families where the right answer is not an answer
   src/score/recency.ts     the durability axis the design assumed existed and did not
+  src/run/cell.ts       what one matrix cell is; the resume key, the cell
+                        record schema, the spread floor
+  src/run/plan.ts       build the matrix, subtract what is recorded, total the
+                        remainder's worst case, refuse above the ceiling
+  src/run/harness.ts    bounded-concurrency execution over an injected executor
+  src/run/store.ts      the append-only JSONL cell store
+  src/run/dossier.ts    the only part that can spend; goes through Runner.start
+  src/run/cli.ts        the entry point. --ceiling is required
 ```
 
 **Boundary rule:** `gemini/client.ts` and `gemini/agents.ts` are the only files that touch the Gemini SDK. Everything downstream takes a `DeepResearchClient` by injection, which is what makes the whole runner/tool layer testable without a network or a key.

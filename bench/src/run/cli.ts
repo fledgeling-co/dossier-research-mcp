@@ -1,4 +1,6 @@
 import { join, resolve } from 'node:path';
+import { argv } from 'node:process';
+import { pathToFileURL } from 'node:url';
 import { buildDeps } from '../../../src/server.js';
 import type { ProviderId } from '../../../src/providers/types.js';
 import type { StartRunArgs } from '../../../src/research/runner.js';
@@ -219,4 +221,23 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
   } finally {
     deps.runner.stopPolling();
   }
+}
+
+/**
+ * Run only when invoked directly, never on import.
+ *
+ * A test that imports this module to check the argument parsing must not
+ * start a batch as a side effect of the import, which is the one way a
+ * hermetic suite could be made to spend money.
+ */
+const invokedDirectly = argv[1] !== undefined && import.meta.url === pathToFileURL(argv[1]).href;
+if (invokedDirectly) {
+  main()
+    .then((code) => {
+      process.exitCode = code;
+    })
+    .catch((e: unknown) => {
+      say(e instanceof Error ? e.message : String(e));
+      process.exitCode = 1;
+    });
 }

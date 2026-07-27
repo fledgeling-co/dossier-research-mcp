@@ -141,6 +141,19 @@ The cause is worth stating as a rule for whoever authors the next batch: **a sin
 Two shapes survived, and they are the shapes to build on: **answers that are an absence**, and **fabricated premises**. Neither is retrievable from a single document, because there is no document to retrieve.
 
 The prior art names the fix, LiveDRBench's problem inversion, and BENCH-09 did not apply it. That is the highest-value next step in the corpus, ahead of adding categories.
+## Amended again 27 July 2026, by BENCH-02
+
+Two corrections, both made visibly rather than by editing the text above into agreement with what shipped.
+
+**Wrong: "a stale task is reported as stale rather than scored."** A stale task **loads, is scored, and is counted as stale**, which is what BENCH-01 implemented and what the honest limits section above now points at. Four reasons decided it, in this order.
+
+Dropping stale tasks silently narrows the corpus, which is the exact failure the loader already refuses when it fails a whole load rather than skipping one bad file. Staleness is a property of the gold rather than of the backend, so excluding the task punishes every backend identically and hides that the suite is decaying, which is information the reader needs more than a marginally cleaner number. It would make results non-comparable over time, because the same suite would score a different set of tasks every month as items crossed the 183-day line, and a movement between two runs could then be the backend or could be the calendar with no way to tell. And counting with a flag preserves the option that dropping destroys: from one run a report can compute both an all-tasks figure and a fresh-tasks-only figure, whereas from a corpus that dropped stale tasks at load the first can never be recovered without re-buying the research.
+
+**The rule now lives in exactly one place**, [`../bench/task-format.md`](../bench/task-format.md), and this document and every downstream item reference it rather than restating it.
+
+**Wrong, or at least too optimistic: "adopt the shell."** promptfoo was evaluated against the real package on 27 July 2026 before anything was built on it, as the brief required. Three of the four claims hold. The fourth does not: `promptfoo eval --resume` identifies the completed set correctly and then re-executes the whole matrix anyway, which on a benchmark whose cells cost $1 to $7 each means one resume re-buys everything already paid for. It also has no budget gate, and cannot have one at its extension points, because a provider and an assertion are both called per cell after the batch has started.
+
+So the adoption is split where the evidence splits it. The scorer contract is adopted exactly: every scorer returns `{ pass, score, reason }`, which is promptfoo's `GradingResult`, so a `javascript` assertion is a two-line wrapper. The execution shell is built here, because the two missing pieces are the control loop. The measurement, the reproduction and the reasoning are in [`../bench/run-harness.md`](../bench/run-harness.md).
 
 ## Implementation
 
@@ -155,7 +168,8 @@ bench/
   tasks/*.yaml        one file per task: question, gold facts, required terms,
                       known dissent URLs, as-of date, category
   src/score/*.ts      one module per category, pure functions over a report
-  src/run.ts          matrix of task x backend x repetition
+  src/run/*.ts        matrix of task x backend x repetition; plan, refuse,
+                      execute, resume. Built, not adopted; see the amendment
   results/*.jsonl     one line per cell, raw, so scoring can be re-run
                       without re-running the research
 ```
@@ -165,5 +179,5 @@ Separating the run from the scoring matters more than it looks: research is the 
 ## The honest limits
 
 - **Task authoring is the bottleneck and the weak point.** Ten categories at ten tasks each is a hundred hand-built gold sets. A thin suite will produce confident rankings from too little evidence, which is the exact failure the product is against.
-- **Gold sets rot.** A revenue figure is correct until the next filing. Every task carries an as-of date and a re-verification date, and a task whose gold has not been re-checked inside six months is reported as stale rather than scored.
+- **Gold sets rot.** A revenue figure is correct until the next filing. Every task carries an as-of date and a re-verification date, and a task whose gold has not been re-checked inside six months is flagged stale. **Corrected 27 July 2026: it is still scored.** See the amendment below; [`../bench/task-format.md`](../bench/task-format.md) is the one place that rule is written.
 - **Token containment is not entailment.** A page can contain "28.6%" while saying something else about it entirely. This is a deliberate trade: the check is weaker than a model's judgement and it is exact, repeatable and free, which for a regression suite is the better bargain. Reported as what it is, never as claim verification.
