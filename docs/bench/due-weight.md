@@ -61,6 +61,8 @@ Per recorded conflicting figure, graded four ways:
 
 A stated number is **claimed by at most one gold value**. Without that rule, two values whose tolerances overlap are both found in a report that stated a single number, and a one-sided report scores full credit for disclosing a disagreement it never mentioned.
 
+The assignment is a maximum matching, not a greedy pass. Claiming greedily in the order the author wrote the values enforces the rule but answers the wrong question: a loose value can take the one mention a tighter value uniquely needed, and a report that did state both figures is then reported one-sided. That error runs in the direction this benchmark is most careful about, because a false negative makes every backend look worse than it is.
+
 ### The false-balance guard
 
 Per recorded fringe claim:

@@ -273,6 +273,35 @@ describe('conflict acknowledgement', () => {
     expect(score.conflictAcknowledgement.findings[0]?.values.filter((v) => v.found)).toHaveLength(1);
   });
 
+  it('assigns mentions so a loose value cannot steal the one a tight value needed', () => {
+    // Greedy claiming in value order fails this: the loose value is written
+    // first and would take 1,200,000,000, leaving the exact value with nothing
+    // and reporting a report that stated BOTH figures as one-sided. A false
+    // negative in exactly the direction that makes every backend look worse.
+    const task = buildTask({
+      category: 'contested',
+      conflictingFigures: [
+        {
+          quantity: 'reported revenue',
+          values: [
+            // Matches either number.
+            { ...numericValue('loose', 1175000000), tolerance: { kind: 'relative', fraction: 0.05 } },
+            // Matches only 1,200,000,000.
+            { ...numericValue('tight', 1200000000), tolerance: { kind: 'exact' } },
+          ],
+        },
+      ],
+    });
+    const score = scoreDueWeight(task, {
+      text: 'Reported revenue was 1,200,000,000 in the filing and 1,150,000,000 in the release.',
+    });
+    if (!score.conflictAcknowledgement.measured) throw new Error('expected a measured metric');
+    expect(score.conflictAcknowledgement.findings[0]?.outcome).toBe('both-figures');
+    const values = score.conflictAcknowledgement.findings[0]?.values ?? [];
+    expect(values.find((v) => v.id === 'tight')?.matchedText).toBe('1,200,000,000');
+    expect(values.find((v) => v.id === 'loose')?.matchedText).toBe('1,150,000,000');
+  });
+
   // DUEWT-20
   it('reports the declared unit where it sits beside the figure, and never gates on it', () => {
     const withUnit = scoreDueWeight(withConflict(), {

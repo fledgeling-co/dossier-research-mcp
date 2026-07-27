@@ -319,29 +319,68 @@ function scoreDissent(
   };
 }
 
+/**
+ * Give each gold value at most one distinct mention, matching as many as
+ * possible.
+ *
+ * **One stated number must not satisfy two gold values.** Without that rule, a
+ * report stating a single figure scores as having disclosed a disagreement it
+ * never mentioned whenever two recorded values have overlapping tolerances,
+ * which is a score over a check that did not happen and the worst failure this
+ * scorer can have.
+ *
+ * Claiming greedily in value order enforces the rule but answers the wrong
+ * question: a loose value can take the one mention a tighter value uniquely
+ * needed, and then a report that did state both figures is reported one-sided.
+ * That error runs in the direction the whole benchmark is most careful about,
+ * because a false negative makes every backend look worse than it is.
+ *
+ * So this is a maximum bipartite matching (Kuhn's augmenting paths) rather than
+ * a greedy pass. A gold set carries at most ten values, so the cost is nothing
+ * and the answer no longer depends on the order the author happened to write
+ * them in. Candidates are walked in report order, so where the assignment is
+ * free the earliest mention wins and the quoted text is the first one a reader
+ * would find.
+ */
+function assignMentions(
+  values: ConflictingFigure['values'],
+  mentions: readonly NumericMention[],
+): (NumericMention | null)[] {
+  const candidates = values.map((value) =>
+    mentions.flatMap((m, i) => (matchesTolerance(m.value, value.value, value.tolerance) ? [i] : [])),
+  );
+  const holderOfMention = new Map<number, number>();
+
+  const augment = (vi: number, seen: Set<number>): boolean => {
+    for (const mi of candidates[vi] ?? []) {
+      if (seen.has(mi)) continue;
+      seen.add(mi);
+      const holder = holderOfMention.get(mi);
+      if (holder === undefined || augment(holder, seen)) {
+        holderOfMention.set(mi, vi);
+        return true;
+      }
+    }
+    return false;
+  };
+
+  for (let vi = 0; vi < values.length; vi += 1) augment(vi, new Set<number>());
+
+  const out: (NumericMention | null)[] = values.map(() => null);
+  for (const [mi, vi] of holderOfMention) out[vi] = mentions[mi] ?? null;
+  return out;
+}
+
 function scoreOneConflict(
   figure: ConflictingFigure,
   normalised: string,
   mentions: readonly NumericMention[],
 ): ConflictFinding {
-  // One mention can satisfy at most one gold value. Without this, two values
-  // whose tolerances overlap are both "found" in a report that stated a single
-  // number, and a one-sided report scores full credit for acknowledging a
-  // disagreement it never disclosed. Greedy first-unused, so the answer does not
-  // depend on iteration luck.
-  const claimed = new Set<number>();
+  const assigned = assignMentions(figure.values, mentions);
   const anchors: number[] = [];
-  const values = figure.values.map((value): ConflictValueFinding => {
-    let hit: NumericMention | null = null;
-    for (let i = 0; i < mentions.length; i += 1) {
-      const mention = mentions[i];
-      if (mention === undefined || claimed.has(i)) continue;
-      if (!matchesTolerance(mention.value, value.value, value.tolerance)) continue;
-      claimed.add(i);
-      hit = mention;
-      anchors.push(mention.index);
-      break;
-    }
+  const values = figure.values.map((value, vi): ConflictValueFinding => {
+    const hit = assigned[vi] ?? null;
+    if (hit !== null) anchors.push(hit.index);
     const unitNearby =
       hit !== null &&
       findNearbyCue(normalised, [hit.index], [value.unit], UNIT_PROXIMITY_CHARS) !== null;

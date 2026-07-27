@@ -484,6 +484,7 @@ The matrix is task times backend times repetition, and the money is spent one ce
 | **DUEWT-19** | Cited URLs are derived from the report text when the caller omits them, and an explicitly supplied list is used unchanged | unit: `due-weight` | ✓ |
 | **DUEWT-20** | The declared unit is reported where it sits near the matched figure and never gates the match | unit: `due-weight` | ✓ |
 | **DUEWT-21** | A guard score of one is reported alongside whether any report actually raised a fringe claim, so a silent backend cannot read as a guard that ran | unit: `due-weight-hedging` | ✓ |
+| **DUEWT-22** | Each stated number is assigned to at most one gold value, and by maximum matching rather than greedily, so a loose value cannot take the mention a tighter value uniquely needed | unit: `due-weight` | ✓ |
 
 ### The paid project
 
