@@ -149,6 +149,17 @@ export interface AggregateInput {
   readonly cells: readonly ScoredCell[];
   readonly corpus: TaskCorpus;
   readonly minTasksPerCategory?: number | undefined;
+  /**
+   * Cell keys the caller could not harvest because the corpus no longer holds
+   * their task.
+   *
+   * Passed in rather than invented. A `ScoredCell` needs a category and a
+   * staleness flag, both of which come from the task, so a caller that met an
+   * orphan cannot honestly construct one; fabricating a category to get it into
+   * the list would put a wrong value in the store's own output. The keys travel
+   * on their own and are reported as orphans.
+   */
+  readonly orphanCells?: readonly string[] | undefined;
 }
 
 const EMPTY_REGISTRY: RegistryCounts = { present: 0, absent: 0, unchecked: 0, invalid: 0 };
@@ -488,10 +499,12 @@ export function aggregate(input: AggregateInput): BenchAggregate {
   // than dropped. It means the corpus moved under a stored result, and a
   // silently narrower denominator is the exact failure the loader already
   // refuses at the other end of the pipeline.
-  const orphanCells = input.cells
-    .filter((c) => !knownTasks.has(c.taskId))
-    .map((c) => c.key)
-    .sort((a, b) => a.localeCompare(b));
+  const orphanCells = [
+    ...new Set([
+      ...input.cells.filter((c) => !knownTasks.has(c.taskId)).map((c) => c.key),
+      ...(input.orphanCells ?? []),
+    ]),
+  ].sort((a, b) => a.localeCompare(b));
   const cells = input.cells.filter((c) => knownTasks.has(c.taskId));
 
   const providers = [...new Set(cells.map((c) => c.provider))].sort((a, b) => a.localeCompare(b));
