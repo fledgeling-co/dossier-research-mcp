@@ -3326,7 +3326,10 @@ async function renderCliModels(storeDir: string, probeNow: boolean, ready: reado
   );
 
   if (probeNow && ready.length > 0) {
-    const answers = await Promise.all(ready.map((id) => probeCliModel(CLI_ADAPTERS.find((a) => a.id === id)!)));
+    // Filtered from the adapter table rather than looked up per id, so there is
+    // no `find(...)!` to be wrong about if the two lists ever drift.
+    const targets = CLI_ADAPTERS.filter((a) => ready.includes(a.id));
+    const answers = await Promise.all(targets.map((a) => probeCliModel(a)));
     const probed = new Map<CliId, string>();
     for (const a of answers) if (a.state === 'probed' && a.model) probed.set(a.id, a.model);
     await writeModelCache(storeDir, probed);
@@ -3432,7 +3435,11 @@ function registerResources(server: FastMCP, deps: ServerDeps): void {
           : `**${String(usable.length)} of ${String(rows.length)} backends usable.** Nothing here was verified against a live API; that would cost money and is not done automatically.`,
       );
 
-      if (args.probeLocal && !deps.config.hermetic) {
+      // `probeModels` implies `probeLocal`. Asking which model a CLI serves
+      // requires knowing which CLIs are identified and signed in, so honouring
+      // one flag while ignoring the other would silently do nothing and say
+      // nothing about why.
+      if ((args.probeLocal || args.probeModels) && !deps.config.hermetic) {
         const clis = await probeAllClis();
         lines.push('', '## Coding CLIs on this machine', '');
         lines.push(
