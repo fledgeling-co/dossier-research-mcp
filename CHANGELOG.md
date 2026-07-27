@@ -8,6 +8,11 @@ This project follows [semantic versioning](https://semver.org/). Until 1.0 the m
 
 ## [Unreleased]
 
+### Fixed
+
+- **A source dated after the as-of date was graded fresh if it was less than half a day after it.** `assessStaleness` compared a rounded day count, and `Math.round(-0.4)` is `-0` while `-0 < 0` is false, so the `after-horizon` branch never fired inside twelve hours. A back-dated source or a transcription error in that window was silently accepted as current, which is precisely the case that branch exists to catch. It now compares the timestamps. Found by BENCH-06 while building the benchmark's own copy of the rule, which is the argument for building a second implementation and diffing it against the first.
+
+
 ## [0.9.0] - 2026-07-27
 
 ### Fixed

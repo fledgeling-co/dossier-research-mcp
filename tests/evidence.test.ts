@@ -6,8 +6,7 @@ import {
   countsAsCorroboration,
   profileEvidence,
   renderProfile,
-  renderTrace,
-} from '../src/research/evidence.js';
+  renderTrace, assessStaleness } from '../src/research/evidence.js';
 
 /**
  * Evidence governance.
@@ -159,5 +158,23 @@ describe('a model saying "no source" is not a source', () => {
       { provider: 'b', text: 'x', urls: ['https://b.org/2'] },
     ]);
     expect(v.independentDomains).toBe(2);
+  });
+});
+
+describe('EVID-15: a source dated after the as-of date is caught however close it is', () => {
+  // `Math.round(-0.4)` is `-0` and `-0 < 0` is false, so the guard compared a
+  // rounded day count and missed everything inside twelve hours. Found by
+  // BENCH-06 building the benchmark's own copy of this rule.
+  it.each([1, 3, 6, 11, 23, 48])('catches a source %i hour(s) after the horizon', (hours) => {
+    const asOf = '2026-07-27T00:00:00Z';
+    const published = new Date(Date.parse(asOf) + hours * 3600_000).toISOString();
+    const result = assessStaleness(published, asOf, 'official');
+    expect(result.freshness, `${String(hours)}h after the horizon`).toBe('after-horizon');
+  });
+
+  it('still treats a source on the horizon itself as current, not future', () => {
+    const asOf = '2026-07-27T00:00:00Z';
+    const result = assessStaleness(asOf, asOf, 'official');
+    expect(result.freshness).not.toBe('after-horizon');
   });
 });

@@ -291,7 +291,12 @@ export function assessStaleness(
     };
   }
   const ageDays = Math.round((horizon - at) / DAY_MS);
-  if (ageDays < 0) {
+  // Compare the timestamps, not the rounded day count. `Math.round(-0.4)` is
+  // `-0`, and `-0 < 0` is false, so a source stamped up to twelve hours after
+  // the as-of date fell through this branch and was graded fresh. A back-dated
+  // source or a transcription error inside half a day was silently accepted as
+  // current, which is the one case this branch exists to catch.
+  if (at > horizon) {
     return {
       freshness: 'after-horizon',
       ageDays,
