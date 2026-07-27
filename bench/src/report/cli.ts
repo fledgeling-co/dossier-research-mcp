@@ -87,9 +87,16 @@ export function parseArgs(args: readonly string[]): ReportCliArgs {
   }
 
   const asOf = flags.get('as-of') ?? new Date().toISOString().slice(0, 10);
-  // Both checks are needed: the shape check rejects `2026-7-1`, and the parse
-  // check rejects `2026-02-31`, which matches the shape and is not a date.
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(asOf) || Number.isNaN(Date.parse(`${asOf}T00:00:00Z`))) {
+  // Shape, then round trip. The shape check rejects `2026-7-1`; the round trip
+  // rejects `2026-02-31`, which matches the shape, parses without complaint and
+  // silently becomes 3 March. A date that quietly moves would move every
+  // staleness answer in the report with it.
+  const parsedDate = new Date(`${asOf}T00:00:00Z`);
+  if (
+    !/^\d{4}-\d{2}-\d{2}$/.test(asOf) ||
+    Number.isNaN(parsedDate.getTime()) ||
+    parsedDate.toISOString().slice(0, 10) !== asOf
+  ) {
     throw new Error(`--as-of must be a real date as YYYY-MM-DD; got "${asOf}".`);
   }
 
