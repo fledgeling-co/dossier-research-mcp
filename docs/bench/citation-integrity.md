@@ -27,7 +27,7 @@ Every endpoint and every predicate below was checked against the live service on
 | Identifier | Endpoint | `present` | `absent` | Everything else |
 |---|---|---|---|---|
 | DOI | `api.crossref.org/works/{id}`, then on any non-200 `doi.org/api/handles/{id}` | Crossref 200, or handle 200 | handle 404 **and** body `responseCode` 100 | `unchecked` |
-| arXiv | `export.arxiv.org/api/query?id_list={id}` | 200 and `totalResults` at least 1 | 200 and `totalResults` 0 | `unchecked` |
+| arXiv | `export.arxiv.org/api/query?id_list={id}` | 200, `totalResults` at least 1, **and** an entry whose own id is the one asked about | 200 and `totalResults` 0 | `unchecked` |
 | PMID | `eutils.ncbi.nlm.nih.gov/.../esummary.fcgi?db=pubmed&id={id}&retmode=json` | 200 and `result[id]` with no `error` | 200 and `result[id].error` | `unchecked` |
 | ISBN | `openlibrary.org/api/books?bibkeys=ISBN:{id}&format=json` | 200 and the `ISBN:{id}` key is present | 200 and the body is `{}` | `unchecked` |
 | CVE | `services.nvd.nist.gov/rest/json/cves/2.0?cveId={id}` | 200 and `totalResults` at least 1 | 200 and `totalResults` 0 | `unchecked` |
@@ -39,6 +39,8 @@ Every endpoint and every predicate below was checked against the live service on
 **The book catalogue answers found for a made-up number.** `9789999999991` was fabricated for this test and resolves to a real OpenLibrary record that lists exactly that number; `9786060606062` returns `{}`. OpenLibrary is community-edited and its coverage is incomplete, so an ISBN result is **catalogue presence, never proof a book exists**, and the detail on every answer says so in both directions.
 
 **arXiv refuses ordinary use.** Every lookup across a seven-minute span answered `429 Rate exceeded`, after only a handful of requests. `unchecked` is the ordinary answer from that archive rather than the rare one, and it is the clearest argument in the whole slice for why the first rule had to be written down before any code was.
+
+**A count is not an answer.** arXiv's result count alone does not say which paper the feed describes, so a `present` verdict also requires an entry whose own id is the one that was asked about. A feed naming a different paper is `unchecked`.
 
 **Two registries answer 200 for something that does not exist.** A missing PMID is an HTTP 200 carrying `{"error":"cannot get document summary"}` on the entry, and an unknown CVE is an HTTP 200 with `totalResults: 0`. Reading the status alone would have scored every fabricated reference in both as real.
 
