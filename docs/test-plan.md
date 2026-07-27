@@ -701,6 +701,35 @@ The suite gives itself a `DOSSIER_BUDGET_USD=15` ceiling so a bug in the tests c
 
 Verified to fail against the pre-fix implementation: **3 admitted, $21 committed against a $15 ceiling.** A concurrency test that passes both before and after the fix proves nothing, so this one was checked in both directions.
 
+### BENCH-10 — does Dossier's own checking actually work
+
+The only slice that tests Dossier's own claim rather than a provider's, and the only one whose score is a confusion matrix. The corpus is a frozen snapshot under `bench/detector/`, so every row runs offline; the capture pass and the judged pass touch the network and are manual, exactly like BENCH-03's live registry probes. The suffix names the file under `bench/src/detector/`.
+
+| AC | Criterion (from the contract) | Test | Status |
+|---|---|---|---|
+| **SELF-01** | The corpus loads offline and carries all five support verdicts plus all four registry verdicts | unit: `corpus`, `files` | ✓ |
+| **SELF-02** | Every case carries reasoning for its label, enforced by the schema rather than by review | unit: `schema` | ✓ |
+| **SELF-03** | A page fixture edited after capture fails the load, rather than silently changing a score | unit: `corpus` | ✓ |
+| **SELF-04** | The loader is pure: it reads no file and reaches no network, proven by walking its import graph | unit: `corpus` | ✓ |
+| **SELF-05** | The corpus is balanced: every label has at least three cases and none exceeds 35% of its family | unit: `balance` | ✓ |
+| **SELF-06** | A detector answering `supports` to everything scores badly on the real corpus, on accuracy and on macro-F1 | unit: `balance` | ✓ |
+| **SELF-07** | It also scores recall 0 on `not_addressed`, which is the failure aggregate accuracy hides | unit: `balance` | ✓ |
+| **SELF-08** | The confusion matrix is complete: every case lands in exactly one cell, and the cells total the corpus | unit: `confusion` | ✓ |
+| **SELF-09** | Per-label precision, recall over committed cases, recall over every case, and F1 are computed and named apart | unit: `confusion` | ✓ |
+| **SELF-10** | A label an arm cannot emit is reported `inexpressible`, never as a tuning failure | unit: `confusion`, `verdicts` | ✓ |
+| **SELF-11** | Every projection between vocabularies lives in one module and is exhaustive over its source enum | unit: `verdicts` | ✓ |
+| **SELF-12** | Containment and the judged mode are scored over identical cases, and the gap is a number | unit: `arms`, `report` | ✓ |
+| **SELF-13** | The judged arm reads recorded verdicts and never calls a model, so the gate cannot spend | unit: `arms`, `judge` | ✓ |
+| **SELF-14** | A case with no recorded judgement abstains, and is not counted as a wrong answer | unit: `arms` | ✓ |
+| **SELF-15** | Link checking's `live` verdict abstains in the five-class view, since a resolving URL claims nothing about support | unit: `arms` | ✓ |
+| **SELF-16** | `liveButUnsound` counts the citations that resolve perfectly and do not support their claim | unit: `report` | ✓ |
+| **SELF-17** | A registry that answered 429, 500, a timeout or an unparseable body is scored `unchecked`, never `absent` | unit: `arms` | ✓ |
+| **SELF-18** | A DOI absent from Crossref and present in the handle directory is `present`, driven through the production loop | unit: `arms` | ✓ |
+| **SELF-19** | An ISBN whose check digit disagrees with its body is `invalid`, never `absent` | unit: `arms` | ✓ |
+| **SELF-20** | The binary view collapses by a declared rule, and `unreadable` leaves it rather than being counted as unsound | unit: `verdicts`, `report` | ✓ |
+| **SELF-21** | The report names what every number cannot mean, including that containment is not entailment | unit: `report` | ✓ |
+| **SELF-22** | The corpus contains a page about the right topic that does not contain the claim, a page that contradicts it, and a page behind a wall | unit: `balance` | ✓ |
+
 ### Remaining gaps, named
 
 | AC | Why it is still open |
