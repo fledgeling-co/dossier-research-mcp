@@ -1,0 +1,174 @@
+import { describe, expect, it } from 'vitest';
+import { OVERLAP_NOTE, rankBackends, type RankCandidate } from './rank.js';
+import { summarise } from './spread.js';
+
+function candidate(
+  provider: string,
+  values: readonly number[],
+  completed = values.length,
+  unit: 'repetition' | 'task' = 'task',
+): RankCandidate {
+  return {
+    provider,
+    value: summarise(values, completed, unit),
+    scorable: true,
+    why: '',
+    completionRate: 1,
+  };
+}
+
+const OVERALL = { kind: 'overall' } as const;
+
+describe('REPORT-01 at one repetition, numbers and no ranking', () => {
+  it('withholds when every candidate has a single result', () => {
+    const ranking = rankBackends('accuracy', OVERALL, [
+      candidate('gemini', [0.9], 1),
+      candidate('openai', [0.4], 1),
+    ]);
+    expect(ranking.entries).toBeNull();
+    expect(ranking.withheld).toBe('sample-below-spread-floor');
+  });
+
+  it('withholds even when one backend has plenty, because the other cannot be placed', () => {
+    const ranking = rankBackends('accuracy', OVERALL, [
+      candidate('gemini', [0.9, 0.91, 0.92]),
+      candidate('openai', [0.4], 1),
+    ]);
+    expect(ranking.entries).toBeNull();
+    expect(ranking.withheld).toBe('sample-below-spread-floor');
+    expect(ranking.excluded.map((e) => e.provider)).toContain('openai');
+  });
+});
+
+describe('REPORT-02 a withheld ranking names the condition that failed', () => {
+  it('names the spread floor and what it needed', () => {
+    const ranking = rankBackends('accuracy', OVERALL, [
+      candidate('a', [0.5], 1),
+      candidate('b', [0.6], 1),
+    ]);
+    expect(ranking.note).toMatch(/no reportable spread/);
+    expect(ranking.note).toMatch(/A spread needs 3 results/);
+    expect(ranking.note).toMatch(/confident ranking it cannot support/);
+  });
+
+  it('names the unrankable metric and its family', () => {
+    const ranking = rankBackends('citation-sources', OVERALL, [
+      candidate('a', [10, 11, 12]),
+      candidate('b', [90, 91, 92]),
+    ]);
+    expect(ranking.entries).toBeNull();
+    expect(ranking.withheld).toBe('metric-not-rankable');
+    expect(ranking.note).toMatch(/volume figure and is never ordered/);
+  });
+
+  it('names an unscorable scope before it looks at any sample', () => {
+    const ranking = rankBackends(
+      'accuracy',
+      { kind: 'category', category: 'contested' },
+      [candidate('a', [0.5, 0.6, 0.7]), candidate('b', [0.1, 0.2, 0.3])],
+      false,
+    );
+    expect(ranking.entries).toBeNull();
+    expect(ranking.withheld).toBe('scope-not-scorable');
+    expect(ranking.note).toMatch(/too few tasks/);
+  });
+
+  it('refuses to call one backend a ranking', () => {
+    const ranking = rankBackends('accuracy', OVERALL, [candidate('a', [0.5, 0.6, 0.7])]);
+    expect(ranking.entries).toBeNull();
+    expect(ranking.withheld).toBe('too-few-candidates');
+    expect(ranking.note).toMatch(/not a comparison/);
+  });
+
+  it('excludes a backend the scope cannot score, naming its reason', () => {
+    const ranking = rankBackends('accuracy', OVERALL, [
+      candidate('a', [0.5, 0.6, 0.7]),
+      candidate('b', [0.1, 0.2, 0.3]),
+      { provider: 'c', value: null, scorable: false, why: 'c completed nothing', completionRate: 0 },
+    ]);
+    expect(ranking.excluded).toContainEqual({ provider: 'c', why: 'c completed nothing' });
+    expect(ranking.entries?.map((e) => e.provider)).toEqual(['a', 'b']);
+  });
+});
+
+describe('REPORT-19 and REPORT-20 the ordering itself', () => {
+  it('orders a higher-is-better metric best first', () => {
+    const ranking = rankBackends('accuracy', OVERALL, [
+      candidate('low', [0.1, 0.11, 0.12]),
+      candidate('high', [0.9, 0.91, 0.92]),
+    ]);
+    expect(ranking.entries?.map((e) => e.provider)).toEqual(['high', 'low']);
+    expect(ranking.entries?.map((e) => e.rank)).toEqual([1, 2]);
+  });
+
+  it('orders the Brier score ascending, because lower is better there', () => {
+    const ranking = rankBackends('calibration-brier', OVERALL, [
+      candidate('worse', [0.8, 0.81, 0.82]),
+      candidate('better', [0.1, 0.11, 0.12]),
+    ]);
+    expect(ranking.entries?.map((e) => e.provider)).toEqual(['better', 'worse']);
+  });
+
+  it('calls two overlapping spreads tied rather than ordering them', () => {
+    const ranking = rankBackends('accuracy', OVERALL, [
+      candidate('a', [0.1, 0.5, 0.9]),
+      candidate('b', [0.2, 0.55, 0.95]),
+    ]);
+    const entries = ranking.entries ?? [];
+    expect(entries).toHaveLength(2);
+    expect(entries[1]?.tiedWithPrevious).toBe(true);
+    expect(entries.map((e) => e.rank)).toEqual([1, 1]);
+  });
+
+  it('uses competition ranking, so a third clear of a tied pair is rank 3', () => {
+    const ranking = rankBackends('accuracy', OVERALL, [
+      candidate('a', [0.80, 0.85, 0.90]),
+      candidate('b', [0.78, 0.84, 0.88]),
+      candidate('c', [0.01, 0.02, 0.03]),
+    ]);
+    expect(ranking.entries?.map((e) => e.rank)).toEqual([1, 1, 3]);
+  });
+
+  it('says on every stated ranking that the overlap check is not a significance test', () => {
+    const ranking = rankBackends('accuracy', OVERALL, [
+      candidate('a', [0.9, 0.91, 0.92]),
+      candidate('b', [0.1, 0.11, 0.12]),
+    ]);
+    expect(ranking.note).toBe(OVERLAP_NOTE);
+    expect(ranking.note).toMatch(/not a significance test/);
+    expect(ranking.note).toMatch(/BENCH-13/);
+  });
+
+  it('breaks a genuine value tie by name, so the order is deterministic', () => {
+    const first = rankBackends('accuracy', OVERALL, [
+      candidate('zeta', [0.5, 0.5, 0.5]),
+      candidate('alpha', [0.5, 0.5, 0.5]),
+    ]);
+    const second = rankBackends('accuracy', OVERALL, [
+      candidate('alpha', [0.5, 0.5, 0.5]),
+      candidate('zeta', [0.5, 0.5, 0.5]),
+    ]);
+    expect(first.entries?.map((e) => e.provider)).toEqual(['alpha', 'zeta']);
+    expect(second.entries?.map((e) => e.provider)).toEqual(['alpha', 'zeta']);
+  });
+
+  it('carries the completion rate onto every ranked entry', () => {
+    const ranking = rankBackends('accuracy', OVERALL, [
+      { ...candidate('a', [0.9, 0.91, 0.92]), completionRate: 0.5 },
+      { ...candidate('b', [0.1, 0.11, 0.12]), completionRate: 1 },
+    ]);
+    expect(ranking.entries?.map((e) => e.completionRate)).toEqual([0.5, 1]);
+  });
+});
+
+describe('a candidate with no value never enters the ordering', () => {
+  it('excludes it and says so', () => {
+    const ranking = rankBackends('accuracy', OVERALL, [
+      candidate('a', [0.9, 0.91, 0.92]),
+      candidate('b', [0.1, 0.11, 0.12]),
+      { provider: 'c', value: null, scorable: true, why: '', completionRate: 1 },
+    ]);
+    expect(ranking.entries?.map((e) => e.provider)).toEqual(['a', 'b']);
+    expect(ranking.excluded.map((e) => e.provider)).toEqual(['c']);
+  });
+});
