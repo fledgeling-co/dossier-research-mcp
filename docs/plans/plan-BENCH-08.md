@@ -8,13 +8,13 @@ Seven new files under `bench/src/report/`, six of them pure, one CLI. Nothing in
 
 Each step ends with a commit, because a capacity error took four uncommitted worktrees on this fleet already.
 
-### 1. `metrics.ts` — the registry
+### 1. `metrics.ts`, the registry
 
 `METRIC_IDS` tuple, `MetricId` union, `MetricDescriptor { id, label, family, direction, unit, caveat }`, `METRICS` keyed record, `metricDescriptor(id)`, `isRankable(id)`. `direction: 'none'` is what makes a volume metric unrankable, so `isRankable` is the single gate `rank.ts` calls.
 
 Test: every id has a descriptor; volume and validity metrics are not rankable; `calibration-brier` is the only `lower`; the tuple and the record cannot drift (a key-set parity assertion).
 
-### 2. `spread.ts` — median and quartiles
+### 2. `spread.ts`, median and quartiles
 
 `summarise(values: readonly number[], completed: number): SpreadReport`.
 - Median: mean of the two middle values on an even count.
@@ -24,7 +24,7 @@ Test: every id has a descriptor; volume and validity metrics are not rankable; `
 
 Test: odd and even medians; a known quartile fixture checked by hand; `n = 1` and `n = 2` withhold with the floor's own wording; `n = 3` reports; a `NaN` input throws.
 
-### 3. `harvest.ts` — one cell to one `ScoredCell`
+### 3. `harvest.ts`, one cell to one `ScoredCell`
 
 ```ts
 harvestCell(input: HarvestInput): ScoredCell
@@ -43,7 +43,7 @@ Every scorer's `not-applicable` arm maps to `null` plus its own `why`, never to 
 
 Test: a failed cell scores nothing and explains itself; a not-applicable arm is `null` not `0`; a refusal task's accuracy is `null`; evidence present and absent both produce a well-formed cell; the same input harvests identically twice.
 
-### 4. `aggregate.ts` — the three stages and both refusals
+### 4. `aggregate.ts`, the three stages and both refusals
 
 `aggregate(input: AggregateInput): BenchAggregate`, where the input is `{ cells: readonly ScoredCell[]; corpus: TaskCorpus; minTasksPerCategory?: number }`.
 
@@ -53,13 +53,13 @@ Stage 1 groups by `taskId|provider`; stage 2 by `provider|category`; stage 3 per
 
 Test: S1, S2, S9 and S10 land here. A category with two tasks is `under-sampled-corpus`; a backend completing two of six is `under-sampled-completed`; nulls never enter a sample; completion rate counts failures; a category present in the corpus but with no cells at all still appears.
 
-### 5. `rank.ts` — the ordering and its four conditions
+### 5. `rank.ts`, the ordering and its four conditions
 
 `rankBackends(metric, candidates): Ranking`. Withholds on: unrankable metric, unscorable scope, any candidate below the spread floor, fewer than two candidates. Sorts by direction. Marks adjacent overlapping IQRs as tied, and every ranking carries the sentence saying the overlap check is descriptive and not a significance test.
 
 Test: `n = 1` withholds and names the floor; a volume metric withholds; `calibration-brier` sorts ascending; overlapping spreads tie; one candidate withholds.
 
-### 6. `render.ts` — markdown and JSON
+### 6. `render.ts`, markdown and JSON
 
 `renderMarkdown(aggregate): string` and `renderJson(aggregate): string`. Section order is the spec's. The validity panel is first. Citation accuracy columns and citation volume columns are rendered by two separate calls over two separate metric lists, so they cannot be merged by editing one array.
 
@@ -75,12 +75,12 @@ Test: arg parsing including an unknown flag and a bad date; an end-to-end render
 
 ### 8. Docs and the shared files
 
-- `docs/bench/reporting.md` — the new reference: what each number is, both refusal rules, the recency gap, and what none of it can mean.
-- `docs/test-plan.md` — AC rows appended in a new `### BENCH-08` section, **before** the tests are written.
-- `CHANGELOG.md` — one entry appended under `## [Unreleased]`.
-- `CLAUDE.md` — the repo-layout block gains the `bench/src/report/` lines and the docs list gains `docs/bench/reporting.md`.
-- `package.json` — a `bench:report` script beside `bench:verify`.
-- `docs/features-to-triage/LEDGER.md` — the BENCH-08 row only.
+- `docs/bench/reporting.md`, the new reference: what each number is, both refusal rules, the recency gap, and what none of it can mean.
+- `docs/test-plan.md`, AC rows appended in a new `### BENCH-08` section, **before** the tests are written.
+- `CHANGELOG.md`, one entry appended under `## [Unreleased]`.
+- `CLAUDE.md`, the repo-layout block gains the `bench/src/report/` lines and the docs list gains `docs/bench/reporting.md`.
+- `package.json`, a `bench:report` script beside `bench:verify`.
+- `docs/features-to-triage/LEDGER.md`, the BENCH-08 row only.
 
 ## Verification
 

@@ -14,12 +14,12 @@ import type { RegistryCounts, ScoredCell } from './harvest.js';
  * averaging first within a task category and then across tasks, which is what
  * stops a large category dominating a backend's figure:
  *
- * 1. **Cell group** — one task on one backend, over its repetitions. The spread
+ * 1. **Cell group**, one task on one backend, over its repetitions. The spread
  *    here is across repetitions and measures the backend's non-determinism.
- * 2. **Category group** — one backend in one category, over stage 1's medians.
+ * 2. **Category group**, one backend in one category, over stage 1's medians.
  *    The spread here is across tasks and measures something else entirely, so
  *    the two are labelled rather than left to be confused.
- * 3. **Backend overall** — the median of stage 2's medians, over the *scorable*
+ * 3. **Backend overall**, the median of stage 2's medians, over the *scorable*
  *    categories only, always carrying the list of the ones excluded and why.
  *
  * The refusals are computed here and carried, never recomputed by the renderer.

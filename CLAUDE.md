@@ -108,6 +108,9 @@ docs/                   the documentation set; README is the approachable entry 
   bench/due-weight.md   the viewpoint-coverage scorers, and every limit they carry
   bench/citation-integrity.md  the five registries, what each answer cannot
                         mean, and why an unreachable one is never `absent`
+  bench/reporting.md    stored cells to a report; both refusal rules, the two
+                        floors and where each came from, and the numbers that
+                        go above every score
   releasing.md          the tag-triggered publish flow
   deep-research-api-vs-agent.md   which Gemini surface fits which job
   providers/            per-provider guides (Gemini, Perplexity, OpenAI, xAI,
@@ -176,6 +179,13 @@ bench/                  the benchmark. NOT compiled into dist/ and NOT published
   src/run/store.ts      the append-only JSONL cell store
   src/run/dossier.ts    the only part that can spend; goes through Runner.start
   src/run/cli.ts        the entry point. --ceiling is required
+  src/report/           the read side: stored cells to a report, and the two
+                        places it refuses to answer. `metrics.ts` is the
+                        registry whose `direction: 'none'` is what stops a
+                        count becoming a leaderboard, `aggregate.ts` holds
+                        both refusal rules, `rank.ts` withholds an ordering
+                        the sample cannot support, and `cli.ts` is the only
+                        file here that opens anything. docs/bench/reporting.md
   src/score/due-weight/ the viewpoint-coverage scorers. Pure functions over one
                         task and one report; the aggregate is what makes the
                         false-balance guard bite. docs/bench/due-weight.md

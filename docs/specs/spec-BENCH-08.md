@@ -89,7 +89,7 @@ bench/src/report/
   cli.ts        the only file here that reads a disk
 ```
 
-`metrics.ts`, `harvest.ts`, `spread.ts`, `aggregate.ts`, `rank.ts` and `render.ts` import no `node:fs` and no network, asserted by a test that reads their own source — the same guard BENCH-03 used on `bench/src/score/`.
+`metrics.ts`, `harvest.ts`, `spread.ts`, `aggregate.ts`, `rank.ts` and `render.ts` import no `node:fs` and no network, asserted by a test that reads their own source, the same guard BENCH-03 used on `bench/src/score/`.
 
 ### The metric registry
 
@@ -124,17 +124,17 @@ Metrics, and where each comes from:
 | `independent-domains-collapsed` | volume | none | `.collapsedIndependentDomains` |
 | `report-chars` | volume | none | the cell record |
 
-**Recency is declared and permanently unavailable, with a reason printed on every report.** BENCH-06 built the durability axis and it needs a publication date per source. Neither the cell store nor BENCH-03's evidence snapshot records one: `PageEvidence` carries url, verdict, text, truncation, anchors and a check timestamp, and nothing about when the page was published. Rather than approximate a date from the fetch time — which would grade every source fresh and score the whole dimension as a lie — the metric reports `unavailable` and names the missing input. This is a real pipeline gap discovered here, recorded in [`../bench/reporting.md`](../bench/reporting.md), and it is the shape BENCH-03 established for a dimension it could not compute.
+**Recency is declared and permanently unavailable, with a reason printed on every report.** BENCH-06 built the durability axis and it needs a publication date per source. Neither the cell store nor BENCH-03's evidence snapshot records one: `PageEvidence` carries url, verdict, text, truncation, anchors and a check timestamp, and nothing about when the page was published. Rather than approximate a date from the fetch time, which would grade every source fresh and score the whole dimension as a lie, the metric reports `unavailable` and names the missing input. This is a real pipeline gap discovered here, recorded in [`../bench/reporting.md`](../bench/reporting.md), and it is the shape BENCH-03 established for a dimension it could not compute.
 
 ### Two-stage aggregation
 
 Taken from FutureSearch's published practice, which averages first within a task category and then across, so a large category cannot dominate.
 
-**Stage 1, the cell group** — one task on one backend, over its repetitions. Produces a median per metric, a spread when the repetition count clears the floor, plus `attempted` / `completed` / completion rate, median cost and median wall clock.
+**Stage 1, the cell group**, one task on one backend, over its repetitions. Produces a median per metric, a spread when the repetition count clears the floor, plus `attempted` / `completed` / completion rate, median cost and median wall clock.
 
-**Stage 2, the category group** — one backend in one category, over the stage-1 medians of the tasks in it. The spread here is across tasks, which is a different uncertainty from stage 1's across repetitions, and both are labelled as what they are.
+**Stage 2, the category group**, one backend in one category, over the stage-1 medians of the tasks in it. The spread here is across tasks, which is a different uncertainty from stage 1's across repetitions, and both are labelled as what they are.
 
-**Stage 3, the backend overall** — the median of the stage-2 medians over the *scorable* categories only, always printed with the list of categories excluded and why.
+**Stage 3, the backend overall**, the median of the stage-2 medians over the *scorable* categories only, always printed with the list of categories excluded and why.
 
 ### The spread floor is BENCH-02's, not a second one
 
@@ -157,8 +157,8 @@ Even then the ordering is emitted with ties: two adjacent backends whose observe
 
 Two distinct under-samples, named separately because they have different causes and different fixes:
 
-- **`under-sampled-corpus`** — the category holds fewer than `minTasksPerCategory` tasks. Nobody can be scored in it. The fix is authoring tasks.
-- **`under-sampled-completed`** — the category is big enough, but *this backend* completed fewer than the floor. Its figure is withheld and its completion rate is printed. The fix is re-running the failed cells. Without this, a backend that completed two of ten tasks would be scored on whichever two it found easiest, which is the completion-rate lesson applied to the denominator.
+- **`under-sampled-corpus`**, the category holds fewer than `minTasksPerCategory` tasks. Nobody can be scored in it. The fix is authoring tasks.
+- **`under-sampled-completed`**, the category is big enough, but *this backend* completed fewer than the floor. Its figure is withheld and its completion rate is printed. The fix is re-running the failed cells. Without this, a backend that completed two of ten tasks would be scored on whichever two it found easiest, which is the completion-rate lesson applied to the denominator.
 
 `MIN_TASKS_PER_CATEGORY` defaults to **5** and is a CLI flag. The derivation, stated because a floor nobody can defend is a floor somebody will lower: the design's own per-category target is ten, five is half of it, and five is the smallest count at which a median has at least two values on each side of it, so one task cannot move it across the whole range. It is printed on every report, so a report generated with a lower floor says so.
 
@@ -178,14 +178,14 @@ A failed cell is a recorded result. It contributes to `attempted`, to the failur
 
 Markdown to stdout by default; `--format json` emits the aggregate for BENCH-11 and BENCH-13 to consume. Diagnostics to stderr. Report sections, in order:
 
-1. **Header** — corpus size, evaluated-at, cell counts, both floors in force.
-2. **Validity panel** — per backend: attempted, completed, completion rate, failures by kind; the corpus stale count and share; the registry `unchecked` count and share with BENCH-03's caveat. This is first, deliberately: the brief's word is "prominently", and a caveat in the middle of a long output is something a reader in a hurry skims, which is the finding the 0.10.0 read-coverage change already rests on.
+1. **Header**, corpus size, evaluated-at, cell counts, both floors in force.
+2. **Validity panel**, per backend: attempted, completed, completion rate, failures by kind; the corpus stale count and share; the registry `unchecked` count and share with BENCH-03's caveat. This is first, deliberately: the brief's word is "prominently", and a caveat in the middle of a long output is something a reader in a hurry skims, which is the finding the 0.10.0 read-coverage change already rests on.
 3. **Cost and wall clock** per backend.
 4. **Quality scorecards** by family, backends as rows.
-5. **Citation panel** — accuracy-family columns and volume-family columns, visually separated, with the rule printed above them.
-6. **Category matrices** — one per rankable metric, categories as rows, backends as columns; under-sampled categories named and unscored.
-7. **Rankings** — only where permitted, each with its tie note; every withheld ranking names the condition that failed.
-8. **Limits** — what these numbers cannot mean.
+5. **Citation panel**, accuracy-family columns and volume-family columns, visually separated, with the rule printed above them.
+6. **Category matrices**, one per rankable metric, categories as rows, backends as columns; under-sampled categories named and unscored.
+7. **Rankings**, only where permitted, each with its tie note; every withheld ranking names the condition that failed.
+8. **Limits**, what these numbers cannot mean.
 
 ---
 
