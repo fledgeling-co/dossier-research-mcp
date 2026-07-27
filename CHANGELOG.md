@@ -8,6 +8,8 @@ This project follows [semantic versioning](https://semver.org/). Until 1.0 the m
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-07-27
+
 ### Fixed
 
 - **A failed CLI now says why it failed.** The error read `the CLI exited with code 1` and stopped there, while the reason sat in the CLI's own captured output the whole time. Reported from a real panel where Claude Code failed twice with a bare code 1; the actual cause was an exhausted subscription, and a bare exit code makes that look like a broken adapter. The tail of the output now travels with the error, the tail rather than the head because a CLI that fails partway writes progress first and the error last.
@@ -309,7 +311,8 @@ Four defects that a full hermetic suite passed and one real API call each found.
 
 - First release. Gemini Deep Research wrapped so an agent can drive it safely: durable runs that survive a disconnect, a spend gate that reserves the worst case before the call, and outline-first reading so a 60,000-token report never lands inline.
 
-[Unreleased]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.5.0...v0.6.0
