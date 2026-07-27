@@ -11,3 +11,7 @@ coverage/
 # Local run store (reports, journals, ledger)
 .deep-research/
 .DS_Store
+
+# ship-feature runner worktrees. They are git worktrees of this same repo;
+# committing one embeds a gitlink that clones cannot resolve.
+.worktrees/
