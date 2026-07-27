@@ -104,6 +104,15 @@ export interface TaskGroup {
   readonly metrics: Readonly<Record<MetricId, SpreadReport | null>>;
   readonly costUsd: SpreadReport | null;
   readonly wallClockMs: SpreadReport | null;
+  /**
+   * What this task actually reserved, summed over its completed cells.
+   *
+   * A real sum rather than a median times a count. The two agree only when
+   * every cell cost the same, and the figure a reader acts on is the money,
+   * so an approximation of it that happens to be right in the uniform case is
+   * the wrong shape for the one number nobody should have to check.
+   */
+  readonly totalCostUsd: number;
   readonly registry: RegistryCounts;
 }
 
@@ -338,6 +347,13 @@ function buildTaskGroups(cells: readonly ScoredCell[]): TaskGroup[] {
         counts.completed,
         'repetition',
       ),
+      // Summed over every recorded cell, failures included. A cell that failed
+      // after the ledger reserved has already cost money, and a total that
+      // counted only the successful ones would under-report the bill in
+      // exactly the case an operator cares about.
+      totalCostUsd: Number(
+        bucket.reduce((sum, c) => sum + c.estimatedCostUsd, 0).toFixed(4),
+      ),
       registry,
     });
   }
@@ -458,7 +474,7 @@ function buildCategoryGroups(
       let totalCostUsd = 0;
       for (const group of bucket) {
         registry = addRegistry(registry, group.registry);
-        totalCostUsd += (group.costUsd?.median ?? 0) * group.completion.completed;
+        totalCostUsd += group.totalCostUsd;
       }
 
       groups.push({

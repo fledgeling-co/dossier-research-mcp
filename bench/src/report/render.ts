@@ -414,6 +414,7 @@ function renderRankings(agg: BenchAggregate): string {
   if (stated.length === 0) {
     lines.push(
       '**No ranking is stated.** The numbers above are the numbers; the sample is what cannot order them.',
+      '',
     );
   } else {
     for (const ranking of stated) {

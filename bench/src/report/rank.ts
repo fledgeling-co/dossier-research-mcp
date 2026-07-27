@@ -232,7 +232,7 @@ export function rankBackends(
       entries: null,
       withheld: 'sample-below-spread-floor',
       note:
-        `Of the ${String(withValue)} backends with a value in ${scopeName(scope)}: ${causes.join(', ')}. ` +
+        `Of the ${String(withValue)} backend${withValue === 1 ? '' : 's'} with a value in ${scopeName(scope)}: ${causes.join(', ')}. ` +
         `No ordering is stated. The numbers above are the numbers; the sample is what cannot rank them. ` +
         `The floor is ${String(floor)} results, and this is the point at which a benchmark would otherwise publish a confident ranking it cannot support.`,
       excluded,

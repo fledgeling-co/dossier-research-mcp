@@ -324,3 +324,28 @@ describe('REPORT-01 the repetition floor survives two-stage aggregation', () => 
     expect(agg.categoryGroups[0]?.repetitionFloor.minRepetitions).toBe(1);
   });
 });
+
+describe('the money figure is a real sum, not a median times a count', () => {
+  it('sums the actual per-cell reservations when they differ', () => {
+    // A median times a count agrees with the sum only when every cell cost the
+    // same, which is exactly the case that hides the bug.
+    const cells = [
+      scoredCell('t1', 'gemini', 1, 'technical', { accuracy: 1 }, { estimatedCostUsd: 1 }),
+      scoredCell('t1', 'gemini', 2, 'technical', { accuracy: 1 }, { estimatedCostUsd: 2 }),
+      scoredCell('t1', 'gemini', 3, 'technical', { accuracy: 1 }, { estimatedCostUsd: 9 }),
+    ];
+    const agg = aggregate({ cells, corpus: corpus([task('t1', 'technical')]) });
+    expect(agg.taskGroups[0]?.costUsd?.median).toBe(2);
+    expect(agg.taskGroups[0]?.totalCostUsd).toBe(12);
+    expect(agg.backends[0]?.totalCostUsd).toBe(12);
+  });
+
+  it('counts a failed cell in the total, because a reservation is a reservation', () => {
+    const cells = [
+      scoredCell('t1', 'gemini', 1, 'technical', { accuracy: 1 }, { estimatedCostUsd: 3 }),
+      scoredCell('t1', 'gemini', 2, 'technical', {}, { outcome: 'failed', estimatedCostUsd: 3 }),
+    ];
+    const agg = aggregate({ cells, corpus: corpus([task('t1', 'technical')]) });
+    expect(agg.backends[0]?.totalCostUsd).toBe(6);
+  });
+});
