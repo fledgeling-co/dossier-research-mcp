@@ -47,7 +47,7 @@ BENCH-09 is hand-authoring work and is the long pole in wall-clock terms. It sta
 
 | ID | Title | Deps | Status | Branch | Outcome |
 |---|---|---|---|---|---|
-| BENCH-01 | Task format, gold-set schema and loader | none | Queued | | |
+| BENCH-01 | Task format, gold-set schema and loader | none | **Running** | _(worktree pending)_ | |
 | BENCH-02 | The run harness | 01 | Blocked | | |
 | BENCH-03 | Citation integrity scorers | 01 | Blocked | | |
 | BENCH-04 | Accuracy and relevance scorers | 01 | Blocked | | |
@@ -83,3 +83,5 @@ Merges are serialized by the orchestrator, one branch at a time, so conflicts in
 
 - **27 Jul, preflight** — Renamed `features-for-triages` to `features-to-triage`; created `docs/specs`, `docs/plans`, `docs/deep-research`, and the ledger. `CODING_PRACTICES.md` and `NEW_PROJECT_BEST_PRACTICES.md` already present. Git clean, no `ai/*` branches, no worktrees to reconcile.
 - **27 Jul, decisions** — Verification substituted (gate plus stdio smoke, no Playwright). Full fleet of ten authorised. Directory renamed to the conventional name.
+- **27 Jul, pre-triage** — All ten ids claimed in one ledger write rather than allocated serially, since the briefs already carry stable ids. Removes the shared write instead of queueing behind it.
+- **27 Jul, wave 1 started** — BENCH-01 dispatched to an Opus runner. Nothing else can start until it merges.
