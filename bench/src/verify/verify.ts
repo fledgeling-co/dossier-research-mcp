@@ -27,6 +27,16 @@ export interface FetchedSource {
   readonly ok: boolean;
   readonly body: string;
   readonly contentType: string;
+  /**
+   * True when the reader stopped at the byte cap before the response ended.
+   *
+   * Load-bearing, not diagnostic. `safeFetch` truncates silently, so without
+   * this flag a fact sitting past the cap in a fifteen-megabyte registry
+   * document reads exactly like a fact that was never there — and the verifier
+   * would report a true gold fact as fabricated, which is the single worst
+   * answer it can give.
+   */
+  readonly truncated: boolean;
   /** Set when the fetch never produced a response at all. */
   readonly error?: string | undefined;
 }
@@ -48,6 +58,7 @@ export type FactVerdict =
   | 'quote-absent'
   | 'value-absent'
   | 'both-absent'
+  | 'source-truncated'
   | 'unreachable';
 
 export interface FactCheck {
@@ -204,6 +215,7 @@ export async function verifyCorpus(
           target.quote === undefined ? 'not-checked' : quoteAppears(text, target.quote);
         const value: Presence | 'not-checked' =
           target.probe === undefined ? 'not-checked' : valueAppears(text, target.probe);
+        const verdict = verdictFor(quote, value);
         check = {
           taskId: task.id,
           file: task.file,
@@ -214,7 +226,11 @@ export async function verifyCorpus(
           status: fetched.status,
           quote,
           value,
-          verdict: verdictFor(quote, value),
+          // A miss against a body we stopped reading early proves nothing, so
+          // it is reported as what it is. A *hit* against a truncated body is
+          // still a hit: finding the string is finding it.
+          verdict: verdict === 'proven' || !fetched.truncated ? verdict : 'source-truncated',
+          note: fetched.truncated ? 'response was truncated at the byte cap' : undefined,
         };
       }
 

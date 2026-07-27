@@ -27,8 +27,17 @@ import { verifyCorpus, type FetchedSource, type VerificationReport } from './ver
 const CORPUS_DIR = 'bench/tasks';
 const EVIDENCE_FILE = 'bench/evidence/gold-verification.json';
 
-/** Bigger than `safeFetch`'s default: a registry document for one package can run to megabytes. */
-const MAX_BYTES = 8 * 1024 * 1024;
+/**
+ * Far bigger than `safeFetch`'s 512 KB default, and the reason is measured
+ * rather than guessed: npm's registry document for `typescript` is 15.5 MB,
+ * because every nightly is an entry, and the publish timestamp this corpus
+ * cites sits past the eight-megabyte cap the first version of this script used.
+ * A cap that truncates is not a safety property here, it is a source of false
+ * "the fact is not there" verdicts, which is the one answer the verifier must
+ * never give wrongly. Truncation is also reported now, so a future document
+ * that outgrows even this fails loudly instead of lying.
+ */
+const MAX_BYTES = 32 * 1024 * 1024;
 const TIMEOUT_MS = 30_000;
 
 async function fetchSource(url: string): Promise<FetchedSource> {
@@ -39,6 +48,7 @@ async function fetchSource(url: string): Promise<FetchedSource> {
       status: result.status,
       ok: result.ok,
       body: result.body,
+      truncated: Buffer.byteLength(result.body, 'utf8') >= MAX_BYTES,
       // `safeFetch` does not surface headers, and the extractor sniffs a JSON
       // body from its first characters anyway. Left blank rather than guessed
       // from the URL, which would be wrong for every API that omits `.json`.
@@ -51,6 +61,7 @@ async function fetchSource(url: string): Promise<FetchedSource> {
       ok: false,
       body: '',
       contentType: '',
+      truncated: false,
       error: e instanceof Error ? e.message : 'fetch failed',
     };
   }

@@ -79,9 +79,13 @@ export function decodeEntities(input: string): string {
  */
 export function extractText(body: string, contentType = ''): string {
   const type = contentType.toLowerCase();
-  const looksJson =
-    type.includes('json') || /^\s*[[{]/.test(body.slice(0, 200));
-  if (looksJson) return body;
+  const looksJson = type.includes('json') || /^\s*[[{]/.test(body.slice(0, 200));
+  // The escaped solidus is legal JSON and several publishers emit it: Crossref
+  // returns `10.1038\/s41586-026-10726-x` for a DOI whose every printed form
+  // has a plain slash. Unescaping it is the difference between a true gold fact
+  // and a false "absent" — and it is exactly the generosity-about-form rule
+  // this module already applies to numbers and dates.
+  if (looksJson) return body.replace(/\\\//g, '/');
 
   const withoutScripts = body
     .replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, ' ')
