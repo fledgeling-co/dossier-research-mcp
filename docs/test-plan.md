@@ -304,6 +304,41 @@ Acceptance criteria are taken from the README's tool contracts and the tool desc
 | **BUDGET-07** | A release is a correction, not a second run: it does not inflate the run count and is never listed as a commitment | unit: `runner` | ✓ |
 | **DOCTOR-01** | `research_doctor` runs the argv self-test on its default path and names any adapter whose invocation the binary refuses | unit: `tools` | ✓ |
 
+### BENCH-01 — the benchmark task format
+
+The benchmark's task files are hand-authored gold sets, so the loader is a trust boundary in the same sense the store is, and every rule below is one an author can get wrong. These are unit rows: the format has no MCP surface, so `protocol` has nothing to add. The suffix names the file, `schema` / `corpus` / `files` under `bench/src/tasks/`.
+
+| AC | Criterion (from the contract) | Test | Status |
+|---|---|---|---|
+| **TASKFMT-01** | A well-formed task file loads with every field preserved | unit: `corpus` | ✓ |
+| **TASKFMT-02** | A malformed file fails the load, naming the file and the failing field path | unit: `corpus` | ✓ |
+| **TASKFMT-03** | Every malformed file in a corpus is named in one failure, not just the first | unit: `corpus` | ✓ |
+| **TASKFMT-04** | A `number` gold fact without a tolerance is rejected, and so is one without a unit | unit: `schema` | ✓ |
+| **TASKFMT-05** | Each tolerance arm parses; a relative fraction outside 0..1 and significant figures outside 1..15 are rejected | unit: `schema` | ✓ |
+| **TASKFMT-06** | A field an arm does not define, and an unknown top-level field, are both rejected rather than ignored | unit: `schema` | ✓ |
+| **TASKFMT-07** | Every capped string and array is accepted at its limit and rejected one past it | unit: `schema` | ✓ |
+| **TASKFMT-08** | Staleness is correct at 182, 183 and 184 whole UTC days, and does not change with the time of day | unit: `corpus` | ✓ |
+| **TASKFMT-09** | The corpus surfaces the stale count, the stale ids and the horizon it used | unit: `corpus` | ✓ |
+| **TASKFMT-10** | A `reverifiedAt` after the reference date is rejected; an `asOf` after it is accepted | unit: `schema` | ✓ |
+| **TASKFMT-11** | Two files sharing a task id fail the load, naming both files | unit: `corpus` | ✓ |
+| **TASKFMT-12** | Gold-fact ids are unique task-wide, including values nested under conflicting figures | unit: `schema` | ✓ |
+| **TASKFMT-13** | Without a grid a task carries one to ten answers; with one it may carry more; a refusal task may carry none | unit: `schema` | ✓ |
+| **TASKFMT-14** | A refusal is permitted only on the two categories that expect one, and its kind must match the category | unit: `schema` | ✓ |
+| **TASKFMT-15** | Both refusal kinds require the wording that shows the report pushed back, not only the absence of a fabricated term | unit: `schema` | ✓ |
+| **TASKFMT-16** | A contested task must carry dissent or clashing figures; a settled-with-fringe task must carry a fringe claim | unit: `schema` | ✓ |
+| **TASKFMT-17** | Conflicting figures carry at least two values, each numeric and each with its own source | unit: `schema` | ✓ |
+| **TASKFMT-18** | A grid must cover every cell exactly once, as an answer or as a declared unknown; duplicate cells, undeclared axes and duplicate axis labels are rejected | unit: `schema` | ✓ |
+| **TASKFMT-19** | A cell tag on an answer is rejected when the task declares no grid | unit: `schema` | ✓ |
+| **TASKFMT-20** | Each task reports which measures it can support, derived from what it records | unit: `corpus` | ✓ |
+| **TASKFMT-21** | The reference date comes from the caller: the loader never reads the clock, and two loads of one corpus are identical | unit: `corpus` | ✓ |
+| **TASKFMT-22** | The pure loader runs from file contents alone and imports nothing from the filesystem | unit: `corpus` | ✓ |
+| **TASKFMT-23** | Dates and `NO` / `ON` / `yes` stay strings under the pinned YAML version | unit: `corpus` | ✓ |
+| **TASKFMT-24** | An unquoted `1.20` or `0755` in a string-valued field is rejected with a readable message rather than silently becoming a number | unit: `corpus` | ✓ |
+| **TASKFMT-25** | Duplicate keys, an empty file and a bare scalar file are each rejected, naming the file | unit: `corpus` | ✓ |
+| **TASKFMT-26** | Reading a directory finds tasks in subdirectories, reports non-YAML files as ignored, and returns a stable order | unit: `files` | ✓ |
+| **TASKFMT-27** | An oversized file and a malformed file in one directory are named in a single failure | unit: `files` | ✓ |
+| **TASKFMT-28** | An empty corpus directory loads as an empty corpus rather than failing | unit: `files` | ✓ |
+
 ### The paid project
 
 `tests/paid/` spends real money against the live API, so it is a **separate vitest project that is deliberately excluded from `test:all` and therefore from the gate**. It cannot block a deploy. It needs both `DOSSIER_PAID_TESTS=1` and a real `GEMINI_API_KEY`, and skips itself entirely without them.

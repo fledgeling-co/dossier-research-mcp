@@ -51,7 +51,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsgo -p tsconfig.build.json",
+    "build": "rm -rf dist && tsgo -p tsconfig.build.json",
     "dev": "tsx src/index.ts",
     "typecheck": "tsgo --noEmit",
     "test": "vitest run --project unit",
@@ -88,7 +88,8 @@
     "typescript": "~6.0",
     "typescript-eslint": "^8.65.0",
     "unplugin-swc": "^1.5.9",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.10",
+    "yaml": "^2.9.0"
   },
   "overrides": {
     "@hono/node-server": "^2.0.5"

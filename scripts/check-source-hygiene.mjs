@@ -15,7 +15,12 @@
  */
 import { readFileSync, globSync } from 'node:fs';
 
-const FILES = [...globSync('src/**/*.ts'), ...globSync('tests/**/*.ts'), ...globSync('scripts/*.mjs')].sort();
+const FILES = [
+  ...globSync('src/**/*.ts'),
+  ...globSync('tests/**/*.ts'),
+  ...globSync('bench/**/*.ts'),
+  ...globSync('scripts/*.mjs'),
+].sort();
 
 // Tab (0x09), LF (0x0a) and CR (0x0d) are legitimate. Everything else below
 // 0x20, plus DEL (0x7f), is not. Checked by code point rather than by regex:

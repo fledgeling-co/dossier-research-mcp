@@ -35,7 +35,7 @@ export default defineConfig({
         test: {
           ...shared,
           name: 'unit',
-          include: ['tests/*.test.ts', 'src/**/*.test.ts'],
+          include: ['tests/*.test.ts', 'src/**/*.test.ts', 'bench/**/*.test.ts'],
         },
       },
       {

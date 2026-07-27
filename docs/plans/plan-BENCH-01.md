@@ -12,145 +12,181 @@ Introduce `bench/`, a second source tree in this repo, and put the benchmark's t
 
 ## Approach
 
-One new top-level tree, `bench/src/tasks/`, split three ways so the purity requirement is structural rather than a promise: `schema.ts` holds Zod and nothing else, `corpus.ts` is pure and synchronous over `{ file, text }` entries, `files.ts` is the only file that reads a disk. The tree is wired into the existing gate (`tsconfig.json` include, the vitest `unit` project, `scripts/check-source-hygiene.mjs`) but deliberately **not** into `tsconfig.build.json`, so `bench/` is typechecked, linted, hygiene-checked and tested without reaching `dist/` or the published tarball. The analogue for every Zod decision is `src/store/types.ts`, which already treats a file read back from disk as a trust boundary; the analogue for the staleness arithmetic is `assessStaleness` in `src/research/evidence.ts`, which already encodes six months as 183 days.
+One new top-level tree, `bench/src/tasks/`, split three ways so the purity requirement is structural rather than a promise: `schema.ts` holds Zod and nothing else, `corpus.ts` is pure and synchronous over `{ file, text }` entries, `files.ts` is the only file that reads a disk. The tree is wired into the existing gate (`tsconfig.json` include, the vitest `unit` project, `scripts/check-source-hygiene.mjs`) but deliberately **not** into `tsconfig.build.json`, so `bench/` is typechecked, linted, hygiene-checked and tested without reaching `dist/` or the published tarball.
 
 ## Reference implementation
 
-- `src/store/types.ts` — the trust-boundary pattern: Zod at the boundary, never a cast, with the reasoning in a comment above each non-obvious rule. Follow its comment density; this file is documentation for the corpus authors as much as it is code.
-- `src/research/evidence.ts` (`assessStaleness`, `HORIZONS`, `DAY_MS`) — the day arithmetic and the existing 183-day encoding of "six months". Reuse the number rather than inventing a second one.
+- `src/store/types.ts` — the analogue for **trust-boundary validation and explanatory-comment style**, not for every Zod decision: it uses `z.object`, which strips unknown keys, where this format needs `z.strictObject`, which rejects them. Follow its comment density; the schema file is documentation for the corpus authors as much as it is code.
+- `src/research/evidence.ts` (`assessStaleness`) — **arithmetic precedent, not shared constants.** Its `HORIZONS` and `DAY_MS` are module-private and cannot be imported. What it establishes is that this repo already encodes six months as `183` days (`journalism: { ageing: 90, stale: 183 }`), so the benchmark reuses the number rather than inventing a second encoding of the same period.
 - `src/research/shapes.ts` (`WINDOWS`) — imported directly for the task `window` field, so the benchmark and the product cannot drift on what a time window is.
+- `src/providers/options.ts` — returns `enforced` / `requested` / `dropped`; named here only to fix where the enforced-versus-asked-for measurement lives (BENCH-02), not as something this slice calls.
 - `tests/local-loop.test.ts` — the closest existing unit-test shape: pure functions, inline fixtures, one assertion per behaviour.
 
 ## Prerequisites
 
-- `npm install --save-dev yaml@latest` (resolves to 2.9.0). A **dev** dependency on purpose: `bench/` is not in `package.json#files` and not compiled by `tsconfig.build.json`, so nothing in the published package can import it, and the install footprint for `npx dossier-research-mcp` is unchanged.
+- `npm install --save-dev yaml@latest` (resolves to 2.9.0), which also updates `package-lock.json`; both files are part of the change. A **dev** dependency on purpose: `bench/` is not in `package.json#files` and not compiled by `tsconfig.build.json`, so nothing in the published package can import it and the install footprint for `npx dossier-research-mcp` is unchanged.
 
 ## Steps
 
 ### 1. Wire the new tree into the gate
 
-- **Files:** `tsconfig.json`, `vitest.config.ts`, `scripts/check-source-hygiene.mjs`, `package.json`
+- **Files:** `tsconfig.json`, `vitest.config.ts`, `scripts/check-source-hygiene.mjs`, `package.json`, `package-lock.json`
 - **Action:** Modify
-- **Details:** Add `"bench/**/*.ts"` to `tsconfig.json`'s `include` (this is what makes `npm run typecheck` and type-aware ESLint cover the tree; without it `eslint .` hard-fails with a project-service parser error rather than silently skipping). Add `'bench/**/*.test.ts'` to the `unit` project's `include` in `vitest.config.ts`. Add `...globSync('bench/**/*.ts')` to `FILES` in `scripts/check-source-hygiene.mjs`. Add the `yaml` devDependency. **Do not** touch `tsconfig.build.json` or `package.json#files`.
-- **Reference:** `tests/**/*.ts` is already covered by the base tsconfig and excluded from the build by exactly this mechanism; `extends` does not merge `include` arrays, so the build config's own `include: ["src/**/*.ts"]` never sees `bench/`.
-- **Verify:** `npm run typecheck`, `npm run lint`, `npm run lint:source` all pass with a throwaway file under `bench/src/`; `npm pack --dry-run` lists no `bench/` entry.
-- **Fulfils:** the tree is gated, and cannot leak into the package.
+- **Details:** Add `"bench/**/*.ts"` to `tsconfig.json`'s `include` — this is what makes `npm run typecheck` and type-aware ESLint cover the tree; without it `eslint .` hard-fails with a project-service parser error rather than silently skipping. Add `'bench/**/*.test.ts'` to the `unit` project's `include` in `vitest.config.ts`. Add `...globSync('bench/**/*.ts')` to `FILES` in `scripts/check-source-hygiene.mjs`. Add the `yaml` devDependency. **Do not** touch `tsconfig.build.json` or `package.json#files`.
+- **The publish boundary, stated accurately.** `extends` does not merge `include` arrays, so `tsconfig.build.json`'s own `include: ["src/**/*.ts"]` never sees `bench/`, and no script emits with the base config. But the base config keeps `rootDir: "."` and `outDir: "dist"`, `build` does not clean `dist`, and `package.json#files` ships all of `dist` — so a hand-run emitting compile against the base config could leave a stale `dist/bench/**` that a later pack would carry. "Cannot leak" is therefore too strong. Close it by making `build` clean first: `"build": "rm -rf dist && tsgo -p tsconfig.build.json"`. One word, and it removes the class rather than documenting it.
+- **Verify:** `npm run typecheck`, `npm run lint`, `npm run lint:source` all pass over the new tree; `npm pack --dry-run` lists no `bench/` and no `dist/bench/` entry.
 
-### 2. The schema
+### 2. Append the AC rows to the test plan
+
+- **File:** `docs/test-plan.md`
+- **Action:** Modify
+- **Details:** Append the `TASKFMT-*` rows to the end of the AC-traceability matrix, immediately after the last existing row (`PANEL-27`) and before `### The paid project`. Append only; never reorder another fleet item's rows. This step is deliberately **before** the tests, per `CLAUDE.md`: coverage follows the contract rather than whatever is convenient to assert, and this matrix — not the plan's own bullet list — is the traceability device for the format's every field and rule.
+- **Verify:** `npm run lint:docs`.
+
+### 3. The schema
 
 - **File:** `bench/src/tasks/schema.ts`
 - **Action:** Create
-- **Details:** Export `TASK_CATEGORIES` (the ten slugs from `docs/plan/benchmark.md`: `time-bound`, `enumeration`, `legal-regulatory`, `primary-literature`, `social-sentiment`, `technical`, `obscure-entity`, `false-premise`, `contested`, `settled-with-fringe`), `STALE_AFTER_DAYS = 183`, and a `taskFileSchema(now: Date)` factory. Every object is a `z.strictObject` so a misspelt field is rejected rather than ignored, and every string and array carries an explicit `.max()` (CP §1).
-  - `SourceRefSchema` — `{ url, quote?, locator? }`, `url` restricted to http/https via `z.url({ protocol: /^https?$/ })`.
-  - `ToleranceSchema` — `z.discriminatedUnion('kind', …)` over `exact` (no payload), `absolute { value > 0 }`, `relative { fraction > 0, <= 1 }`, `significantFigures { digits: int 1..15 }`. The field names differ per arm on purpose: `fraction` cannot be misread as a percentage the way a shared `value` could, and that ambiguity would silently change every numeric score.
-  - `GoldFactSchema` — `z.discriminatedUnion('kind', …)` over `number { value, unit, tolerance, … }`, `date { value: z.iso.date() }`, `name { value, aliases? }`, `identifier { value, aliases? }`. Every arm carries `id` (slug, unique within the task), `source: SourceRefSchema`, optional `label`, optional `cell: { entity, field }`. **`tolerance` and `unit` are required members of the `number` arm**, which is how "a number without a tolerance is rejected" becomes a type-level fact rather than a check that can be forgotten; `unit: 'dimensionless'` is the explicit way to say a figure has none.
-  - `KnownDissentSchema` `{ url, distinguishingTerm }`; `ConflictingFigureSchema` `{ quantity, values: array(GoldFact).min(2) }`; `FringeClaimSchema` `{ claim, distinguishingTerm, source, rejectionCues[] }`.
-  - `ExpectedRefusalSchema` — `z.discriminatedUnion('kind', …)` over `false-premise { fabricatedTerms.min(1), acknowledgementTerms.min(1) }` and `no-public-footprint { acknowledgementTerms.min(1) }`. Acknowledgement wording is required on **both** arms: a report that asserts a fabricated event and one that corrects it both contain the fabricated name, so absence-of-term alone cannot tell them apart.
-  - `EnumerationSchema` `{ entities.min(2), fields.min(1), unknownCells[] }`.
-  - The task object: `id`, `category`, `question`, `asOf`, `reverifiedAt`, `window?` (`z.enum(WINDOWS)` imported from `src/research/shapes.js`), `goldFacts`, `requiredTerms`, `driftTerms`, `knownDissent`, `conflictingFigures`, `fringeClaims`, `expectedRefusal?`, `enumeration?`, then `.superRefine` for the cross-field rules in step 3.
-- **Reference:** `src/store/types.ts` for the Zod idiom and comment density.
-- **Verify:** `bench/src/tasks/schema.test.ts` (step 6) covers each arm and each rejection.
-- **Fulfils:** the field list, the tolerance rule, the unit rule, the refusal polarity fix, the enumeration grid.
+- **Details:** Export `TASK_CATEGORIES` (the ten slugs from `docs/plan/benchmark.md`: `time-bound`, `enumeration`, `legal-regulatory`, `primary-literature`, `social-sentiment`, `technical`, `obscure-entity`, `false-premise`, `contested`, `settled-with-fringe`), `STALE_AFTER_DAYS = 183`, `MAX_TASK_FILE_BYTES = 262_144`, and a `taskFileSchema(now: Date)` factory. Every object is a `z.strictObject`, so a misspelt field is rejected rather than ignored, and every string and array carries an explicit maximum (CP §1). The caps are part of the public format, so they are stated here rather than chosen at the keyboard:
 
-### 3. Cross-field rules
+  | Field | Shape and bound |
+  |---|---|
+  | `id` | slug `/^[a-z0-9][a-z0-9-]*$/`, 1..100 |
+  | `category` | `z.enum(TASK_CATEGORIES)` |
+  | `question` | 10..2000 chars |
+  | `asOf`, `reverifiedAt` | `z.iso.date()` — `YYYY-MM-DD` only, real calendar dates |
+  | `window` | `z.enum(WINDOWS)`, optional |
+  | `requiredTerms`, `driftTerms` | ≤50 items, each 1..200 chars |
+  | `knownDissent` | ≤20 items |
+  | `conflictingFigures` | ≤20 items; `values` 2..10 |
+  | `fringeClaims` | ≤20 items; `claim` ≤1000; `rejectionCues` ≤30 items, each 1..200 |
+  | `goldFacts` | ≤200 array bound; the 10-versus-200 rule is step 4 |
+  | `enumeration.entities` | 2..40, unique, each 1..200 |
+  | `enumeration.fields` | 1..20, unique, each 1..80 |
+  | `enumeration.unknownCells` | ≤800 items of `z.strictObject({ entity, field })` |
+  | `source.url` | `z.url({ protocol: /^https?$/ })`, ≤2000 |
+  | `source.quote`, `source.locator` | ≤1000 / ≤200, both optional |
+  | `label`, `unit` | ≤200 / ≤50 |
+  | `aliases` | ≤20 items, each 1..200 |
+
+  - `ToleranceSchema` — `z.discriminatedUnion('kind', …)` over `exact` (no payload), `absolute { value > 0 }`, `relative { fraction > 0, <= 1 }`, `significantFigures { digits: int 1..15 }`. The payload field name differs per arm on purpose: `fraction` cannot be misread as a percentage the way a shared `value` could, and that ambiguity would silently change every numeric score.
+  - `GoldFactSchema` — `z.discriminatedUnion('kind', …)` over `number { value, unit, tolerance }`, `date { value: z.iso.date() }`, `name { value, aliases? }`, `identifier { value, aliases? }`. Every arm carries `id`, `source: SourceRefSchema`, optional `label`, optional `cell: z.strictObject({ entity, field })`. **`tolerance` and `unit` are required members of the `number` arm** — verified to produce parse errors at paths `["tolerance"]` and `["unit"]` — which is how "a number without a tolerance is rejected" becomes a type-level fact rather than a check somebody can forget. `unit: 'dimensionless'` is the explicit way to say a figure has none.
+  - `ConflictingFigureSchema` — `{ quantity, values }` where `values` is 2..10 **numeric** gold facts (the `number` arm only, not the full union). The design calls these conflicting *figures* and the due-weight item scores them by finding both numbers in the report, so a name or a date here would be a value nothing can compare.
+  - `KnownDissentSchema` `{ url, distinguishingTerm }`; `FringeClaimSchema` `{ claim, distinguishingTerm, source, rejectionCues }`.
+  - `ExpectedRefusalSchema` — `z.discriminatedUnion('kind', …)` over `false-premise { fabricatedTerms.min(1), acknowledgementTerms.min(1) }` and `no-public-footprint { acknowledgementTerms.min(1) }`. Acknowledgement wording is required on **both** arms: a report that asserts a fabricated event and one that corrects it both contain the fabricated name, so absence-of-term alone cannot tell them apart.
+- **Reference:** `src/store/types.ts` for the trust-boundary idiom and comment density.
+- **Verify:** `bench/src/tasks/schema.test.ts`, one case per arm and per bound (each cap tested at the limit and one past it).
+
+### 4. Cross-field rules
 
 - **File:** `bench/src/tasks/schema.ts` (the `.superRefine` on the task object)
-- **Action:** Create (part of step 2's file)
-- **Details:** Each rule adds an issue at a real `path` so the error names the offending field, not just the file.
-  1. `reverifiedAt` may not be after `now`, compared as whole UTC days. A human cannot have checked a fact in the future. `asOf` is deliberately left unconstrained, because a rule that takes effect on a future date is a legitimate gold fact.
-  2. `goldFacts[].id` unique within the task.
-  3. `expectedRefusal` is present exactly when `category` is `false-premise` or `obscure-entity`, and its `kind` matches (`false-premise` ↔ `false-premise`, `obscure-entity` ↔ `no-public-footprint`).
-  4. Without `expectedRefusal`, `goldFacts` must be non-empty.
-  5. Without `enumeration`, `goldFacts` is capped at 10 (the design document's number); with it, at 200. A three-by-four grid is twelve cells, so a flat ten would make the completeness category unable to test completeness. The widening is deliberate and is recorded in the spec.
-  6. `category: contested` requires `knownDissent` or `conflictingFigures` non-empty.
-  7. `category: settled-with-fringe` requires `fringeClaims` non-empty.
-  8. `category: enumeration` requires the `enumeration` block; and with it, every `entity × field` pair must be covered exactly once by either a `cell`-tagged gold fact or an `unknownCells` entry, with no duplicate and no cell naming an entity or field the grid does not declare. This is what makes "every cell filled or explicitly marked unknown" checkable.
-  9. `cell` may only appear on a gold fact when the task declares an `enumeration` block.
-- **Reference:** the "malformed envelope fails loudly" half of the store's rule in `CLAUDE.md`. This whole item is envelope, never item-skip.
-- **Verify:** one test per rule, each asserting both the accepted and the rejected shape.
-- **Fulfils:** category coherence, the grid completeness rule, the gold-fact count rule.
+- **Action:** Create (part of step 3's file)
+- **Details:** Each rule adds an issue at a real `path`, so the error names the offending field and not merely the file.
+  1. `reverifiedAt` may not be after `now`, compared as whole UTC days. A human cannot have checked a fact in the future. `asOf` is deliberately unconstrained: a rule that takes effect on a future date is a legitimate gold fact.
+  2. Gold-fact `id` is unique **task-wide**, across both `goldFacts[]` and every `conflictingFigures[].values[]`, so a scorer can address any recorded value unambiguously.
+  3. The answer-count ceiling applies to `goldFacts[]` only: at most 10 without an `enumeration` block, at most 200 with one, and at least 1 unless `expectedRefusal` is present. Values nested under `conflictingFigures` are the disagreeing pair rather than answers, so they are outside the ceiling but inside the uniqueness rule.
+  4. `expectedRefusal` is present exactly when `category` is `false-premise` or `obscure-entity`, and its `kind` matches (`false-premise` ↔ `false-premise`, `obscure-entity` ↔ `no-public-footprint`).
+  5. `category: contested` requires `knownDissent` or `conflictingFigures` non-empty.
+  6. `category: settled-with-fringe` requires `fringeClaims` non-empty.
+  7. `category: enumeration` requires the `enumeration` block; with it, every `entity × field` pair is covered exactly once by either a `cell`-tagged gold fact or an `unknownCells` entry, with no duplicate cell and no cell naming an entity or field the grid does not declare. `entities` and `fields` must each be free of duplicates, or two distinct-looking rows collapse onto one cell key and an apparently complete grid covers fewer cells than it claims.
+  8. `cell` may only appear on a gold fact when the task declares an `enumeration` block.
+- **Reference:** the "malformed envelope fails loudly" half of the store's rule in `CLAUDE.md`. This whole item is envelope; nothing here is ever item-skip.
+- **Verify:** one test per rule, each asserting both the accepted and the rejected shape, with duplicate axis labels tested separately from duplicate cell coverage.
 
-### 4. The pure loader
+### 5. The pure loader
 
 - **File:** `bench/src/tasks/corpus.ts`
 - **Action:** Create
-- **Details:** No `node:fs` import anywhere in this file; that is the mechanical guarantee behind "pure and synchronous", and a test asserts the module's source contains no `node:fs`.
-  - `parse` the YAML with `YAML.parse(text, { version: '1.2', schema: 'core' })`, pinned explicitly rather than left to the library default. Under YAML 1.1 an unquoted `2026-01-15` becomes a `Date`, `NO`/`ON`/`yes` become booleans and `0755` becomes 493; under 1.2 core all of those stay strings and the schema sees exactly what the author typed. Duplicate keys already throw. Record the reason in a comment, because a future dependency bump that changes the default would otherwise silently re-open it.
-  - `loadCorpus(entries: readonly TaskFileEntry[], options: { now: Date }): TaskCorpus`. `now` is **required**, never defaulted from the clock, so the same corpus loads identically twice and a stored result can be re-scored later against the date it was scored under.
-  - Collect failures across *every* entry before throwing, then throw one `TaskCorpusError` whose `message` names each file with its field paths and whose `failures` array carries `{ file, issues: [{ path, message }] }`. A YAML syntax error, an empty or comment-only document (which parses to `null`), and a schema failure all land in the same shape.
+- **Details:** No `node:fs` import anywhere in this file; that is the mechanical guarantee behind "pure and synchronous", and a test asserts the module's own source contains no `node:fs`.
+  - Parse with `YAML.parse(text, { version: '1.2', schema: 'core' })`, pinned explicitly rather than left to the library default. Under YAML 1.1 an unquoted `2026-01-15` becomes a `Date` and `NO` / `ON` / `yes` become booleans; under 1.2 core all of those stay strings and the schema sees what the author typed. Two traps survive **both** versions and are the reason the string-valued arms are strict: an unquoted `1.20` arrives as the number `1.2`, and an unquoted `0755` arrives as the number `755` (1.1 would make it octal `493`; 1.2 makes it decimal, and neither is a string). A version-like or leading-zero identifier must therefore be quoted, and if it is not, the `identifier` arm rejects it with a readable message instead of silently corrupting the gold. Duplicate keys already throw. The reason is recorded in a comment, because a dependency bump that changes the default would otherwise silently re-open it.
+  - `loadCorpus(entries, options: { now: Date }): TaskCorpus`. `now` is **required** and never defaulted from the clock, so the same corpus loads identically twice and a stored result can be re-scored later against the date it was scored under.
+  - Staleness is whole-UTC-day arithmetic: convert both dates to UTC day ordinals (`Math.floor(Date.UTC(y, m, d) / DAY_MS)`) and subtract. `Math.round((now - at) / DAY_MS)` is **wrong** here — with `now` at noon it turns a 182-day gap into 183 and marks a task stale a day early. Verified: for `now` 2026-07-27T12:00Z against 2026-01-26, `Math.round` gives 183 and the day-ordinal difference gives 182.
+  - Collect failures across *every* entry before throwing, then throw one `TaskCorpusError` whose message names each file with its field paths and whose `failures` array carries `{ file, issues: [{ path, message }] }`. A YAML syntax error, an empty or comment-only document (which parses to `null`), a schema failure and an adapter failure handed in from step 6 all land in that one shape.
   - Duplicate `id` **across** files is a corpus-level failure naming both files.
-  - Per task, derive `stale` (`reverifiedAgeDays >= STALE_AFTER_DAYS`), `reverifiedAgeDays` (whole UTC days, the `Math.round((now - at) / DAY_MS)` shape `assessStaleness` uses), and `applicableMetrics` — a purely derived record of which measures the task can support (`accuracy` when it has gold facts, `relevance` when it has required terms, `dissentRecall`, `conflictAcknowledgement`, `falseBalance`, `refusal`, `enumerationCompleteness`). Deriving it once here is what stops four later items each re-deriving the same rule and disagreeing.
-  - Return `{ tasks, staleCount, staleIds, staleAfterDays, evaluatedAt, ignoredFiles }`.
-- **Reference:** `assessStaleness` in `src/research/evidence.ts` for the arithmetic; `TaskCorpusError` follows the ordinary `Error` subclass shape with a `name` set.
-- **Verify:** step 6's tests drive it entirely from inline YAML strings, with no filesystem at all.
-- **Fulfils:** loud failure naming the file, staleness plus the surfaced count, purity.
+  - Per task, derive `stale`, `reverifiedAgeDays`, and `applicableMetrics` — a purely derived record of which measures the task can support: `accuracy` and `calibration` (gold facts present, each with a stable id to pair a confidence marker against), `relevance` (required terms present), `dissentRecall`, `conflictAcknowledgement`, `falseBalance`, `refusal`, `enumerationCompleteness`. Deriving it once here is what stops four later items each re-deriving the same rule and disagreeing about it. Pairing a marker to a fact and turning it into a Brier score stay with the calibration item; what this slice owes it is the eligibility flag and the stable id.
+  - Return `{ tasks, staleCount, staleIds, staleAfterDays, evaluatedAt, ignoredFiles }`, with `tasks`, `staleIds` and `ignoredFiles` in a deterministic order (step 6 sorts the input).
+- **Verify:** step 7's tests drive it entirely from inline YAML strings, with no filesystem at all.
 
-### 5. The filesystem adapter
+### 6. The filesystem adapter
 
 - **File:** `bench/src/tasks/files.ts`
 - **Action:** Create
-- **Details:** `readTaskEntries(dir)` walks the directory **recursively** with `readdirSync(dir, { withFileTypes: true, recursive: true })`, reads `.yaml` and `.yml` with `readFileSync`, skips dotfiles, and returns everything else as `ignoredFiles` rather than dropping it silently — a `.yam` typo is exactly the quietly-dropped task the brief exists to prevent, and so is a whole subdirectory of tasks the walk never entered. Refuse a file over `MAX_TASK_FILE_BYTES` (256 KiB) by name. `loadCorpusFromDirectory(dir, { now })` composes the two. Synchronous throughout, so the whole surface a scorer sees is synchronous.
-- **Reference:** none in-repo; the store's readers are async because they serve a server, and this serves a batch script.
-- **Verify:** one test using `mkdtempSync`, matching the acceptance suite's `mkdtemp` isolation convention.
-- **Fulfils:** reading `bench/tasks/`, nothing dropped silently.
+- **Details:** `readTaskEntries(dir)` walks recursively (`readdirSync(dir, { withFileTypes: true, recursive: true })`), **sorts the normalised relative paths** before reading — directory order is unspecified by Node, and an unsorted walk would make `tasks`, `staleIds` and the failure list come out in a different order on a different machine while the loader claims repeatability — reads `.yaml` and `.yml` with `readFileSync`, skips dotfiles, and returns everything else in `ignoredFiles` rather than dropping it silently. A `.yam` typo is exactly the quietly-dropped task the brief exists to prevent, and so is a whole subdirectory the walk never entered. It returns `{ entries, ignoredFiles, failures }`, where `failures` carries oversized files (over `MAX_TASK_FILE_BYTES`) and unreadable ones in the **same** `{ file, issues }` shape the loader uses. `loadCorpusFromDirectory(dir, { now })` merges those adapter failures with the loader's own before throwing once, so a directory holding one oversized file and one malformed file names both rather than stopping at the first. Synchronous throughout, so the whole surface a scorer sees is synchronous.
+- **Verify:** tests using `mkdtempSync`, matching the acceptance suite's isolation convention, including a mixed bad directory and a determinism check that two loads of the same directory return identical order.
 
-### 6. Tests
+### 7. Tests
 
 - **Files:** `bench/src/tasks/schema.test.ts`, `bench/src/tasks/corpus.test.ts`, `bench/src/tasks/files.test.ts`
 - **Action:** Create
-- **Details:** Cover the AC rows appended to `docs/test-plan.md` in step 8 — **append those rows before writing these tests**, per `CLAUDE.md`, so coverage follows the contract rather than what is convenient to assert. Beyond the obvious happy path and each rejection, three tests exist specifically because they lock facts that were verified empirically rather than assumed: dates and `NO`/`ON`/`yes` stay strings under the pinned YAML version; an unquoted version-like value such as `1.20` arrives as the number `1.2` and is therefore rejected by the `identifier` arm with a readable message rather than silently corrupting the gold; and `corpus.ts` imports no `node:fs`.
+- **Details:** Cover every `TASKFMT-*` row added in step 2. Four tests exist specifically to lock facts that were verified empirically rather than assumed: dates and `NO` / `ON` / `yes` stay strings under the pinned YAML version; an unquoted `1.20` and an unquoted `0755` both arrive as numbers and are rejected by the `identifier` arm with a readable message; the staleness boundary is exercised at 182, 183 and 184 days with `now` at midnight, noon and 23:59:59 UTC; and `corpus.ts` imports no `node:fs`.
 - **Reference:** `tests/local-loop.test.ts`.
 - **Verify:** `npx vitest run --project unit bench/`.
-- **Fulfils:** every acceptance criterion has a test.
 
-### 7. The corpus directory and the format reference
+### 8. The corpus directory and the format reference
 
 - **Files:** `bench/tasks/.gitkeep`, `docs/bench/task-format.md`
 - **Action:** Create
-- **Details:** `bench/tasks/` ships empty; authoring the corpus is BENCH-09 and doing it here would pre-empt it. `docs/bench/task-format.md` is the field reference a hundred hand-authored files are written against: every field, what it is for, which measure reads it, and one fully annotated example. It must pass `npm run lint:docs` (it is under `docs/`, so every internal link is checked) and carry no em dash.
-- **Reference:** `docs/tools.md` for the reference-doc register.
-- **Fulfils:** the contract is documented where the authors will look.
+- **Details:** `bench/tasks/` ships empty; authoring the corpus is BENCH-09 and doing it here would pre-empt it. `docs/bench/task-format.md` is the field reference a hundred hand-authored files are written against: every field, what it is for, which measure reads it, the quoting traps, and one fully annotated example.
+- **Verify:** `npm run lint:docs`, plus the voice lint `CLAUDE.md` requires of every doc: `python3 ~/.claude/plugins/cache/diolog-plugins/create-luke-content/2.4.3/skills/create-luke-content/scripts/voice_lint.py --format marketing docs/bench/task-format.md`.
 
-### 8. Shared files
+### 9. The remaining shared files
 
-- **Files:** `docs/test-plan.md`, `CHANGELOG.md`, `docs/features-to-triage/LEDGER.md`, `CLAUDE.md`
+- **Files:** `CHANGELOG.md`, `docs/features-to-triage/LEDGER.md`, `CLAUDE.md`
 - **Action:** Modify
-- **Details:** Append the `TASKFMT-*` AC rows to the end of the AC-traceability matrix in `docs/test-plan.md`, immediately after the last existing row and before `### The paid project` — append only, never reorder another item's rows. Add one entry under `## [Unreleased]` in `CHANGELOG.md`. Update only this item's Status/Spec/Plan cells in the ledger. Add a `bench/` line to the repo-layout tree in `CLAUDE.md`, which that file's own closing rule requires of an architecture shift.
+- **Details:** One entry under `## [Unreleased]` in `CHANGELOG.md`. Only this item's Status/Spec/Plan cells in the ledger; other fleet items are editing their own rows concurrently. A `bench/` line in the repo-layout tree in `CLAUDE.md`, which that file's own closing rule requires of an architecture shift.
 - **Verify:** `npm run lint:docs`.
 
 ## Edge cases
 
-- An empty or comment-only YAML file parses to `null`, not to an object; the strict object rejects it with "expected object, received null" and the file is named. Asserted.
-- A YAML document that is a bare scalar parses to a string and is rejected the same way.
+- An empty or comment-only YAML file parses to `null`, not to an object; the strict object rejects it with "expected object, received null" and the file is named. A bare scalar document parses to a string and is rejected the same way.
 - An empty `bench/tasks/` directory loads as an empty corpus with `staleCount: 0`. Refusing to score too small a sample is BENCH-08's job, not the loader's.
 - A relative `window` such as `30d` is anchored to the task's `asOf`, not to the run clock, or the same task asks a different question every month. The loader records the ask; what a provider actually enforced is a property of the run and belongs to BENCH-02, which already has `enforced` / `requested` / `dropped` from `src/providers/options.ts`.
-- A task with `expectedRefusal` has zero gold facts, so accuracy over it is `not_applicable`, never `0`. `applicableMetrics` carries that so a later denominator cannot quietly include it.
+- A task with `expectedRefusal` has zero gold facts, so accuracy over it is `not_applicable`, never `0`. `applicableMetrics` carries that, so a later denominator cannot quietly include it.
 
 ## Acceptance criteria
 
 - [ ] A corpus containing two malformed files throws once, and the thrown error names **both** files and the failing field path within each; no task is skipped.
-- [ ] A `goldFact` of `kind: number` written without `tolerance`, or without `unit`, fails to parse, and the message names the missing field.
-- [ ] A task whose `reverifiedAt` is 184 days before the supplied `now` loads with `stale: true`; one at 182 days loads with `stale: false`; and `staleCount` plus `staleIds` on the returned corpus match.
+- [ ] A directory holding one oversized file and one malformed file names **both** in a single throw, so an adapter failure cannot mask a loader failure.
+- [ ] A `goldFact` of `kind: number` written without `tolerance`, or without `unit`, fails to parse, and the message names the missing field; each tolerance arm parses, and `relative` outside 0..1 and `significantFigures` outside 1..15 are rejected.
+- [ ] An unknown or misspelt top-level field is rejected rather than ignored, and so is a field on a gold-fact arm that does not define it.
+- [ ] Staleness is correct at the boundary: with `reverifiedAt` 182, 183 and 184 UTC days before `now`, `stale` is `false`, `true`, `true`, and the answer does not change when `now` is at midnight, noon or 23:59:59. `staleCount` and `staleIds` on the returned corpus match.
+- [ ] `reverifiedAt` after `now` is rejected; `asOf` after `now` is accepted.
 - [ ] `loadCorpus` is driven end to end from inline YAML strings in a test that imports nothing from `node:fs`, and `bench/src/tasks/corpus.ts` contains no `node:fs` import.
-- [ ] Calling `loadCorpus` twice with the same entries and the same `now` returns identical results, and the function never reads the clock.
-- [ ] Two files declaring the same `id` fail the load, and the error names both files.
-- [ ] An `enumeration` task whose grid has a cell that is neither a `cell`-tagged gold fact nor declared unknown fails to parse, naming the missing cell.
-- [ ] A `contested` task with neither `knownDissent` nor `conflictingFigures`, and a `settled-with-fringe` task with no `fringeClaims`, both fail to parse.
-- [ ] `readTaskEntries` finds a task in a subdirectory, and reports a non-YAML file as `ignoredFiles` rather than omitting it.
+- [ ] Calling `loadCorpus` twice with the same entries and the same `now` returns identical results, and loading the same directory twice returns the same order.
+- [ ] Two files declaring the same `id`, and two gold facts sharing an `id` within one task (including one nested under `conflictingFigures`), each fail the load naming what collided.
+- [ ] A task without an `enumeration` block is capped at ten gold facts; one with a block may carry more; and an `enumeration` task with a cell that is neither a `cell`-tagged fact nor declared unknown, a duplicate cell, a cell naming an undeclared axis, or a duplicate entity or field label, each fail to parse naming the offending cell or label.
+- [ ] `expectedRefusal` on any category other than `false-premise` or `obscure-entity` is rejected; a `false-premise` task missing `fabricatedTerms` or `acknowledgementTerms`, and a `no-public-footprint` task missing `acknowledgementTerms`, are rejected.
+- [ ] A `contested` task with neither `knownDissent` nor `conflictingFigures`, and a `settled-with-fringe` task with no `fringeClaims`, both fail to parse; a `conflictingFigures` entry carrying a non-numeric value is rejected.
+- [ ] `applicableMetrics` reports `accuracy` and `calibration` false and `refusal` true for a refusal task, and `enumerationCompleteness` true only for a task with a grid.
+- [ ] An empty corpus directory loads as an empty corpus with `staleCount: 0`; `readTaskEntries` finds a task in a subdirectory and reports a non-YAML file in `ignoredFiles` rather than omitting it.
+- [ ] An unquoted `1.20` and an unquoted `0755` in a string-valued field are rejected with a readable message; an unquoted date and `NO` / `ON` / `yes` remain strings.
 - [ ] `npm run gate` passes, and `npm run test:all` is green on two consecutive runs.
-- [ ] `npm pack --dry-run` lists no `bench/` entry, and `dist/` contains no bench output.
+- [ ] `npm pack --dry-run` lists no `bench/` and no `dist/bench/` entry.
 
 ## Verify
 
 - `npm run gate` (typecheck, lint, lint:source, lint:docs, test:all, build), then `npm run test:all` a second time — this repo has had a lock bug that failed roughly one run in eight, so a pass that does not reproduce is not a pass.
 - A real-Node, out-of-transform check: run the loader over a temporary corpus through `tsx` in a separate process, so NodeNext module resolution and the pinned YAML parse options are proven on the wire rather than under vitest's swc transform. Two defects in this repo this month passed unit tests and only appeared outside them.
-- A protocol-level stdio smoke test against `dist/index.js` — `initialize`, `tools/list` — as a regression guard that the new tree changed nothing about the server and added no stdout noise. BENCH-01 adds no MCP surface, so this is a regression check, not a feature check, and it is stated as such.
-- `npm pack --dry-run` to confirm the publish boundary.
+- A protocol-level stdio smoke test against `dist/index.js` — `initialize`, then `tools/list` — as a regression guard that the new tree changed nothing about the server and added no stdout noise. BENCH-01 adds no MCP surface, so this is a regression check rather than a feature check, and it is reported as such.
+- `npm pack --dry-run` for the publish boundary, and the voice lint on the new doc.
 
 ## Out of scope
 
 - Any scoring. No accuracy, relevance, citation, due-weight, calibration, refusal or source-quality logic. This slice reads files and returns types.
-- Any network call, including validating that a `source.url` resolves. BENCH-09 owns the scripted check that a gold fact is really present in its cited source.
+- Any network call, including checking that a `source.url` resolves. BENCH-09 owns the scripted check that a gold fact is really present in its cited source.
 - Authoring corpus tasks. `bench/tasks/` ships empty.
 - The run harness, the results format, and anything under `bench/results/`.
 - The detector corpus under `bench/detector/`, which is BENCH-10 and a different schema.
+
+## Plan review gate — 2026-07-27
+
+**Mechanical path check: PASS.** Every backtick-quoted path in this plan either exists or is explicitly marked to be created. The one apparent miss, `src/research/shapes.js`, is the NodeNext import specifier for `src/research/shapes.ts` and is required by this repo's module resolution.
+
+**Cross-family review: Codex `gpt-5.6-sol`, `max` effort, read-only, grounded in the repository. Verdict as returned: MATERIAL DEFECTS**, 14 findings (3 High, 7 Medium, 4 Low). All 14 accepted; none rejected. Two were independently re-verified before acceptance, because both contradicted something this plan asserted:
+
+- `Math.round((now - at) / DAY_MS)` does not implement whole-day ageing. Re-run here: for `now` at 2026-07-27T12:00Z against 2026-01-26, it returns 183 where the UTC day-ordinal difference returns 182, so a task would be marked stale a day early. Step 5 now specifies day ordinals and the ACs test 182/183/184 across three times of day.
+- The claim that YAML 1.2 core leaves `0755` a string was wrong. Re-run here: it parses to the number `755` (1.1 would give octal `493`). Step 5 now states the trap correctly and the ACs test it.
+
+The other twelve, each now folded into the steps or the ACs: `calibration` missing from the derived metric list; nested conflicting values escaping the task-wide id-uniqueness rule and admitting non-numeric arms; the ACs being a smoke subset rather than traceable to every clause; the caps being promised but not stated; `enumeration` axes needing uniqueness; unspecified directory order defeating the repeatability claim; adapter failures not merged into the single throw; the step 6/8 ordering inversion (the test-plan append is now step 2); the `dist/bench/**` stale-output route through the base config's `rootDir`; `package-lock.json` missing from the affected files; the `src/store/types.ts` analogue being overstated and `HORIZONS` / `DAY_MS` being private rather than importable; and the missing voice-lint invocation.
+
+The reviewer separately confirmed as sound: the Zod 4.4.3 usage, including that a missing `tolerance` or `unit` genuinely produces a parse error at the named path; `WINDOWS` being the exported tuple claimed; `src/providers/options.ts` genuinely returning enforced/requested/dropped; the ESLint project-service and vitest wiring; `bench/` being excluded from the tarball by `package.json#files`; and the step ordering otherwise closing.

@@ -95,6 +95,7 @@ docs/                   the documentation set; README is the approachable entry 
   security.md           injection, SSRF, data egress
   development.md        toolchain and the two test suites
   test-plan.md          the AC-traceability matrix
+  bench/task-format.md  the benchmark task format, for whoever hand-writes a gold set
   releasing.md          the tag-triggered publish flow
   deep-research-api-vs-agent.md   which Gemini surface fits which job
   providers/            per-provider guides (Gemini, Perplexity, OpenAI, xAI,
@@ -111,6 +112,14 @@ docs/                   the documentation set; README is the approachable entry 
 blog/                   long-form articles. Not product docs; Luke's byline
 skills/deep-research-prompt-creator/   the bundled Claude Code skill (shipped in the package)
 tests/                  hermetic vitest; no network, no keys
+bench/                  the benchmark. NOT compiled into dist/ and NOT published;
+                        typechecked, linted and unit-tested by the gate like any
+                        other source. Its design is docs/plan/benchmark.md
+  tasks/*.yaml          one hand-authored gold set per task
+  src/tasks/schema.ts   the task format, in Zod. The contract every scorer reads
+  src/tasks/corpus.ts   the pure synchronous loader. Imports no filesystem, on
+                        purpose, so a scorer is testable without one
+  src/tasks/files.ts    the only part that reads a disk
 ```
 
 **Boundary rule:** `gemini/client.ts` and `gemini/agents.ts` are the only files that touch the Gemini SDK. Everything downstream takes a `DeepResearchClient` by injection, which is what makes the whole runner/tool layer testable without a network or a key.

@@ -1,7 +1,7 @@
 # BENCH-01: Task format, gold-set schema and loader
 
 **ID:** BENCH-01
-**Status:** Ready for Plan
+**Status:** In Progress
 **Created:** 2026-07-27
 **Last updated:** 2026-07-27
 **Brief:** [BENCH-01](../features-to-triage/BENCH-01-task-format.md) · **Design of record:** [benchmark.md](../plan/benchmark.md)
@@ -136,3 +136,7 @@ Rejected for this item, with reasons, and carried to the fleet log:
 **Assumptions review gate — 2026-07-27**
 
 A fresh reviewer, not the one that wrote the assumptions, checked every default against the brief, the design document and the fleet's own record. Twenty of twenty-two passed. Two were sent back and both were fixed here rather than raised as questions, because both were settleable from the governing documents: the ceiling on how many answers a task may carry had to say what happens to a grid, and the word for an out-of-date task had to be the one the brief and the design document already use rather than a second synonym. Gate re-checked against those two points and passed.
+
+## Plan — 2026-07-27
+
+Implementation plan: [`docs/plans/plan-BENCH-01.md`](../plans/plan-BENCH-01.md) (Plan size: Standard).

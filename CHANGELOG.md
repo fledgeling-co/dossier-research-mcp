@@ -8,6 +8,16 @@ This project follows [semantic versioning](https://semver.org/). Until 1.0 the m
 
 ## [Unreleased]
 
+### Added
+
+- **A checked file format for benchmark tasks, under `bench/`.** One YAML file per task, parsed into a typed corpus by a loader that is pure and synchronous, so a scorer can be tested without a filesystem. Nothing here scores anything and nothing here touches the network; it is the contract the rest of the benchmark reads. Documented in [`docs/bench/task-format.md`](docs/bench/task-format.md).
+
+  Three behaviours are deliberate and are the opposite of what the server does elsewhere. A malformed task file **fails the whole load**, naming every bad file at once, rather than being skipped the way a bad record in a listing is: a corpus that quietly drops a task reports a score over a sample nobody chose. An unknown or misspelt field is rejected rather than ignored, because a silently dropped line is a task scored on less than its author wrote. And a task that has gone 183 days without human re-verification still loads, but is flagged stale and counted, because gold rots and a score over a corpus that is a third stale is a different claim from one that is not.
+
+  Two rules are enforced by the shape of the schema rather than by a check somebody has to remember: a numeric answer cannot be written without a tolerance, and cannot be written without a unit. Comparing floats exactly is how a correct answer scores zero, and a right figure in the wrong unit can only score zero if the right unit was recorded.
+
+  `bench/` is typechecked, linted, hygiene-checked and unit-tested by `npm run gate`, and is deliberately not compiled into `dist/` or shipped in the package. `npm run build` now clears `dist/` first, so a stale artefact from a hand-run compile cannot ride along in a tarball.
+
 ### Fixed
 
 - **Every `local-codex` run had been dying at argument parsing, and nothing could see it.** The adapter sent `codex exec --search`. `--search` is a flag on `codex` and not on `codex exec`: it is documented on `codex --help`, absent from `codex exec --help`, and `codex exec --search` answers `error: unexpected argument '--search' found` and exits 2 before doing anything. So no research ever ran on that backend, and because a CLI run is ledgered at $0 it cost nothing visible while silently consuming a seat on every panel it joined. Verified by hand against codex-cli 0.145.0 on 27 July 2026.
