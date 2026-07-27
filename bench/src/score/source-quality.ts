@@ -11,6 +11,7 @@ import {
   type EvidenceProfile,
 } from '../../../src/research/evidence.js';
 import {
+  MAX_PAGE_CHARS,
   MIN_SHINGLES,
   sameStory,
   shingleHashes,
@@ -64,6 +65,18 @@ import {
  * dates already collected. That is what keeps the result reproducible from a
  * stored run and keeps every test off the network.
  */
+
+/**
+ * The most pages one call will compare.
+ *
+ * A resource bound, like `MAX_PAGE_CHARS`. The comparison is pairwise, so the
+ * work grows with the square of the page count; two hundred pages is forty
+ * thousand comparisons, which is nothing, and is already far more citations than
+ * any report in the corpus carries. Pages beyond the cap are **reported as
+ * unexamined**, not dropped quietly, because a page nobody looked at must not
+ * be able to make the collapsed count look more thorough than it was.
+ */
+export const MAX_PAGES = 200;
 
 /** One page whose text was collected by whoever did the fetching. */
 export interface FetchedPage {
@@ -127,6 +140,10 @@ export interface SourceQualityScored {
   readonly syndicationClusters: readonly SyndicationCluster[];
   /** How many supplied pages were long enough to be compared at all. */
   readonly comparedPages: number;
+  /** Pages compared on a prefix only, named so a partial score is never silent. */
+  readonly truncatedPages: readonly string[];
+  /** Pages past the page ceiling that were never examined. */
+  readonly unexaminedPages: number;
   /**
    * Every cited domain no page could be compared for. A collapsed count that
    * quietly means "we checked some of them" is worse than no collapsed count,
@@ -140,6 +157,8 @@ export interface SourceQualityScored {
     readonly containment: number;
     readonly shingleWords: number;
     readonly minShingles: number;
+    readonly maxPageChars: number;
+    readonly maxPages: number;
   };
   readonly notes: readonly string[];
 }
@@ -263,7 +282,9 @@ export function scoreSourceQuality(
   // document that is not in the report at all.
   const comparable: { url: string; domain: string; shingles: Set<number> }[] = [];
   const domainsWithShortPage = new Set<string>();
+  const truncatedPages: string[] = [];
   let ignoredPages = 0;
+  let unexaminedPages = 0;
   const seenPageUrls = new Set<string>();
   for (const page of pages) {
     if (!isHttpUrl(page.url)) {
@@ -277,6 +298,11 @@ export function scoreSourceQuality(
       continue;
     }
     seenPageUrls.add(url);
+    if (comparable.length >= MAX_PAGES) {
+      unexaminedPages += 1;
+      continue;
+    }
+    if (page.text.length > MAX_PAGE_CHARS) truncatedPages.push(url);
     const shingles = shingleHashes(page.text);
     if (shingles.size < MIN_SHINGLES) {
       domainsWithShortPage.add(domain);
@@ -285,7 +311,27 @@ export function scoreSourceQuality(
     comparable.push({ url, domain, shingles });
   }
 
+  /**
+   * The rule, stated because a domain can contribute more than one page.
+   *
+   * Two domains merge when **any** page on one is the same story as **any** page
+   * on the other. Pages are what get compared; domains are what get counted, and
+   * this is the mapping between them.
+   *
+   * The consequence worth knowing: an outlet that ran both its own original
+   * reporting and the wire copy merges with the wire's other carriers on the
+   * strength of the wire copy alone, even though its original piece is genuine
+   * independent evidence. That direction *understates* independence. It is
+   * accepted rather than engineered around for two reasons. Counting story
+   * clusters instead of domains would answer a different question from the raw
+   * figure it sits beside, so the two numbers would stop being comparable, which
+   * is the one property the brief insists on. And the case is visible rather
+   * than silent: the cluster is reported with its URLs and its scores, and a
+   * note below names any merged domain that also carried a page in no cluster,
+   * so a reader can see exactly what was merged and disagree.
+   */
   const links: SyndicationLink[] = [];
+  const clusteredPageUrls = new Set<string>();
   for (let i = 0; i < comparable.length; i += 1) {
     for (let j = i + 1; j < comparable.length; j += 1) {
       const a = comparable[i]!;
@@ -296,6 +342,8 @@ export function scoreSourceQuality(
       const verdict = sameStory(a.shingles, b.shingles);
       if (!verdict.same) continue;
       groups.union(a.domain, b.domain);
+      clusteredPageUrls.add(a.url);
+      clusteredPageUrls.add(b.url);
       links.push({
         a: a.url,
         b: b.url,
@@ -359,10 +407,37 @@ export function scoreSourceQuality(
       `${String(ignoredPages)} supplied page(s) were on a domain the report did not cite, or repeated a page already supplied, and took no part.`,
     );
   }
+  if (truncatedPages.length > 0) {
+    notes.push(
+      `${String(truncatedPages.length)} page(s) were longer than ${String(MAX_PAGE_CHARS)} characters and were compared on the first ${String(MAX_PAGE_CHARS)} only: ${truncatedPages.join(', ')}.`,
+    );
+  }
+  if (unexaminedPages > 0) {
+    notes.push(
+      `${String(unexaminedPages)} page(s) past the ${String(MAX_PAGES)}-page ceiling were not examined at all, so any syndication among them is untested rather than ruled out.`,
+    );
+  }
   if (syndicationClusters.length > 0) {
     notes.push(
       `${String(rawIndependentDomains)} independent domain(s) collapse to ${String(grouped.size)} once pages carrying the same story are merged. Both figures are reported: the merging threshold is a judgement and the raw figure is what a reader who disagrees with it should reason from.`,
     );
+    // A merged domain that also carried a page in no cluster contributed
+    // evidence the merge is not accounting for, so the collapsed figure
+    // understates independence for that domain. Named rather than silently
+    // folded in; see the rule statement above the pairwise loop.
+    const mergedDomains = new Set(syndicationClusters.flatMap((c) => c.domains));
+    const alsoOriginal = [
+      ...new Set(
+        comparable
+          .filter((p) => mergedDomains.has(p.domain) && !clusteredPageUrls.has(p.url))
+          .map((p) => p.domain),
+      ),
+    ].sort();
+    if (alsoOriginal.length > 0) {
+      notes.push(
+        `${String(alsoOriginal.length)} merged domain(s) also carried a page matching nothing else (${alsoOriginal.join(', ')}). Merging counts them once, so for those the collapsed figure understates independence rather than overstating it.`,
+      );
+    }
   }
 
   return {
@@ -373,6 +448,8 @@ export function scoreSourceQuality(
     collapsedIndependentDomains: grouped.size,
     syndicationClusters,
     comparedPages: comparable.length,
+    truncatedPages,
+    unexaminedPages,
     uncheckedDomains,
     discardedCitations,
     thresholds: {
@@ -380,6 +457,8 @@ export function scoreSourceQuality(
       containment: SYNDICATION_CONTAINMENT,
       shingleWords: SHINGLE_WORDS,
       minShingles: MIN_SHINGLES,
+      maxPageChars: MAX_PAGE_CHARS,
+      maxPages: MAX_PAGES,
     },
     notes,
   };

@@ -18,6 +18,19 @@
  * claims* across backends and is deliberately crude. This one compares *full
  * fetched page text*. Two different instruments, two different inputs, two
  * different questions, and the product's own is untouched by this file.
+ *
+ * **What "page text" means here, stated because the thresholds depend on it.**
+ * Plain text, as the caller supplies it. In practice that is a whole HTML page
+ * run through a tag stripper, so it carries the site's navigation, its footer
+ * and its promotional furniture alongside the article. That cuts both ways and
+ * both directions are safe: shared furniture raises similarity between two pages
+ * on the *same* site, where it changes nothing because same-domain pairs cannot
+ * change a domain count and are never compared; and per-site furniture *lowers*
+ * similarity between two printings of one wire story, which pushes toward
+ * reporting more independence rather than less. If a caller ever supplies
+ * extracted article bodies instead, every score here rises and the bar becomes
+ * more permissive, so the change would have to be re-measured rather than
+ * assumed harmless.
  */
 
 /**
@@ -40,39 +53,55 @@ export const SHINGLE_WORDS = 10;
 /**
  * The resemblance at which two pages are called the same story.
  *
- * **Provenance, and which part of it is a judgement.**
- *
- * The measure is Broder's resemblance: the size of the intersection of two
+ * **The measure.** Broder's resemblance: the size of the intersection of two
  * documents' shingle sets over the size of their union, one when the documents
  * are identical. It is the Jaccard coefficient over w-shingles.
  *
- * Two published anchors were read rather than remembered. Broder et al. (above)
- * clustered the web at **0.50**: "We calculated our clusters based on a 50%
- * resemblance." Manning, Raghavan and Schütze, *Introduction to Information
- * Retrieval* §19.6, give **0.9** as the illustrative cutoff for dropping a page
+ * **Provenance, in three parts, and which part is a judgement.**
+ *
+ * *Where 0.7 comes from.* This repo already recorded the figure. `last30days-
+ * skill`, read on 26 July 2026 and written up in
+ * `docs/plan/external-skill-gap-analysis.md`, de-duplicates its registry on
+ * `max(char_3gram_jaccard, token_jaccard) >= 0.7` **over titles and bodies**.
+ * That is the near-duplicate rule this benchmark is answering, and 0.7 is its
+ * number rather than one invented here.
+ *
+ * *Where it does not come from, stated because the two are easy to conflate.*
+ * Their measure is not this one. A character-trigram Jaccard maxed against a
+ * bag-of-tokens Jaccard scores differently from resemblance over ten-word
+ * shingles on the same pair of documents, so 0.7 does not transfer between them
+ * as a calibration. It transfers as the value somebody working on this exact
+ * problem, on this exact kind of input, settled on.
+ *
+ * *What the published anchors say, read rather than remembered.* Broder et al.
+ * (above) clustered the web at **0.50**: "We calculated our clusters based on a
+ * 50% resemblance." Manning, Raghavan and Schütze, *Introduction to Information
+ * Retrieval* §19.6, give **0.9** as an illustrative cutoff for dropping a page
  * from an index: "if it exceeds a preset threshold (say, 0.9), we declare them
- * near duplicates and eliminate one from indexing."
+ * near duplicates and eliminate one from indexing." 0.7 sits between the two,
+ * and **landing there rather than at either end is this project's judgement.**
+ * Broder's 0.50 is tuned for grouping a web-scale crawl, where a false grouping
+ * costs an index entry; here a false collapse understates a backend's
+ * independence, which is a reported score, so the bar is deliberately above his.
+ * The 0.9 is tuned for dropping a near-verbatim copy; a republished wire story
+ * carries a house headline, a local standfirst and a different furniture block,
+ * so demanding 0.9 on resemblance would miss the ordinary case. Measured on this
+ * module's own fixtures, four printings of one wire story score 0.83 to 0.86 and
+ * four independently written articles about the same event score 0.00, so the
+ * bar is not finely balanced between them; it sits in a wide empty gap.
  *
- * 0.7 sits between them, and **landing there rather than at either end is this
- * project's judgement, not a figure lifted from a paper.** Broder's 0.50 is
- * tuned for grouping a web-scale crawl, where a false grouping costs an index
- * entry; here a false collapse understates a backend's independence, which is a
- * score, so the bar is deliberately higher than his. The IIR 0.9 is tuned for
- * de-duplicating an index, where only a near-verbatim copy should be dropped;
- * a republished wire story carries a house headline, a local standfirst and a
- * different furniture block, so demanding 0.9 would miss the ordinary case.
- *
- * **The objection that does not apply here, said out loud because it will be
- * misapplied otherwise.** An earlier attempt at near-duplicate merging in
- * `src/research/corroborate.ts` was rejected on the grounds that published
- * thresholds around this value are tuned for **article bodies**, and applying
- * one to the short one-sentence claims that file compares would silently
- * collapse genuine corroboration: two backends independently stating the same
- * fact in similar words are two sources, and merging them destroys the very
- * thing being measured. That objection is correct and it is about the *input*,
- * not about the number. This module is given full fetched page text, which is
- * precisely what those thresholds were tuned for, so the objection does not
- * transfer. Do not carry it across.
+ * **The objection that does not apply here, said out loud because it will
+ * otherwise be reapplied to the wrong thing.** The same gap analysis records why
+ * this was declined for `src/research/corroborate.ts`, and the reason is exact:
+ * "Their thresholds are tuned against article titles and bodies. Dossier holds
+ * one-sentence worker-written claims, and two workers summarising genuinely
+ * independent sources on a narrow question will write near-identical sentences.
+ * Applying a 0.7 similarity merge to that text would silently collapse real
+ * corroboration." That objection is correct, and it is about the **input**, not
+ * about the number. This module is never given one-sentence claims. It is given
+ * full fetched page text, which is the article-body case those thresholds were
+ * tuned against in the first place. The objection does not transfer here. Do not
+ * carry it across, and do not use this module on claim text.
  */
 export const SYNDICATION_RESEMBLANCE = 0.7;
 
@@ -116,6 +145,21 @@ export const SYNDICATION_CONTAINMENT = 0.9;
  * scores rather than folded silently into a count.
  */
 export const MIN_SHINGLES = 100;
+
+/**
+ * The most page text this will shingle, in characters.
+ *
+ * A resource bound rather than a trust boundary: the caller is the benchmark's
+ * own harness in this repo, not a network. What it stops is a pathological input
+ * turning an O(n²) pairwise comparison into an unbounded one. The cap is set
+ * well above the 60,000 characters the product's own page stripper already
+ * truncates to, so a page produced the ordinary way is never affected.
+ *
+ * Text beyond the cap is dropped and the truncation is **reported**, never
+ * silent: a partial page scored as though it were whole is a similarity computed
+ * against a document that does not exist.
+ */
+export const MAX_PAGE_CHARS = 200_000;
 
 /**
  * Words, lowercased, punctuation gone, digits kept.
@@ -166,7 +210,7 @@ export function hashShingle(shingle: string): number {
  * information about whether another document is the same story.
  */
 export function shingleHashes(text: string, width: number = SHINGLE_WORDS): Set<number> {
-  const words = normaliseForShingling(text);
+  const words = normaliseForShingling(text.slice(0, MAX_PAGE_CHARS));
   const out = new Set<number>();
   if (words.length < width) return out;
   for (let i = 0; i + width <= words.length; i += 1) {
