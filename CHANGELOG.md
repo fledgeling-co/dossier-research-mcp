@@ -8,6 +8,15 @@ This project follows [semantic versioning](https://semver.org/). Until 1.0 the m
 
 ## [Unreleased]
 
+### Fixed
+
+- **The same question, on the same backend, twice, was one paid run.** The dedupe fingerprint carried the prompt, tier, tools, plan-review flag, attachments, provider, shape and window, and no repetition index, so a deliberate repeat inside the dedupe window collapsed onto the first run. Nothing was wrong for ordinary use, where that is the protection working. It mattered the moment anyone wanted to measure variance: five repeats returned one report five times, and any spread computed from them was a single sample reported as five.
+
+  A repeat is now expressible rather than dedupe being weakened, because dedupe exists to stop *accidental* duplicate spend and a deliberate repeat is not accidental. Omitting it, or passing zero, hashes exactly as before, which was checked at the wire rather than asserted: the fingerprint for an unchanged request is byte-identical across the change.
+
+  Two further defects had to be fixed before that one worked, both found by an out-of-family review rather than by the change's author. The index was appended to a space-joined string whose last element was free text, so `wideSpec: "foo"` with repeat 7 hashed identically to `wideSpec: "foo repeat:7"` with none. And it was threaded through a truthiness test, where `NaN` is falsy, so a malformed index was silently dropped onto the no-repeat run.
+
+
 ### Added
 
 - **A merge now says how much of each report was actually read, at the top.** Observed in a real session: an agent ran a panel of five, read one report in full, one executive summary, four sections of another's eighteen and nothing at all from a fifth, then wrote a confident synthesis as though it had read them all. Asked how, it said it had leaned on the merge tool's claims list as a substitute for reading, a list whose own output already said it measures coverage difference rather than agreement.
