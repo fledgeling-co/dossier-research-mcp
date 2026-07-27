@@ -53,7 +53,11 @@ const WRITES_WITHOUT_SPENDING = [
   // Writes files into the caller's project. No model, no network, still a write.
   'research_export',
 ];
-const EGRESS = ['corpus_add_file'];
+// `research_ground` is the second one: local by default and free, but
+// `destination: "upload"` sends the report to Google, and an annotation is
+// fixed per tool rather than per argument value, so it carries the stronger
+// claim exactly as `research_doctor` does for `probeModels`.
+const EGRESS = ['corpus_add_file', 'research_ground'];
 const READ_ONLY = [
   'research_plan',
   'research_status',
@@ -81,7 +85,7 @@ describe('PROTO-01: every tool registers', () => {
         'research_approve_plan', 'research_budget', 'research_cancel', 'research_claims',
         'research_compare', 'research_counter_review', 'research_doctor',
         'research_evidence',
-      'research_export', 'research_followup', 'research_list', 'research_plan',
+      'research_export', 'research_followup', 'research_ground', 'research_list', 'research_plan',
         'research_read', 'research_recent', 'research_start', 'research_status',
       'research_synthesise',
         'research_import', 'research_local_draft', 'research_local_note',
@@ -244,7 +248,7 @@ describe('PROTO-06 / DEGRADE-02: usable with no credentials', () => {
     expect(started.isError).toBe(true);
     expect(started.text).toMatch(/credential/i);
     // The decisive part: the server is still alive and answering afterwards.
-    expect((await mcp.listTools()).length).toBe(36);
+    expect((await mcp.listTools()).length).toBe(37);
   });
 });
 

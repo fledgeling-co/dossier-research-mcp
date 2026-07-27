@@ -25,7 +25,30 @@
  * Everything here is pure. The filesystem and the upload live in the tool.
  */
 
-import type { RunRecord } from '../store/types.js';
+/**
+ * What a grounding document needs to know about the run it came from.
+ *
+ * Declared structurally rather than imported from `store/types.js`, and that is
+ * load-bearing rather than fussy: `store/types.js` reaches the provider registry
+ * and from there the CLI adapters, which read a filesystem. Importing the type
+ * would put that whole subtree on this module's import graph, and the benchmark's
+ * purity check walks source imports rather than runtime ones. A `RunRecord`
+ * satisfies this by construction.
+ */
+export interface GroundedRun {
+  readonly id: string;
+  readonly title?: string | undefined;
+  readonly question: string;
+  readonly provider: string;
+  readonly model?: string | undefined;
+  readonly tier: string;
+  readonly archetype?: string | undefined;
+  readonly sourceCount: number;
+  readonly estimatedCostUsd?: number | undefined;
+  readonly completedAt?: string | undefined;
+  readonly updatedAt: string;
+  readonly groundedIn?: readonly string[] | undefined;
+}
 
 /**
  * The fixed subdirectory a locally-grounded report is written into.
@@ -174,7 +197,7 @@ export function groundingFrontMatter(runIds: readonly string[]): string[] {
 }
 
 export interface GroundingDocumentArgs {
-  readonly run: RunRecord;
+  readonly run: GroundedRun;
   readonly markdown: string;
 }
 

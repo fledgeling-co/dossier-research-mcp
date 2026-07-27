@@ -108,7 +108,7 @@ describe('GROUND-03/04: the operator owns the directory, not the caller', () => 
 
   it('takes no directory, filename or subdirectory from the caller', async () => {
     const tool = (await granted.listTools()).find((t) => t.name === 'research_ground');
-    const schema = JSON.stringify(tool?.['inputSchema'] ?? {});
+    const schema = JSON.stringify(tool ?? {});
     for (const forbidden of ['dir', 'path', 'directory', 'filename', 'root', 'subdir']) {
       expect(schema).not.toMatch(new RegExp(`"${forbidden}"\\s*:\\s*\\{`));
     }
