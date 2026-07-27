@@ -282,6 +282,7 @@ export function scoreSourceQuality(
   // document that is not in the report at all.
   const comparable: { url: string; domain: string; shingles: Set<number> }[] = [];
   const domainsWithShortPage = new Set<string>();
+  const domainsPastCeiling = new Set<string>();
   const truncatedPages: string[] = [];
   let ignoredPages = 0;
   let unexaminedPages = 0;
@@ -300,6 +301,7 @@ export function scoreSourceQuality(
     seenPageUrls.add(url);
     if (comparable.length >= MAX_PAGES) {
       unexaminedPages += 1;
+      domainsPastCeiling.add(domain);
       continue;
     }
     if (page.text.length > MAX_PAGE_CHARS) truncatedPages.push(url);
@@ -383,12 +385,19 @@ export function scoreSourceQuality(
   const uncheckedDomains: UncheckedDomain[] = [];
   for (const domain of [...citedDomains].sort()) {
     if (checkedDomains.has(domain)) continue;
-    uncheckedDomains.push({
-      domain,
-      why: domainsWithShortPage.has(domain)
-        ? `every page supplied for this domain was shorter than ${String(MIN_SHINGLES)} shingles, which is too little text to characterise; it is counted as its own source rather than merged`
-        : 'no page text was supplied for this domain, so it could not be compared; it is counted as its own source',
-    });
+    // The reasons are distinct on purpose. "No page was supplied" sends whoever
+    // is reading this to the harness; "the page was too short" sends them to the
+    // page; "past the ceiling" sends them to this file's own bound. One
+    // catch-all string would send all three to the wrong place.
+    let why: string;
+    if (domainsWithShortPage.has(domain)) {
+      why = `every page supplied for this domain was shorter than ${String(MIN_SHINGLES)} shingles, which is too little text to characterise; it is counted as its own source rather than merged`;
+    } else if (domainsPastCeiling.has(domain)) {
+      why = `its page arrived past the ${String(MAX_PAGES)}-page ceiling and was never examined; it is counted as its own source`;
+    } else {
+      why = 'no page text was supplied for this domain, so it could not be compared; it is counted as its own source';
+    }
+    uncheckedDomains.push({ domain, why });
   }
 
   const notes: string[] = [];

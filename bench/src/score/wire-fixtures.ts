@@ -100,7 +100,7 @@ export const WIRE_PRINTINGS: readonly { url: string; text: string }[] = [
  */
 const WIRE_WORDS = WIRE_BODY.split(' ');
 export const WIRE_TRUNCATED: { url: string; text: string } = {
-  url: 'https://fifth-outlet.example.com/brief/rates-hold',
+  url: 'https://fifth-outlet.example.dev/brief/rates-hold',
   text: ['Rates hold', ...WIRE_WORDS.slice(0, Math.floor(WIRE_WORDS.length * 0.55))].join(' '),
 };
 
@@ -175,6 +175,31 @@ export const INDEPENDENT_ARTICLES: readonly { url: string; text: string }[] = [
 ];
 
 /**
+ * An outlet's own original piece, on a domain that also carried the wire copy.
+ *
+ * The case that decides how page clusters map back to domain counts. This
+ * publisher contributed real independent evidence *and* republished somebody
+ * else's story, so merging its domain into the wire's cluster counts one source
+ * where there were arguably two. The scorer merges it and names the
+ * understatement rather than silently choosing either answer.
+ */
+export const ORIGINAL_ON_SYNDICATING_DOMAIN: { url: string; text: string } = {
+  url: 'https://first-outlet.example.com/opinion/the-case-for-waiting',
+  text: [
+    'Our economics editor writes: there is a respectable argument that the board has now waited',
+    'too long, and it deserves a better hearing than it has been getting in the commentary this',
+    'week. The people who make it are not arguing that inflation is beaten. They are arguing that',
+    'the lags are long, that the effect of the last four increases is still working through the',
+    'household sector, and that a board waiting for confirmation in the quarterly figures is a',
+    'board that will always be acting on a picture six months out of date. Against that sits the',
+    'uncomfortable fact that nobody who cut early in the last cycle enjoyed the experience, and',
+    'that the cost of moving too soon falls on precisely the households the board is trying to',
+    'protect. Reasonable people land in different places on that trade, and the minutes suggest',
+    'the room did too. What is not reasonable is pretending the question has an obvious answer.',
+  ].join(' '),
+};
+
+/**
  * Pages that are not articles.
  *
  * Short, near-identical wherever they are served, and the reason `MIN_SHINGLES`
@@ -183,11 +208,11 @@ export const INDEPENDENT_ARTICLES: readonly { url: string; text: string }[] = [
  */
 export const BOILERPLATE_PAGES: readonly { url: string; text: string }[] = [
   {
-    url: 'https://paywalled.example.com/business/rates',
+    url: 'https://paywalled.example.build/business/rates',
     text: 'Subscribe to continue reading. Already a subscriber? Sign in. Get unlimited access from $4 a week. Cancel any time.',
   },
   {
-    url: 'https://walled.example.org/finance/rates',
+    url: 'https://walled.example.zone/finance/rates',
     text: 'Subscribe to continue reading. Already a subscriber? Sign in. Get unlimited access from $4 a week. Cancel any time.',
   },
 ];
