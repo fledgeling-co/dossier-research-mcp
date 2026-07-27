@@ -297,6 +297,11 @@ export interface UnitMatch {
 /**
  * The unit written immediately after `index`, if any.
  *
+ * **`text` must already be lower case**, meaning it has been through
+ * `normaliseForSearch`, because every surface form in the lexicon is. Passing
+ * raw report text here finds nothing and looks exactly like a report that
+ * stated no unit, which would turn the unit rule off without failing anything.
+ *
  * Longest form first, which is the whole reason `percentage points` is never
  * read as `percentage`. A form ending in a letter must end on a word boundary,
  * so `m` does not match inside `market`; a symbol form needs no boundary,
@@ -337,6 +342,8 @@ export function matchUnitAt(
  * `$1.2B` and `USD 1.2 billion` both state a currency the number cannot carry
  * behind it. Only currencies are looked for: no other unit in ordinary prose
  * precedes its number.
+ *
+ * **`text` must already be lower case**, for the same reason as `matchUnitAt`.
  */
 export function matchCurrencyPrefix(text: string, index: number): UnitMatch | null {
   let at = index;

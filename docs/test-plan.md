@@ -496,6 +496,33 @@ The matrix is task times backend times repetition, and the money is spent one ce
 | **DUEWT-31** | A term whose accents compose differently still matches, and a bidi control is dropped like a zero-width space | unit: `due-weight-text` | ✓ |
 | **DUEWT-32** | A percentage range, a magnitude-suffixed range and a spaced two-letter magnitude all read correctly, and digits inside a URL or a clock time are not figures | unit: `due-weight-numbers` | ✓ |
 
+### BENCH-04 — accuracy and relevance
+
+The two failure modes here are silent. A gold fact missed on number formatting reports every backend as worse than it is and says nothing about why, and a match taken from a citation URL credits a backend for reasoning it never did. `ACCREL-01` and `ACCREL-06` are table-driven for exactly that reason.
+
+| AC | Criterion (from the contract) | Test | Status |
+|---|---|---|---|
+| **ACCREL-01** | The ways a model writes one figure all recover one gold fact: `1.2 billion`, `1,200,000,000`, `1.2B`, `1.2 bn`, `$1.2B`, `USD 1.2 billion`, `1.2e9` and the grouped decimal forms | unit: `numbers`, `accuracy` | ✓ |
+| **ACCREL-02** | A right figure with a recognised wrong unit recovers nothing: percentage points against percent, one currency against another, and a stated unit against a `dimensionless` gold | unit: `accuracy` | ✓ |
+| **ACCREL-03** | A figure with no unit written beside it still recovers, and is reported as `unstated` rather than counted the same as a stated one | unit: `accuracy` | ✓ |
+| **ACCREL-04** | A gold unit carrying its own scale word folds into the value, so `1.2` in `USD billions` and `$1.2bn` are one fact | unit: `units`, `accuracy` | ✓ |
+| **ACCREL-05** | An ambiguous suffix is read every plausible way, so `450m` recovers both a gold of 450 million and a gold of 450 metres | unit: `numbers` | ✓ |
+| **ACCREL-06** | A figure present only inside a citation recovers nothing, once for each form the citation extractor recognises: markdown link target, autolink, reference definition, bare URL and `cite` tag | unit: `prose`, `accuracy` | ✓ |
+| **ACCREL-07** | Link text that is a bare hostname is dropped with its URL; link text that is prose is kept | unit: `prose` | ✓ |
+| **ACCREL-08** | A value appearing only inside a denial does not recover; the same value also stated plainly does; a contrast word ends the denial's reach | unit: `prose`, `accuracy` | ✓ |
+| **ACCREL-09** | Each tolerance arm accepts immediately inside its bound and rejects immediately outside, including a relative tolerance against a zero gold, which is noted on the result | unit: `numbers`, `accuracy` | ✓ |
+| **ACCREL-10** | Scaling is decimal-exact rather than a multiplication, so `1.1 million` is `1100000`; and no output anywhere contains exponential notation | unit: `numbers` | ✓ |
+| **ACCREL-11** | Every accepted date form matches, a month and year with no day does not, an impossible calendar day is refused, and an ambiguous numeric date matches on either reading and says so | unit: `dates` | ✓ |
+| **ACCREL-12** | Names and identifiers match case-insensitively after Unicode normalisation, on word boundaries, by value or by any recorded alias | unit: `accuracy` | ✓ |
+| **ACCREL-13** | All four answer kinds are handled, proven against the exported kind tuple so a fifth cannot be added without failing here | unit: `accuracy` | ✓ |
+| **ACCREL-14** | A task with no gold facts is not-applicable rather than zero, and so is relevance on a task with no required terms | unit: `accuracy`, `relevance` | ✓ |
+| **ACCREL-15** | Relevance is coverage minus weighted drift, clamped to zero and one, counting each term once, with an empty drift list scoring no penalty | unit: `relevance` | ✓ |
+| **ACCREL-16** | Relevance matches over prose, so a required term present only in a citation URL scores no coverage | unit: `relevance` | ✓ |
+| **ACCREL-17** | The recovery record the accuracy scorer returns is accepted by the calibration scorer unchanged, including the empty one from a not-applicable result | unit: `accuracy` | ✓ |
+| **ACCREL-18** | Every admitted corpus task scores without throwing, and a report built from a task's own gold recovers every one of its facts | unit: `accuracy` | ✓ |
+| **ACCREL-19** | Percent, percentage points and basis points never canonicalise together, and the longest unit form wins so `percentage points` is never read as `percentage` | unit: `units` | ✓ |
+| **ACCREL-20** | A drift weight that is negative or not a number is refused rather than producing a score nobody can read | unit: `relevance` | ✓ |
+
 ### The paid project
 
 `tests/paid/` spends real money against the live API, so it is a **separate vitest project that is deliberately excluded from `test:all` and therefore from the gate**. It cannot block a deploy. It needs both `DOSSIER_PAID_TESTS=1` and a real `GEMINI_API_KEY`, and skips itself entirely without them.
