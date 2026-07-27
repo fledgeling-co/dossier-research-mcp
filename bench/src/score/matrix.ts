@@ -136,11 +136,19 @@ function isSubstantive(text: string): boolean {
 }
 
 /**
- * A row whose content is essentially just a link.
+ * A row whose content is essentially nothing but a link.
  *
- * Catches a bibliography that carries no heading of its own, which is common in
- * a list of sources at the end of a section.
+ * Catches a bibliography that carries no heading of its own, which is common at
+ * the end of a section. The threshold is deliberately tight, at four
+ * characters, because this rule removes a statement from every denominator and
+ * a generous one silently deletes real claims: at twelve, "Adoption rose
+ * [a](...)" reduced to `Adoptionrose`, twelve characters exactly, and a genuine
+ * claim was being filed as a bibliography entry. A labelled bibliography row
+ * with real words in it is caught by the heading rule instead, which is the
+ * safer of the two mechanisms because it cannot fire mid-prose.
  */
+const BARE_ROW_RESIDUE_LIMIT = 4;
+
 function isBareCitationRow(text: string): boolean {
   const withoutCitations = text
     .replace(/\[[^\]\n]*\]\([^)\s]*\)/g, ' ')
@@ -148,7 +156,7 @@ function isBareCitationRow(text: string): boolean {
     .replace(/<cite\s+[^>]*\/?>/g, ' ')
     .replace(/https?:\/\/\S+/g, ' ')
     .replace(/[|\s\d.,;:()[\]-]/g, '');
-  return extractCitedUrls(text).length > 0 && withoutCitations.length <= 12;
+  return extractCitedUrls(text).length > 0 && withoutCitations.length <= BARE_ROW_RESIDUE_LIMIT;
 }
 
 interface Piece {

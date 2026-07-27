@@ -1,0 +1,195 @@
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { describe, expect, it } from 'vitest';
+import { DiskRegistryCache, MemoryRegistryCache } from './cache.js';
+import { citationLookupCoordinator, collectAnchors, collectCitationEvidence } from './collect.js';
+import { parseEvidence } from './evidence.js';
+import type { RegistryResponse } from './registries.js';
+import type { FetchedSource } from '../verify/verify.js';
+
+/**
+ * Collection, entirely offline.
+ *
+ * Every transport here is a function returning a literal, which is the point of
+ * the injected boundary: the collector's whole decision surface is exercised in
+ * the gate with no network, no waiting and no key. The one test that matters
+ * most is the last: with every call failing, a full snapshot still comes back,
+ * because a collection that gives up halfway leaves a scorer computing a rate
+ * over whichever half happened to succeed.
+ */
+
+const page = (over: Partial<FetchedSource> = {}): FetchedSource => ({
+  url: 'https://example.com/a',
+  status: 200,
+  ok: true,
+  body: '<html><body><p id="results">Adoption reached 28.6%.</p></body></html>',
+  contentType: '',
+  truncated: false,
+  ...over,
+});
+
+function transportFor(map: Record<string, RegistryResponse>): (url: string) => Promise<RegistryResponse> {
+  return (url) => {
+    for (const [fragment, response] of Object.entries(map)) {
+      if (url.includes(fragment)) return Promise.resolve(response);
+    }
+    return Promise.resolve({ status: 0, body: '', error: 'no scripted response' });
+  };
+}
+
+const REPORT = 'Adoption reached 28.6% [source](https://example.com/a), see 10.1038/nature12373.';
+
+describe('anchors', () => {
+  it('collects id and name attributes and decodes their entities', () => {
+    const found = collectAnchors('<a name="top"></a><div id="a&amp;b"></div><p id=bare>');
+    expect(found).toContain('top');
+    expect(found).toContain('a&b');
+    expect(found).toContain('bare');
+  });
+
+  it('returns nothing for a document with no anchors', () => {
+    expect(collectAnchors('<p>plain</p>')).toEqual([]);
+  });
+});
+
+describe('a snapshot of one report', () => {
+  it('records the page, the identifier and the report hash', async () => {
+    const evidence = await collectCitationEvidence(REPORT, {
+      registryTransport: transportFor({ 'api.crossref.org': { status: 200, body: '{}' } }),
+      fetchPage: () => Promise.resolve(page()),
+    });
+    expect(evidence.pages).toHaveLength(1);
+    expect(evidence.pages[0]).toMatchObject({ verdict: 'live', truncated: false, completeHtml: true });
+    expect(evidence.pages[0]?.anchors).toContain('results');
+    expect(evidence.registry).toHaveLength(1);
+    expect(evidence.registry[0]).toMatchObject({ kind: 'doi', status: 'present', via: 'crossref' });
+    expect(evidence.reportSha256).toMatch(/^[0-9a-f]{64}$/);
+    // It is its own schema's citizen, so a scorer can read it back from disk.
+    expect(() => parseEvidence(evidence)).not.toThrow();
+  });
+
+  it('escalates a Crossref miss to the handle directory (INTEG-03)', async () => {
+    const evidence = await collectCitationEvidence('See 10.5281/zenodo.3509134 for the data.', {
+      registryTransport: transportFor({
+        'api.crossref.org': { status: 404, body: '{}' },
+        'doi.org/api/handles': { status: 200, body: '{"responseCode":1}' },
+      }),
+      fetchPage: () => Promise.resolve(page()),
+    });
+    expect(evidence.registry[0]).toMatchObject({ status: 'present', via: 'doi-handle' });
+  });
+
+  it('carries a truncated body through as truncated (INTEG-41)', async () => {
+    const evidence = await collectCitationEvidence(REPORT, {
+      registryTransport: transportFor({}),
+      fetchPage: () => Promise.resolve(page({ truncated: true })),
+    });
+    expect(evidence.pages[0]?.truncated).toBe(true);
+    // A truncated body is never complete readable HTML, so anchors are not
+    // listed from it and the anchor check answers unchecked rather than missing.
+    expect(evidence.pages[0]?.completeHtml).toBe(false);
+  });
+
+  it('records a page that would not load, rather than dropping it', async () => {
+    const evidence = await collectCitationEvidence(REPORT, {
+      registryTransport: transportFor({}),
+      fetchPage: () =>
+        Promise.resolve(page({ ok: false, status: 0, body: '', error: 'connect ETIMEDOUT' })),
+    });
+    expect(evidence.pages[0]).toMatchObject({ verdict: 'unreachable' });
+  });
+});
+
+describe('the cache (INTEG-06, INTEG-07)', () => {
+  it('looks one identifier up once across many reports', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'bench-cite-collect-'));
+    const cache = new DiskRegistryCache(dir);
+    let calls = 0;
+    const options = {
+      registryTransport: (url: string) => {
+        calls += 1;
+        return Promise.resolve(
+          url.includes('crossref') ? { status: 200, body: '{}' } : { status: 404, body: '{}' },
+        );
+      },
+      fetchPage: () => Promise.resolve(page()),
+      cache,
+    };
+    await collectCitationEvidence(REPORT, options);
+    await collectCitationEvidence(`Another report, same DOI 10.1038/nature12373.`, options);
+    expect(calls).toBe(1);
+  });
+
+  it('collapses two concurrent collections onto one lookup, given a shared coordinator', async () => {
+    let calls = 0;
+    const shared = citationLookupCoordinator({ cache: new MemoryRegistryCache() });
+    const options = {
+      registryTransport: () => {
+        calls += 1;
+        return new Promise<RegistryResponse>((resolve) => {
+          setTimeout(() => {
+            resolve({ status: 200, body: '{}' });
+          }, 5);
+        });
+      },
+      fetchPage: () => Promise.resolve(page()),
+      ...shared,
+    };
+    await Promise.all([
+      collectCitationEvidence(REPORT, options),
+      collectCitationEvidence(REPORT, options),
+    ]);
+    expect(calls).toBe(1);
+  });
+
+  it('does not remember an unchecked answer', async () => {
+    const cache = new MemoryRegistryCache();
+    let calls = 0;
+    const options = {
+      registryTransport: () => {
+        calls += 1;
+        return Promise.resolve({ status: 429, body: 'Rate exceeded.' });
+      },
+      fetchPage: () => Promise.resolve(page()),
+      cache,
+    };
+    await collectCitationEvidence(REPORT, options);
+    await collectCitationEvidence(REPORT, options);
+    // Two lookups, because the first was never an answer worth keeping.
+    expect(calls).toBe(4);
+    expect(cache.get('doi', '10.1038/nature12373')).toBeUndefined();
+  });
+});
+
+describe('with nothing reachable at all (INTEG-40)', () => {
+  it('still returns a complete snapshot in which nothing is absent', async () => {
+    const evidence = await collectCitationEvidence(REPORT, {
+      registryTransport: () =>
+        Promise.resolve({ status: 0, body: '', error: 'getaddrinfo ENOTFOUND' }),
+      fetchPage: () =>
+        Promise.resolve(page({ ok: false, status: 0, body: '', error: 'getaddrinfo ENOTFOUND' })),
+    });
+    expect(evidence.pages).toHaveLength(1);
+    expect(evidence.registry).toHaveLength(1);
+    expect(evidence.registry[0]?.status).toBe('unchecked');
+    expect(evidence.registry.every((r) => r.status !== 'absent')).toBe(true);
+    expect(() => parseEvidence(evidence)).not.toThrow();
+  });
+});
+
+describe('caps', () => {
+  it('names what it did not reach, so silence is never mistaken for success', async () => {
+    const many = Array.from(
+      { length: 5 },
+      (_, i) => `Claim ${String(i)} [s](https://example.com/${String(i)}).`,
+    ).join(' ');
+    const evidence = await collectCitationEvidence(many, {
+      registryTransport: transportFor({}),
+      fetchPage: () => Promise.resolve(page()),
+      maxPages: 2,
+    });
+    expect(evidence.pages).toHaveLength(2);
+    expect(evidence.notes.join(' ')).toMatch(/unchecked rather than absent/);
+  });
+});
