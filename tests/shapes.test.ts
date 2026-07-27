@@ -301,7 +301,7 @@ describe('a declared gap is recognised however it is written', () => {
   // A blanket no-em-dash sweep replaced it with a comma once, quietly turning
   // "the model said there is nothing here" into "the model wrote a comma", and
   // the whole suite stayed green. This is the test that would have caught it.
-  const spec = { topic: 't', entities: ['E'], fields: [{ name: 'f' }] };
+  const spec = { topic: 't', entities: ['E'], fields: [{ name: 'f', detail: 'brief' as const }] };
 
   it.each(['—', '–', '-', '--', 'n/a', 'N/A', 'none', 'unknown', 'not found', '_not found_'])(
     'treats %j as a declared gap rather than as a value',
