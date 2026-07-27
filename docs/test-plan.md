@@ -729,6 +729,9 @@ The only slice that tests Dossier's own claim rather than a provider's, and the 
 | **SELF-20** | The binary view collapses by a declared rule, and `unreadable` leaves it rather than being counted as unsound | unit: `verdicts`, `report` | ✓ |
 | **SELF-21** | The report names what every number cannot mean, including that containment is not entailment | unit: `report` | ✓ |
 | **SELF-22** | The corpus contains a page about the right topic that does not contain the claim, a page that contradicts it, and a page behind a wall | unit: `balance` | ✓ |
+| **SELF-23** | The entry point is wired: the real CLI, spawned over its real argv, prints both families and both matrices in full | unit: `cli` | ✓ |
+| **SELF-24** | `capture` and `judge` are reachable from it and refuse before they can reach a network or spend | unit: `cli` | ✓ |
+| **SELF-25** | A constructed fixture's printed digest is the digest of the file that was written, so the loader will accept it | unit: `cli` | ✓ |
 
 ### Remaining gaps, named
 

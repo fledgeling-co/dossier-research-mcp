@@ -112,7 +112,7 @@ export function parseJudgement(output: string): JudgeOne | { readonly error: str
     const quote = (raw as { quote?: unknown }).quote;
     const note = (raw as { note?: unknown }).note;
     return {
-      verdict: verdict as SupportLabel,
+      verdict,
       ...(typeof quote === 'string' && quote !== '' ? { quote: quote.slice(0, 1000) } : {}),
       ...(typeof note === 'string' && note !== '' ? { note: note.slice(0, 600) } : {}),
     };
