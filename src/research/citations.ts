@@ -25,6 +25,49 @@ export interface VerifyOptions {
 const DEFAULT_CONCURRENCY = 6;
 const DEFAULT_MAX_URLS = 150;
 
+/** A verdict without the url and timestamp, which the caller already holds. */
+export type CitationJudgement = Pick<CitationVerdict, 'verdict'> & { readonly note?: string };
+
+/**
+ * What an HTTP status says about a citation.
+ *
+ * Exported because the benchmark's citation scorer needs the same reading over
+ * a body it fetched for its own purposes, and two implementations of one rule
+ * eventually disagree about what the rule is. The rule lives here once; the
+ * benchmark imports it rather than restating it.
+ */
+export function judgeCitationStatus(status: number, ok: boolean): CitationJudgement {
+  if (ok) return { verdict: 'live' };
+  if (status === 404 || status === 410) return { verdict: 'not_found' };
+  if (status === 401 || status === 402 || status === 403) {
+    return {
+      verdict: 'blocked',
+      note: 'Paywalled, login-gated, or bot-blocked, existence is plausible but unconfirmed.',
+    };
+  }
+  return { verdict: 'unverified', note: `Unexpected status ${String(status)}` };
+}
+
+/** What a thrown fetch error says about a citation. Exported for the same reason. */
+export function judgeCitationError(e: unknown): CitationJudgement {
+  if (e instanceof BlockedUrlError) {
+    // A redirect loop says something about the SERVER, not the citation —
+    // sites commonly 302 an unrecognised User-Agent back to itself as a bot
+    // deterrent (milvus.io does exactly this). Reporting that as
+    // `invalid_url` alongside malformed and SSRF URLs drags real sources
+    // into the "suspect" badge and implies fabrication that isn't there.
+    if (e.reason === 'redirect_loop') {
+      return {
+        verdict: 'blocked',
+        note: `${e.message}, the source is probably fine; open it in a browser to confirm.`,
+      };
+    }
+    return { verdict: 'invalid_url', note: e.message.slice(0, 300) };
+  }
+  const message = e instanceof Error ? e.message : String(e);
+  return { verdict: 'unreachable', note: message.slice(0, 300) };
+}
+
 async function verifyOne(url: string, timeoutMs: number): Promise<CitationVerdict> {
   const checkedAt = new Date().toISOString();
   try {
@@ -34,46 +77,10 @@ async function verifyOne(url: string, timeoutMs: number): Promise<CitationVerdic
     if (result.status === 405 || result.status === 501) {
       result = await safeFetch(url, { method: 'GET', timeoutMs, maxBytes: 32 * 1024 });
     }
-
-    if (result.ok) return { url, verdict: 'live', httpStatus: result.status, checkedAt };
-    if (result.status === 404 || result.status === 410) {
-      return { url, verdict: 'not_found', httpStatus: result.status, checkedAt };
-    }
-    if (result.status === 401 || result.status === 402 || result.status === 403) {
-      return {
-        url,
-        verdict: 'blocked',
-        httpStatus: result.status,
-        checkedAt,
-        note: 'Paywalled, login-gated, or bot-blocked, existence is plausible but unconfirmed.',
-      };
-    }
-    return {
-      url,
-      verdict: 'unverified',
-      httpStatus: result.status,
-      checkedAt,
-      note: `Unexpected status ${result.status}`,
-    };
+    const judged = judgeCitationStatus(result.status, result.ok);
+    return { url, httpStatus: result.status, checkedAt, ...judged };
   } catch (e: unknown) {
-    if (e instanceof BlockedUrlError) {
-      // A redirect loop says something about the SERVER, not the citation —
-      // sites commonly 302 an unrecognised User-Agent back to itself as a bot
-      // deterrent (milvus.io does exactly this). Reporting that as
-      // `invalid_url` alongside malformed and SSRF URLs drags real sources
-      // into the "suspect" badge and implies fabrication that isn't there.
-      if (e.reason === 'redirect_loop') {
-        return {
-          url,
-          verdict: 'blocked',
-          checkedAt,
-          note: `${e.message}, the source is probably fine; open it in a browser to confirm.`,
-        };
-      }
-      return { url, verdict: 'invalid_url', checkedAt, note: e.message.slice(0, 300) };
-    }
-    const message = e instanceof Error ? e.message : String(e);
-    return { url, verdict: 'unreachable', checkedAt, note: message.slice(0, 300) };
+    return { url, checkedAt, ...judgeCitationError(e) };
   }
 }
 
