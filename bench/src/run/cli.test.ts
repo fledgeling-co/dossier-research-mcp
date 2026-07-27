@@ -42,6 +42,17 @@ describe('parseArgs', () => {
     expect(() => parseArgs(['--providers', ' , ', '--ceiling', '10'])).toThrow(/--providers/);
   });
 
+  // Checked against the authoritative id list rather than cast into it, so a
+  // typo cannot reach the planner as a backend nothing can cost.
+  it('refuses a backend id that does not exist, naming the ones that do', () => {
+    expect(() => parseArgs(['--providers', 'gemni', '--ceiling', '10'])).toThrow(
+      /Unknown backend "gemni"/,
+    );
+    expect(() => parseArgs(['--providers', 'gemini,nope', '--ceiling', '10'])).toThrow(
+      /Known ids: /,
+    );
+  });
+
   // An unknown flag silently ignored is a typo that spends money: `--dry-rnu`
   // parsed as nothing at all left `dryRun` false and started the batch.
   it('refuses an unknown or malformed flag rather than ignoring it', () => {

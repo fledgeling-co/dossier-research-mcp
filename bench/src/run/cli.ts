@@ -3,7 +3,7 @@ import { argv } from 'node:process';
 import { pathToFileURL } from 'node:url';
 import { UTILITY_CALL_BAND } from '../../../src/gemini/cost.js';
 import { buildDeps } from '../../../src/server.js';
-import type { ProviderId } from '../../../src/providers/types.js';
+import { PROVIDER_IDS, type ProviderId } from '../../../src/providers/types.js';
 import type { StartRunArgs } from '../../../src/research/runner.js';
 import { loadCorpusFromDirectory, type BenchTask } from '../tasks/index.js';
 import { boundedConcurrency, DEFAULT_CONCURRENCY, runBatch } from './harness.js';
@@ -100,7 +100,20 @@ export function parseArgs(argv: readonly string[]): CliArgs {
   // Deduplicated: the same backend named twice would give two matrix cells the
   // same coordinates, so one would overwrite the other in the store and the
   // matrix would silently be smaller than the plan reported.
-  const providers = [...new Set(requested)];
+  //
+  // Checked against the authoritative id list rather than cast into it (CP §1).
+  // `main()` also refuses a backend that is unconfigured; this refuses one that
+  // does not exist at all, which is the typo case and belongs with the parsing.
+  const providers: ProviderId[] = [];
+  for (const id of new Set(requested)) {
+    const known = PROVIDER_IDS.find((p) => p === id);
+    if (!known) {
+      throw new Error(
+        `Unknown backend "${id}". Known ids: ${PROVIDER_IDS.join(', ')}.\n\n${USAGE}`,
+      );
+    }
+    providers.push(known);
+  }
 
   const ceilingRaw = flags.get('ceiling');
   if (ceilingRaw === undefined) {
@@ -119,7 +132,7 @@ export function parseArgs(argv: readonly string[]): CliArgs {
   return {
     tasksDir: resolve(flags.get('tasks') ?? join('bench', 'tasks')),
     outPath: resolve(flags.get('out') ?? join('bench', 'results', 'cells.jsonl')),
-    providers: providers as ProviderId[],
+    providers,
     repetitions,
     ceilingUsd,
     concurrency,
