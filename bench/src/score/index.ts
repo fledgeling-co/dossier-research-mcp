@@ -202,6 +202,7 @@ export {
   containmentOracle,
   judgedOracle,
   scoreCitationIntegrity,
+  supportPairKey,
 } from './citations.js';
 export type {
   AnchorTally,

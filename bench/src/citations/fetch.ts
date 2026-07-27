@@ -39,16 +39,22 @@ const DEFAULT_TIMEOUT_MS = 20_000;
 /**
  * Whether the read stopped at the cap.
  *
- * The same inference `bench/src/verify/cli.ts` makes, deliberately identical
- * rather than improved: `safeFetch` breaks its read once the byte total reaches
- * the cap, so a body at or over it was cut short. The decoder can hold back up
- * to three bytes of an incomplete character, which makes this a false negative
- * in a three-byte window at the very end of a two-megabyte read. Writing it
- * down rather than tuning it, because a divergence between the two slices about
- * what truncated means would be worth far more than three bytes.
+ * The same inference `bench/src/verify/cli.ts` makes, because `safeFetch`
+ * breaks its read once the byte total reaches the cap and surfaces no flag
+ * saying so: a body at or near the cap was cut short.
+ *
+ * One deliberate difference from the sibling, and it is a four-byte one. The
+ * decoder can hold back up to three bytes of an incomplete character, so a
+ * strict `>= cap` misses a genuine truncation by a hair. In gold verification
+ * that hair costs a false `absent` on one fact; here it turns "we stopped
+ * reading before the number" into "the page does not contain the number" for
+ * every statement citing that page. Erring the other way costs an `unchecked`
+ * on a page that happens to end within four bytes of the cap, which is the
+ * harmless direction, and this slice's whole posture is to take the harmless
+ * direction when the two are not symmetric.
  */
 function looksTruncated(body: string, cap: number): boolean {
-  return Buffer.byteLength(body, 'utf8') >= cap;
+  return Buffer.byteLength(body, 'utf8') >= cap - 4;
 }
 
 /** Fetch one cited page for the containment and anchor checks. */

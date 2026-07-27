@@ -41,6 +41,17 @@ export interface CollectOptions {
   readonly fetchPage: (url: string) => Promise<FetchedSource>;
   readonly cache?: RegistryCache | undefined;
   readonly limiter?: RateLimiter | undefined;
+  /**
+   * Shared across every collector call in one batch.
+   *
+   * The cache, the limiter and this are all injected together and all three
+   * have to outlive a single call to do their jobs: a limiter created per
+   * report enforces a gap per report rather than per registry, and a
+   * single-flight map created per report cannot collapse two concurrent cells
+   * that want the same DOI. `citationLookupCoordinator()` builds the three as
+   * one unit; a batch builds it once and passes it to every call.
+   */
+  readonly flight?: SingleFlight | undefined;
   readonly now?: (() => Date) | undefined;
   /** Bounded well below the harness's own, since this is batch work. */
   readonly concurrency?: number | undefined;
@@ -48,6 +59,31 @@ export interface CollectOptions {
   /** Cap on cited pages fetched from one report, so one runaway cannot stall a batch. */
   readonly maxPages?: number | undefined;
   readonly maxIdentifiers?: number | undefined;
+}
+
+/**
+ * The three things that must be shared across a whole batch, built as one.
+ *
+ * Handed to every `collectCitationEvidence` call in a run. Built per call
+ * instead, the cache still works and the other two silently do not: the gap
+ * would be enforced per report rather than per registry, and two cells wanting
+ * the same identifier at the same moment would both miss and both request,
+ * which is the requirement that the same DOI across forty reports is one
+ * lookup, quietly unmet.
+ */
+export function citationLookupCoordinator(options: {
+  readonly cache?: RegistryCache | undefined;
+  readonly registryOptions?: RegistryOptions | undefined;
+  readonly sleep?: ((ms: number) => Promise<void>) | undefined;
+} = {}): { cache: RegistryCache; limiter: RateLimiter; flight: SingleFlight } {
+  return {
+    cache: options.cache ?? new MemoryRegistryCache(),
+    limiter: new RateLimiter({
+      gaps: { crossref: crossrefGapMs(options.registryOptions ?? {}) },
+      ...(options.sleep === undefined ? {} : { sleep: options.sleep }),
+    }),
+    flight: new SingleFlight(),
+  };
 }
 
 const DEFAULT_CONCURRENCY = 4;
@@ -211,7 +247,7 @@ export async function collectCitationEvidence(
   const limiter =
     options.limiter ??
     new RateLimiter({ gaps: { crossref: crossrefGapMs(options.registryOptions ?? {}) } });
-  const flight = new SingleFlight();
+  const flight = options.flight ?? new SingleFlight();
   const notes: string[] = [];
 
   const allUrls = extractCitedUrls(report).map(canonicaliseUrl);

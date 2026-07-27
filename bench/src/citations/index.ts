@@ -16,7 +16,7 @@ export {
 } from './cache.js';
 export type { RegistryCache, Sleeper } from './cache.js';
 
-export { collectAnchors, collectCitationEvidence } from './collect.js';
+export { citationLookupCoordinator, collectAnchors, collectCitationEvidence } from './collect.js';
 export type { CollectOptions } from './collect.js';
 
 export {
@@ -33,6 +33,8 @@ export {
 export type { CitationEvidence, PageEvidence, RegistryAnswer } from './evidence.js';
 
 export { MAX_PAGE_BYTES, MAX_REGISTRY_BYTES, fetchPage, fetchRegistry } from './fetch.js';
+
+export { evidenceMatchesReport, evidencePath, readEvidence, writeEvidence } from './store.js';
 
 export { REGISTRY_GAP_MS, REGISTRY_IDS, crossrefGapMs, isRefusal, plan } from './registries.js';
 export type {
