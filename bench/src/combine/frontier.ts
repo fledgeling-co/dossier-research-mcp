@@ -1,3 +1,5 @@
+import { spreadsOverlap, type SpreadReport } from '../report/spread.js';
+
 /**
  * The Pareto frontier, over three axes rather than two.
  *
@@ -69,6 +71,25 @@ export interface FrontierCandidate {
   readonly costUsd: number;
   /** Maximise. `robustness.worstCaseSurvivingShare` from `overlap.ts`. */
   readonly robustness: number;
+  /**
+   * The spread behind `score`, when the sample has one.
+   *
+   * Optional, and supplying it changes the answer: two candidates whose score
+   * spreads overlap are **tied on that axis**, so neither can dominate the
+   * other on the strength of a score difference the sample cannot establish.
+   *
+   * This is not a second opinion about what a sample can support. It is
+   * `spreadsOverlap` from `bench/src/report/spread.ts`, the same rule
+   * `rankBackends` uses to report two backends tied rather than ordering them,
+   * imported rather than restated. Two answers to that question in one codebase
+   * is worse than either, and a frontier is a *stronger* claim than a ranking:
+   * saying a combination is dominated says nobody should ever buy it.
+   *
+   * Omitted, every candidate is treated as separable and the frontier is a
+   * point-estimate frontier. That is the honest default for a single run rather
+   * than a silent one: the report says so in as many words.
+   */
+  readonly scoreSpread?: SpreadReport | null | undefined;
 }
 
 /**
@@ -84,6 +105,25 @@ export interface MeasureLabel {
   readonly name: string;
   readonly direction: 'higher-is-better' | 'lower-is-better';
 }
+
+/**
+ * The two sentences a frontier carries about what its ordering rests on.
+ *
+ * Exported so tests assert on them and so neither can be quietly reworded into
+ * a claim the evidence does not support.
+ */
+export const SEPARABILITY_CHECKED =
+  'Two combinations whose observed score spreads overlap are treated as tied on that axis, so neither ' +
+  'dominates the other on a score difference this sample cannot establish. That is the same descriptive ' +
+  'check bench/src/report/rank.ts applies before ordering two backends, imported rather than restated. ' +
+  'It is not a significance test: bootstrap intervals, paired differences and errors clustered on topic ' +
+  'are BENCH-13.';
+
+export const SEPARABILITY_UNCHECKED =
+  'No score spreads were supplied, so this is a point-estimate frontier: every score difference, however ' +
+  'small, was taken at face value. Calling a combination dominated says nobody should ever buy it, which ' +
+  'is a stronger claim than a ranking, and at one repetition per cell it is a claim about one sample. ' +
+  'Supply scoreSpread per candidate to have overlapping spreads treated as ties.';
 
 export interface DominatedCandidate {
   readonly id: string;
@@ -104,6 +144,14 @@ export interface FrontierResult {
    * is reading a ranking of an unknown quantity.
    */
   readonly measure: MeasureLabel;
+  /**
+   * Whether the sample was allowed to say two combinations cannot be separated.
+   *
+   * One of `SEPARABILITY_CHECKED` or `SEPARABILITY_UNCHECKED`. Always present,
+   * because "dominated" is a strong claim and a reader has to know whether it
+   * rests on a spread or on a single point.
+   */
+  readonly separability: string;
   /** The direction of each axis, carried so a reader never has to guess. */
   readonly axes: {
     readonly score: 'maximise';
@@ -129,17 +177,40 @@ function assertFinite(c: FrontierCandidate): void {
 }
 
 /**
+ * How the two compare on score, once the sample is allowed to say "cannot tell".
+ *
+ * Overlapping spreads are `tied`, which is both weaker and stronger than it
+ * looks: `a` cannot dominate `b` by out-scoring it, and neither is `a`
+ * disqualified for under-scoring it. The pair simply has to be separated on
+ * cost or robustness, or not at all.
+ */
+function compareScore(a: FrontierCandidate, b: FrontierCandidate): 'better' | 'worse' | 'tied' {
+  if (a.scoreSpread != null && b.scoreSpread != null && spreadsOverlap(a.scoreSpread, b.scoreSpread)) {
+    return 'tied';
+  }
+  if (a.score > b.score) return 'better';
+  if (a.score < b.score) return 'worse';
+  return 'tied';
+}
+
+/**
  * Does `a` dominate `b`?
  *
  * At least as good on all three, strictly better on at least one. Ties on all
  * three keep both: two genuinely identical purchases are two options, not one
  * option and one loser, and picking a winner between them would be an ordering
  * imposed by input order rather than by evidence.
+ *
+ * A score difference the sample cannot establish counts as a tie, so it can
+ * neither disqualify a candidate nor promote one. Domination is a claim that
+ * nobody should ever buy the loser, and that claim has to rest on a difference
+ * the evidence actually carries.
  */
 function dominates(a: FrontierCandidate, b: FrontierCandidate): boolean {
-  const noWorse = a.score >= b.score && a.costUsd <= b.costUsd && a.robustness >= b.robustness;
-  if (!noWorse) return false;
-  return a.score > b.score || a.costUsd < b.costUsd || a.robustness > b.robustness;
+  const score = compareScore(a, b);
+  if (score === 'worse') return false;
+  if (!(a.costUsd <= b.costUsd && a.robustness >= b.robustness)) return false;
+  return score === 'better' || a.costUsd < b.costUsd || a.robustness > b.robustness;
 }
 
 function explain(a: FrontierCandidate, b: FrontierCandidate, measure: MeasureLabel): string {
@@ -148,9 +219,16 @@ function explain(a: FrontierCandidate, b: FrontierCandidate, measure: MeasureLab
   const shown = (v: number): string =>
     (measure.direction === 'lower-is-better' ? -v : v).toFixed(4);
   const parts: string[] = [];
-  if (a.score > b.score) {
+  const score = compareScore(a, b);
+  if (score === 'better') {
     parts.push(`has ${measure.name} ${shown(a.score)} against ${shown(b.score)}`);
-  } else if (a.score === b.score) parts.push(`matches on ${measure.name}`);
+  } else if (score === 'tied') {
+    parts.push(
+      a.scoreSpread != null && b.scoreSpread != null
+        ? `cannot be separated on ${measure.name} at this sample size`
+        : `matches on ${measure.name}`,
+    );
+  }
   if (a.costUsd < b.costUsd) parts.push(`costs $${a.costUsd.toFixed(2)} against $${b.costUsd.toFixed(2)}`);
   else if (a.costUsd === b.costUsd) parts.push('costs the same');
   if (a.robustness > b.robustness) {
@@ -217,6 +295,9 @@ export function paretoFrontier(
     frontier,
     dominated,
     measure,
+    separability: candidates.some((c) => c.scoreSpread != null)
+      ? SEPARABILITY_CHECKED
+      : SEPARABILITY_UNCHECKED,
     axes: { score: 'maximise', costUsd: 'minimise', robustness: 'maximise' },
   };
 }

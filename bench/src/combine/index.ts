@@ -77,8 +77,17 @@ export type {
   MemberContribution,
 } from './marginal.js';
 
-export { paretoFrontier } from './frontier.js';
-export type { DominatedCandidate, FrontierCandidate, FrontierResult } from './frontier.js';
+export {
+  paretoFrontier,
+  SEPARABILITY_CHECKED,
+  SEPARABILITY_UNCHECKED,
+} from './frontier.js';
+export type {
+  DominatedCandidate,
+  FrontierCandidate,
+  FrontierResult,
+  MeasureLabel,
+} from './frontier.js';
 
 export { combinationId, evaluateCombinations, evaluateScopes } from './evaluate.js';
 export type {
