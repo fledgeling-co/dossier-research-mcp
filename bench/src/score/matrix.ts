@@ -494,7 +494,11 @@ export function matrixMetrics(input: MatrixInput): MatrixMetrics {
     unsupportedStatementRate:
       decidedStatements === 0 ? null : unsupportedStatements / decidedStatements,
     necessarySources,
-    sourceNecessity: sources.length === 0 ? null : necessarySources / sources.length,
+    // Null, not zero, when nothing in the support matrix could be decided.
+    // Zero would read as "no source is necessary", which is a claim, and it
+    // would be made from no evidence at all.
+    sourceNecessity:
+      sources.length === 0 || decidedStatements === 0 ? null : necessarySources / sources.length,
     sourceNecessityTieDependent: true,
     uniquelyCitedSources,
     budget,

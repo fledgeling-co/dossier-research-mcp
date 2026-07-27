@@ -152,4 +152,14 @@ Segmentation runs over the **raw** report. Normalising citations first rewrites 
 
 ## Running it
 
-Collection and scoring are library functions; BENCH-08 owns the reporting surface. The gate covers every decision either half makes, with an injected transport, an injected clock and a temporary directory. Live registry probes are a manual step and are deliberately never in the gate: they are not hermetic and their answers move.
+`citationBatch()` is the wired arrangement: the live adapters, the on-disk answer cache and one coordinator shared across every report in a run. It exists because every part of this slice is injectable so the gate can drive it offline, and that leaves an obligation somebody has to discharge. Built per report instead of per batch, the limiter enforces a gap per report rather than per registry and two concurrent cells both miss the cache for the same identifier, so "the same DOI across forty reports is one lookup" would hold only if a future caller happened to wire three objects together correctly.
+
+```
+const batch = citationBatch({ registryOptions: { crossrefMailto: 'you@example.com' } });
+await batch.collect(cellKey, report);      // fetches, remembers, writes the snapshot
+const result = batch.score(cellKey, report); // reads it back and scores, purely
+```
+
+`score` refuses a snapshot collected from a different report and reports that as no evidence, never as a result about a backend.
+
+BENCH-08 still owns what a run *reports*. The gate covers every decision either half makes, with an injected transport, an injected clock and a temporary directory. The SSRF boundary is exercised for real, because a private address is refused before a socket opens, so driving the live fetcher at one stays hermetic. Live registry probes are a manual step and are deliberately never in the gate: they are not hermetic and their answers move.

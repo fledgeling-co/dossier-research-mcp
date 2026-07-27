@@ -601,12 +601,12 @@ The sharpest instrument in the benchmark, and the one whose wrong answer is most
 | **INTEG-24** | A text fragment, a PDF page fragment and a non-HTML body are `not-applicable` or `unchecked`, never `missing` | unit: `containment` | ✓ |
 | **INTEG-25** | Statement segmentation ignores fenced code, headings and table separators, and does not split on a decimal or a common abbreviation | unit: `matrix` | ✓ |
 | **INTEG-26** | A citation in the gap after a sentence terminator attaches to the preceding statement | unit: `matrix` | ✓ |
-| **INTEG-27** | Citation accuracy is the elementwise product over the citation total, and is null when nothing is cited | unit: `matrix` | ✓ |
+| **INTEG-27** | Citation accuracy is the elementwise product over the citations whose support could be **decided**, and is null when nothing was cited or nothing could be decided | unit: `matrix` | ✓ |
 | **INTEG-28** | Citation thoroughness is that product over the support total across all pairs, and is null when the pair budget binds | unit: `matrix` | ✓ |
-| **INTEG-29** | Source necessity is the size of a minimum vertex cover of the citation graph, which is canonical, and a report citing every source for every statement scores low on it | unit: `matrix` | ✓ |
-| **INTEG-30** | `uniquelyCitedSources` is reported beside necessity and counts the sources a report relies on alone | unit: `matrix` | ✓ |
+| **INTEG-29** | Source necessity is the source side of a minimum vertex cover of the **support** graph, as the paper defines it, and is null when nothing in that matrix could be decided | unit: `matrix` | ✓ |
+| **INTEG-30** | Necessity reports that it is tie-dependent, and the canonical `uniquelyCitedSources` is reported beside it | unit: `matrix` | ✓ |
 | **INTEG-31** | Uncited sources are the empty columns of the citation matrix | unit: `matrix` | ✓ |
-| **INTEG-32** | Unsupported statements are counted over cited statements, and the divergence from the published definition is stated | unit: `matrix`, `citations` | ✓ |
+| **INTEG-32** | A statement is unsupported only once something in its support row was decided, and one nothing could be decided about leaves the denominator; the divergence from the published relevance-filtered definition is stated | unit: `matrix`, `citations` | ✓ |
 | **INTEG-33** | The relevance-dependent dimensions are reported unavailable with a reason, never approximated | unit: `citations` | ✓ |
 | **INTEG-34** | Citation accuracy and citation volume are separate numbers on every result, including the unmeasurable arm | unit: `citations` | ✓ |
 | **INTEG-35** | The support oracle's name rides on every result | unit: `citations` | ✓ |
@@ -616,6 +616,11 @@ The sharpest instrument in the benchmark, and the one whose wrong answer is most
 | **INTEG-39** | A report with no citations is `unmeasurable / no-citations` and still reports volume | unit: `citations` | ✓ |
 | **INTEG-40** | With every network call failing, collection still returns a complete snapshot | unit: `collect` | ✓ |
 | **INTEG-44** | A URL refused as private keeps the product's own `invalid_url` verdict, and a self-redirect loop keeps `blocked`, rather than both flattening to `unreachable` | unit: `collect` | ✓ |
+| **INTEG-45** | The real fetch adapter refuses a link-local, loopback, private or non-http address before a socket is opened, and the refusal reaches the snapshot as `invalid_url` | unit: `live` | ✓ |
+| **INTEG-46** | A transport that rejects rather than resolving costs one answer, never the whole snapshot, and never produces `absent` | unit: `live` | ✓ |
+| **INTEG-47** | Collecting, writing, reading and scoring compose through one surface, and a snapshot collected from a different report is refused rather than scored against | unit: `live` | ✓ |
+| **INTEG-48** | An arXiv feed whose entry names a different paper is `unchecked`, not `present` | unit: `registries` | ✓ |
+| **INTEG-49** | `data-id`, a commented-out attribute and a string inside a script are not anchors | unit: `collect` | ✓ |
 | **INTEG-41** | A truncated page body is carried as truncated through collection into the containment verdict | unit: `collect`, `containment` | ✓ |
 | **INTEG-42** | Number and text matching goes through the shared primitives, so two slices cannot disagree about a thousands separator | unit: `containment` | ✓ |
 | **INTEG-43** | An evidence snapshot read back from disk is Zod-parsed, and a malformed one is refused rather than scored against | unit: `evidence` | ✓ |

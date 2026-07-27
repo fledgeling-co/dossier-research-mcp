@@ -37,6 +37,9 @@ export type { FetchedPage } from './fetch.js';
 
 export { evidenceMatchesReport, evidencePath, readEvidence, writeEvidence } from './store.js';
 
+export { citationBatch, defaultEvidenceDir } from './live.js';
+export type { CitationBatch, LiveCitationOptions } from './live.js';
+
 export { REGISTRY_GAP_MS, REGISTRY_IDS, crossrefGapMs, isRefusal, plan } from './registries.js';
 export type {
   RegistryId,

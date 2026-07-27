@@ -160,7 +160,8 @@ bench/                  the benchmark. NOT compiled into dist/ and NOT published
   src/score/matrix.ts      the published statement-by-source algebra
   src/score/citations.ts   citation integrity, pure over a report and a snapshot
   src/citations/        the impure half: registries, the on-disk answer cache,
-                        the rate limiter and the evidence snapshot. Reaching a
+                        the rate limiter, the evidence snapshot and live.ts,
+                        which wires the real adapters into one batch. Reaching a
                         network lives here and nowhere in src/score/.
                         docs/bench/citation-integrity.md
   src/run/cell.ts       what one matrix cell is; the resume key, the cell

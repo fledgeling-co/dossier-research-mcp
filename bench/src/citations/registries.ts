@@ -218,6 +218,7 @@ function handleStep(id: string): RegistryStep {
  * narrowness is the safety: a feed this pattern cannot read is `unchecked`.
  */
 const ARXIV_TOTAL = /<opensearch:totalResults[^>]*>\s*(\d+)\s*<\/opensearch:totalResults>/i;
+const ARXIV_ENTRY_ID = /<entry\b[\s\S]*?<id>([^<]*)<\/id>/gi;
 
 function arxivStep(id: string): RegistryStep {
   return {
@@ -238,7 +239,19 @@ function arxivStep(id: string): RegistryStep {
       if (Number(total) === 0) {
         return { kind: 'absent', detail: 'arXiv returned no entry for this id' };
       }
-      return { kind: 'present', detail: 'arXiv returned an entry for this id' };
+      // A count alone is not the answer. The feed must carry an entry whose own
+      // id is the one that was asked about, or a response describing something
+      // else would read as confirmation of this identifier.
+      const wanted = id.toLowerCase();
+      for (const entry of response.body.matchAll(ARXIV_ENTRY_ID)) {
+        if ((entry[1] ?? '').toLowerCase().includes(wanted)) {
+          return { kind: 'present', detail: 'arXiv returned an entry with this id' };
+        }
+      }
+      return {
+        kind: 'unchecked',
+        detail: 'arXiv returned a result carrying no entry with this id, so it decides nothing about it',
+      };
     },
   };
 }

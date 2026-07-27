@@ -10,6 +10,7 @@ import {
   cacheKey,
 } from './cache.js';
 import type { RegistryAnswer } from './evidence.js';
+import { REGISTRY_GAP_MS, crossrefGapMs } from './registries.js';
 
 /**
  * Remembering an answer, spacing the requests, and collapsing the duplicates.
@@ -144,6 +145,25 @@ describe('the rate limiter (INTEG-09)', () => {
     // The first goes immediately; the next two each wait the full gap, because
     // no time passed between them other than the waiting itself.
     expect(slept).toEqual([200, 200]);
+  });
+
+  it('halves Crossref\'s gap when a contact address puts it in the polite pool', () => {
+    // Verified 27 July 2026: the public pool allows 5 a second and the polite
+    // pool 10, so the gap is the pool the configured contact address buys.
+    expect(crossrefGapMs({})).toBe(200);
+    expect(crossrefGapMs({ crossrefMailto: '' })).toBe(200);
+    expect(crossrefGapMs({ crossrefMailto: 'x@example.com' })).toBe(100);
+  });
+
+  it('has a gap at or below what every registry publishes', () => {
+    expect(REGISTRY_GAP_MS).toMatchObject({
+      crossref: 200,
+      'doi-handle': 200,
+      arxiv: 3000,
+      ncbi: 350,
+      openlibrary: 1000,
+      nvd: 6000,
+    });
   });
 
   it('does not make one registry wait behind another', async () => {

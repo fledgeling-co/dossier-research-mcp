@@ -99,8 +99,18 @@ const DEFAULT_MAX_IDENTIFIERS = 300;
  */
 export function collectAnchors(html: string): string[] {
   const found = new Set<string>();
-  const pattern = /\b(?:id|name)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>=`]+))/gi;
-  for (const m of html.matchAll(pattern)) {
+  // Script bodies, style bodies and comments are dropped first: a browser would
+  // not resolve a fragment against a string inside a script, and a page whose
+  // JavaScript happens to contain `name="x"` would otherwise be reported as
+  // declaring an anchor it does not have.
+  const markup = html
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, ' ')
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style\s*>/gi, ' ')
+    .replace(/<!--[\s\S]*?-->/g, ' ');
+  // The attribute must open one, so `data-id` and `aria-labelledby` do not
+  // count: only `id` and `name` address a fragment.
+  const pattern = /[\s<"'](?:id|name)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>=`]+))/gi;
+  for (const m of markup.matchAll(pattern)) {
     const value = m[1] ?? m[2] ?? m[3] ?? '';
     const decoded = decodeEntities(value).trim();
     if (decoded.length > 0 && decoded.length <= 300) found.add(decoded);
@@ -147,9 +157,17 @@ async function lookUpIdentifier(
 
     let lastDetail = 'no registry step reached a conclusion';
     for (const step of built.steps) {
-      const response = await limiter.schedule(step.registry, () =>
-        options.registryTransport(step.url),
-      );
+      // A transport that REJECTS rather than resolving with an error would
+      // otherwise reject the whole collection, losing every other answer in the
+      // snapshot along with this one. Normalised here so a thrown timeout
+      // reaches `interpret` as the `unchecked` it is.
+      const response = await limiter
+        .schedule(step.registry, () => options.registryTransport(step.url))
+        .catch((e: unknown) => ({
+          status: 0,
+          body: '',
+          error: e instanceof Error ? e.message : 'the registry request threw',
+        }));
       const outcome = step.interpret(response);
       if (outcome.kind === 'next') {
         lastDetail = outcome.detail;
@@ -179,7 +197,20 @@ async function collectPage(
   checkedAt: string,
   fetchOne: (url: string) => Promise<FetchedPage>,
 ): Promise<PageEvidence> {
-  const source = await fetchOne(url);
+  // Same reason as the registry transport: a fetcher that throws must cost one
+  // page's evidence, never the whole report's.
+  const source = await fetchOne(url).catch(
+    (e: unknown): FetchedPage => ({
+      url,
+      status: 0,
+      ok: false,
+      body: '',
+      contentType: '',
+      truncated: false,
+      error: e instanceof Error ? e.message : 'the page request threw',
+      thrown: e,
+    }),
+  );
 
   // The error object itself where there is one, so a URL `safeFetch` refused as
   // private or malformed keeps its own verdict instead of flattening into

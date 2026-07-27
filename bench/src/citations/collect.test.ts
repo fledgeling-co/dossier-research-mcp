@@ -52,6 +52,16 @@ describe('anchors', () => {
   it('returns nothing for a document with no anchors', () => {
     expect(collectAnchors('<p>plain</p>')).toEqual([]);
   });
+
+  it('does not read data-id, a commented-out attribute or a string inside a script', () => {
+    // A browser resolves a fragment against `id` and `name` and nothing else, so
+    // reading these would report a page as declaring anchors it does not have,
+    // which turns a real broken fragment into an honest one.
+    const found = collectAnchors(
+      '<div data-id="ghost"></div><!-- id="comment" --><script>var a = \'name="fake"\';</script><style>#x{}</style><p id="real"></p>',
+    );
+    expect(found).toEqual(['real']);
+  });
 });
 
 describe('a snapshot of one report', () => {

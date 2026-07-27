@@ -127,12 +127,24 @@ describe('transport failures are never evidence (INTEG-04)', () => {
 });
 
 describe('arXiv (INTEG-14)', () => {
-  const feed = (total: number): string =>
-    `<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom"><opensearch:totalResults>${String(total)}</opensearch:totalResults></feed>`;
+  const feed = (total: number, entryId?: string): string =>
+    `<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom"><opensearch:totalResults>${String(total)}</opensearch:totalResults>${
+      entryId === undefined
+        ? ''
+        : `<entry><id>http://arxiv.org/abs/${entryId}v1</id><title>A paper</title></entry>`
+    }</feed>`;
 
-  it('reads the result count', () => {
-    expect(run('arxiv', '2509.04499', [ok(feed(1))]).status).toBe('present');
+  it('reads the result count and the entry it names', () => {
+    expect(run('arxiv', '2509.04499', [ok(feed(1, '2509.04499'))]).status).toBe('present');
     expect(run('arxiv', '2509.99999', [ok(feed(0))]).status).toBe('absent');
+  });
+
+  it('does not read a result describing a different paper as confirmation', () => {
+    // A count alone is not the answer: the feed has to carry an entry whose own
+    // id is the one that was asked about.
+    const result = run('arxiv', '2509.04499', [ok(feed(1, '1234.56789'))]);
+    expect(result.status).toBe('unchecked');
+    expect(result.detail).toMatch(/no entry with this id/);
   });
 
   it('scores the 429 the archive actually answers as unchecked', () => {

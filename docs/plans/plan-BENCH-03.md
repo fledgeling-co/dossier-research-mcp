@@ -215,7 +215,7 @@ Export from `bench/src/score/index.ts` and a new `bench/src/citations/index.ts`.
 | **INTEG-29** | Source necessity is the source side of a minimum vertex cover, deterministic under the pinned ordering |
 | **INTEG-30** | Source necessity reports that it is tie-dependent, and `uniquelyCitedSources` is reported beside it |
 | **INTEG-31** | Uncited sources are the empty columns of the citation matrix |
-| **INTEG-32** | Unsupported statements are counted over cited statements, and the divergence from the published definition is stated |
+| **INTEG-32** | A statement is unsupported only once something in its support row was decided, and one nothing could be decided about leaves the denominator |
 | **INTEG-33** | The relevance-dependent dimensions are reported unavailable with a reason, never approximated |
 | **INTEG-34** | Citation accuracy and citation volume are separate numbers on every result, including the unmeasurable arm |
 | **INTEG-35** | The support oracle's name rides on every result |
@@ -228,6 +228,11 @@ Export from `bench/src/score/index.ts` and a new `bench/src/citations/index.ts`.
 | **INTEG-42** | Number and text matching goes through BENCH-09's shared primitives, so the two slices cannot disagree about a thousands separator |
 | **INTEG-43** | An evidence snapshot round-trips through a disk, is Zod-parsed on read, and a malformed one is refused rather than scored against |
 | **INTEG-44** | A URL refused as private keeps the product's own `invalid_url` verdict, and a self-redirect loop keeps `blocked` |
+| **INTEG-45** | The real fetch adapter refuses a link-local, loopback, private or non-http address before a socket is opened |
+| **INTEG-46** | A transport that rejects costs one answer, never the whole snapshot, and never produces `absent` |
+| **INTEG-47** | Collecting, writing, reading and scoring compose through one surface, and a mismatched report is refused |
+| **INTEG-48** | An arXiv feed whose entry names a different paper is `unchecked`, not `present` |
+| **INTEG-49** | `data-id`, a commented-out attribute and a string inside a script are not anchors |
 
 ## Verify
 

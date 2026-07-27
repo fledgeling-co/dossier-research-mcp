@@ -131,7 +131,7 @@ That separation is what makes a metric added in three months applicable to runs 
 
 ## Plan
 
-[plan-BENCH-03.md](../plans/plan-BENCH-03.md) — Standard tier, 12 steps, 44 acceptance criteria. Its cross-family plan review returned MATERIAL DEFECTS over fourteen findings, four of them real bugs; the dispositions are in the plan's own gate note.
+[plan-BENCH-03.md](../plans/plan-BENCH-03.md) — Standard tier, 12 steps, 49 acceptance criteria. Its cross-family plan review returned MATERIAL DEFECTS over fourteen findings, four of them real bugs; the dispositions are in the plan's own gate note.
 
 ---
 

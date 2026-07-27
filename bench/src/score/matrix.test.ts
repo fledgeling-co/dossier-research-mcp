@@ -260,6 +260,15 @@ describe('source necessity (INTEG-29, INTEG-30)', () => {
     expect(m.sourceNecessity).toBeCloseTo(m.necessarySources / 2);
   });
 
+  it('is null, not zero, when nothing in the support matrix could be decided', () => {
+    const m = matrixMetrics(
+      build([statement(0, 's0')], ['https://a'], [[true]], [['unchecked']]),
+    );
+    // Zero would read as "no source is necessary", which is a claim, and it
+    // would be made from no evidence at all.
+    expect(m.sourceNecessity).toBeNull();
+  });
+
   it('reports that it is tie-dependent, rather than leaving the reader to find out', () => {
     const m = matrixMetrics(
       build([statement(0, 's0')], ['https://a'], [[true]], [['supported']]),
