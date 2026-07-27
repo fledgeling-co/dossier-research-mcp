@@ -138,3 +138,45 @@ export function renderReadCoverage(
 
   return [header, note, '', ...lines, ''].filter((l) => l !== '').join('\n');
 }
+
+/**
+ * Record one `research_read` call.
+ *
+ * Best-effort by design: a failure to record must never fail the read itself.
+ * The ledger exists to make a later claim about coverage honest, and refusing
+ * to hand over a report because bookkeeping failed would trade a real capability
+ * for a bookkeeping one.
+ */
+export async function recordRead(
+  store: {
+    readSession: (id: string) => Promise<unknown>;
+    saveSession: (id: string, value: unknown) => Promise<void>;
+  },
+  runId: string,
+  event: ReadEvent,
+): Promise<void> {
+  try {
+    const key = `${runId}-reads`;
+    const existing = ReadLedgerSchema.safeParse(await store.readSession(key));
+    const events = existing.success ? existing.data.events : [];
+    // Bounded, or a long session's ledger grows without limit for no gain: the
+    // coverage figure only needs distinct sections, not every visit.
+    const next = [...events, event].slice(-500);
+    await store.saveSession(key, { runId, events: next });
+  } catch {
+    // Deliberately swallowed. See the doc comment.
+  }
+}
+
+/** The ledger for a run, or undefined when nothing has been read. */
+export async function readLedgerFor(
+  store: { readSession: (id: string) => Promise<unknown> },
+  runId: string,
+): Promise<ReadLedger | undefined> {
+  try {
+    const parsed = ReadLedgerSchema.safeParse(await store.readSession(`${runId}-reads`));
+    return parsed.success ? parsed.data : undefined;
+  } catch {
+    return undefined;
+  }
+}

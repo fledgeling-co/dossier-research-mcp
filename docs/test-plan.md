@@ -538,3 +538,4 @@ npm run gate                # typecheck, lint, test, build
 | **READ-01** | An outline, summary or grep read counts as no coverage | `reading` | ✓ |
 | **READ-02** | Coverage counts distinct sections, so re-reading one is not reading several | `reading` | ✓ |
 | **READ-03** | A merge over unread reports warns at the top, and names what was never opened | `reading` | ✓ |
+| **READ-04** | The read ledger is wired: a merge over unread reports warns over the real MCP surface | `reading` acceptance | ✓ |

@@ -49,6 +49,7 @@ import {
   readSection,
   renderOutline,
 } from './research/report.js';
+import { readCoverage, readLedgerFor, recordRead, renderReadCoverage } from './research/reading.js';
 import {
   canonicaliseUrl,
   type ConvergenceCandidate,
@@ -1007,6 +1008,7 @@ export function createServer(deps: ServerDeps): FastMCP {
           ].join('\n');
         }
         case 'outline':
+          await recordRead(store, args.runId, { mode: 'outline', sections: [], chars: 0, at: new Date().toISOString() });
           return `${renderOutline(markdown)}\n\n${provenance}`;
         case 'section': {
           if (!args.section) throw new UserError('mode "section" needs a `section` (index or heading substring).');
@@ -1018,6 +1020,12 @@ export function createServer(deps: ServerDeps): FastMCP {
           }
           const body = readSection(markdown, found);
           const clamped = clampToTokens(body, args.maxTokens);
+          await recordRead(store, args.runId, {
+            mode: 'section',
+            sections: [found.index],
+            chars: clamped.text.length,
+            at: new Date().toISOString(),
+          });
           return `_Section ${found.index}/${outlineReport(markdown).length} · ~${found.estimatedTokens} estimated tokens_\n\n${clamped.text}\n\n${provenance}`;
         }
         case 'grep': {
@@ -1985,7 +1993,25 @@ function registerEvidenceTools(server: FastMCP, deps: ServerDeps): void {
       }
 
       const merged = mergeEvidence(runs);
+
+      // How much of each report has actually been read, at the TOP of the merge.
+      // The caveat that failed in the real session was accurate and buried, and
+      // where a caveat sits decides whether it is read.
+      const coverageRows = await Promise.all(
+        runs.map(async (r) => ({
+          runId: r.runId,
+          label: r.provider,
+          coverage: readCoverage(
+            await readLedgerFor(store, r.runId),
+            outlineReport(r.markdown).length,
+            r.markdown.length,
+          ),
+        })),
+      );
+      const coverage = renderReadCoverage(coverageRows);
+
       const header = [
+        ...(coverage ? [coverage, ''] : []),
         `## Merged evidence from ${String(runs.length)} run(s)`,
         '',
         ...merged.runs.map(
