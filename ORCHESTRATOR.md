@@ -55,11 +55,11 @@ BENCH-09 is hand-authoring work and is the long pole in wall-clock terms. It sta
 | BENCH-05 | Due weight, viewpoint coverage | 01 | **Merged** | `ai/bench-05` | 11 defects found and fixed |
 | BENCH-06 | Calibration and refusal correctness | 01 | **Merged** | `ai/bench-06` | 954 tests; took recency, found a product bug |
 | BENCH-07 | Source quality and syndication | 01 | **Merged** | `ai/bench-07` | syndication, 12 critic defects |
-| BENCH-08 | Reporting and comparison | 02, scorers | Blocked | | |
+| BENCH-08 | Reporting and comparison | 02, scorers | **Running** | | |
 | BENCH-09 | The seed task corpus | 01 | **Merged** | `ai/bench-09` | 1001 tests; 7 admitted, 20 quarantined, $0 spent |
-| BENCH-10 | Self-eval of Dossier's own checking | 01, 03 | Blocked | | |
-| BENCH-11 | Which combination is best | 02, scorers | Blocked | | |
-| BENCH-12 | A finished report is an input to the next one | none | Queued | | |
+| BENCH-10 | Self-eval of Dossier's own checking | 01, 03 | **Running** | | |
+| BENCH-11 | Which combination is best | 02, scorers | **Running** | | |
+| BENCH-12 | A finished report is an input to the next one | none | **Running** | | |
 | BENCH-13 | The statistics | 02, 08 | Blocked | | |
 
 ## Context contract
@@ -136,3 +136,10 @@ Nothing was lost, but the cost was real: four worktrees held uncommitted source 
 - **27 Jul, the paused three resumed** — BENCH-03, 04 and 07, making four concurrent with BENCH-05. Each was told which four items merged under it and what to read before designing, since all three branched before `bench/src/score/` and `bench/src/run/` existed and a parallel tree would conflict at merge.
 
   BENCH-03 carries the one real risk: its only surviving artefact is a spec, and its last words before dying were that Codex registry probes had given **three findings that change the design**, which exist nowhere on disk. It has been told to recover or re-derive them before proceeding rather than continue as though the design were unchanged.
+- **27 Jul, wave 2 complete** — BENCH-03, 04, 05 and 07 merged. **1674 tests green.** Two things worth carrying forward.
+
+  BENCH-03 **falsified a claim in the design**. I had called registry existence checking exact, free hallucination detection with no judgement involved. It probed all five registries live: Crossref alone would call a genuine DOI fabricated, since it is one registration agency among several and a real Zenodo DOI is a Crossref 404; OpenLibrary answers found for a fabricated ISBN; arXiv rate-limited every probe across seven minutes. The design is corrected in place with a date, and the overclaim left visible because it is more instructive than the correction. What survives is narrower and real: an identifier the owning registry positively denies is strong evidence of fabrication, everything else is `unchecked`.
+
+  A **name collision nearly shipped through my own merge resolution**. BENCH-07 and BENCH-03 both exported `containment`, over different objects, and my keep-both conflict resolution put both in one barrel under one name. Typecheck caught it; it is now `shingleContainment` and `tokenContainment`. Append-only merges are safe for prose and not for exports.
+
+- **27 Jul, wave 3 dispatched** — BENCH-08, 10, 11 and 12. Four concurrent, the level that has held. BENCH-12 is the only one that changes shipped code rather than `bench/`, so it carries the CP §7 review and the third-party egress rules.
