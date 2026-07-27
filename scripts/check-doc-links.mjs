@@ -45,8 +45,22 @@ function anchors(file) {
 const broken = [];
 let linkCount = 0;
 
+/**
+ * Blank out fenced blocks and inline code spans before looking for links.
+ *
+ * A markdown link inside backticks is not a link, it is an example of one, and
+ * a checker that cannot tell the difference reports a doc explaining citation
+ * syntax as a broken link to a file called `url`. Replacing with spaces rather
+ * than deleting keeps every byte offset intact, so a real broken link is still
+ * reported at its true position.
+ */
+const withoutCode = (s) =>
+  s
+    .replace(/```[\s\S]*?```/g, (m) => ' '.repeat(m.length))
+    .replace(/(?<!`)`[^`\n]+`(?!`)/g, (m) => ' '.repeat(m.length));
+
 for (const file of FILES) {
-  const body = readFileSync(file, 'utf8');
+  const body = withoutCode(readFileSync(file, 'utf8'));
   for (const m of body.matchAll(/\[[^\]]*\]\(([^)]+)\)/g)) {
     const link = m[1].trim();
     if (link.startsWith('http') || link.startsWith('mailto:')) continue;

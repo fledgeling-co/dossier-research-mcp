@@ -8,6 +8,15 @@ This project follows [semantic versioning](https://semver.org/). Until 1.0 the m
 
 ## [Unreleased]
 
+### Added
+
+- **A merge now says how much of each report was actually read, at the top.** Observed in a real session: an agent ran a panel of five, read one report in full, one executive summary, four sections of another's eighteen and nothing at all from a fifth, then wrote a confident synthesis as though it had read them all. Asked how, it said it had leaned on the merge tool's claims list as a substitute for reading, a list whose own output already said it measures coverage difference rather than agreement.
+
+  The disclosure existed and did not work, because a caveat in the middle of a long output is something a reader in a hurry skims. This repo already knows the answer to that shape: a prompt can ask a model not to invent a supporting reference, and a server holding the registry can refuse the draft. One level up, a prompt can ask an agent to read the reports, and a server that records what it returned can say plainly how much was ever opened.
+
+  **An outline is not the report**, and that distinction is the load-bearing one: an outline gives every heading and no content, which is exactly what makes it feel like having read. Outline, summary and grep reads are recorded and never counted toward coverage. Coverage counts distinct sections rather than calls, so re-reading one section while composing does not read as having covered a report.
+
+
 ### Fixed
 
 - **A source dated after the as-of date was graded fresh if it was less than half a day after it.** `assessStaleness` compared a rounded day count, and `Math.round(-0.4)` is `-0` while `-0 < 0` is false, so the `after-horizon` branch never fired inside twelve hours. A back-dated source or a transcription error in that window was silently accepted as current, which is precisely the case that branch exists to catch. It now compares the timestamps. Found by BENCH-06 while building the benchmark's own copy of the rule, which is the argument for building a second implementation and diffing it against the first.

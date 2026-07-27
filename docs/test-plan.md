@@ -503,3 +503,6 @@ npm run test:acceptance     # this suite
 npm run test:all            # unit + acceptance (npm test runs unit only)
 npm run gate                # typecheck, lint, test, build
 ```
+| **READ-01** | An outline, summary or grep read counts as no coverage | `reading` | ✓ |
+| **READ-02** | Coverage counts distinct sections, so re-reading one is not reading several | `reading` | ✓ |
+| **READ-03** | A merge over unread reports warns at the top, and names what was never opened | `reading` | ✓ |
