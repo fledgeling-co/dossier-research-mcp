@@ -119,3 +119,27 @@ Findings dispositioned:
 3. **Accepted.** `research_read` had no place for a header; the provenance block is a footer. Added as a banner above the body in every mode that returns one.
 4. **Rejected, with a reason.** "Create the File Search store when it is missing." Declined: see the assumption above. A grounding request must not create a remote resource as a side effect.
 5. **Accepted.** The `<prior_research>` block must sit before the final `<core_directive>`, on exactly the rule `tests/prompt.test.ts` already locks. Built that way and tested.
+
+## Progress — 2026-07-27
+
+**Delivered.** `research_ground` (local by default, upload by name), `groundedInRunIds` on `research_plan` and `research_start`, the declaration in `research_read` and `research_export`, and the corroboration rule in `classifySource`, `assessSupport` and `mergeEvidence`. One new module, `src/research/grounding.ts`; everything else is an edit at an existing seam.
+
+**Acceptance, line by line.**
+
+| From the brief | Where it is proven |
+|---|---|
+| Grounding needs no manual export step | `GROUND-01`, and the stdio smoke does the whole loop against `dist/` |
+| Local works with no key and sends nothing | `GROUND-05` fails if `fetch` is called at all; the acceptance suite is hermetic and keyless |
+| Upload names the third party and is never the default | `GROUND-02`, `GROUND-09`; the default lives in the Zod schema |
+| A claim in both reports counts once | `GROUND-11`, `GROUND-12`, `GROUND-13` |
+| A grounded report declares it in its header | `GROUND-14`, across every read mode, the export file and the grounding document |
+
+**Three things the build found that the plan had not.**
+
+1. **`grounding.ts` could not import `RunRecord`.** `store/types.js` reaches the provider registry and from there the CLI adapters, which read a filesystem, and the benchmark's `INTEG-37` purity check walks *source* imports rather than runtime ones. A type-only import was enough to fail it. The module declares the shape it needs structurally instead, which is the better design anyway.
+2. **`research_plan` and `research_start` normalised the grounding differently.** `resolveGrounding` de-duplicates; planning used the raw argument. `[RUN, RUN]` therefore priced a two-run grounding and started a one-run one, and the contract handshake refused a request nobody had changed. Fixed by routing both through one function, and the test was **checked in both directions**: it fails against the pre-fix code with two different fingerprints.
+3. **A malformed run id threw a plain `Error` out of the tool body**, which is a protocol fault rather than an answer. Re-raised as a `UserError`, with the server proven still answering afterwards.
+
+**Verification.** `npm run gate` green **twice** on the final state: 1714 tests passed, 2 skipped, 70 files, both runs. Plus a protocol-level stdio smoke against the built `dist/index.js`: `initialize` returned `dossier 0.10.0`, `tools/list` returned 37 tools with `research_ground` naming Google and annotated non-read-only, `research_ground` wrote a `0600` document carrying its canonical identifier, `corpus_local_search` then found it, a grounded `research_plan` carried `<prior_research>` before the re-anchor, and stdout carried zero non-JSON lines. No Playwright; there is no UI.
+
+**Known weakness carried forward.** No Codex lane was available, so every reviewer on this item was Claude reviewing Claude. Logged as a downgrade rather than a pass.
