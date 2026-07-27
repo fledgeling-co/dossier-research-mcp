@@ -86,6 +86,16 @@ import {
   renderTrace,
 } from './research/evidence.js';
 import { failureTag } from './research/failure.js';
+import {
+  GROUNDING_SUBDIR,
+  assertGroundableRunId,
+  groundingFileName,
+  groundingFrontMatter,
+  groundingUri,
+  priorResearchBlock,
+  renderGroundingDeclaration,
+  renderGroundingDocument,
+} from './research/grounding.js';
 import { describeRun, Runner, stateHint } from './research/runner.js';
 import {
   buildWidePrompt,
@@ -100,7 +110,8 @@ import {
 import { Store } from './store/store.js';
 import { RUN_STATES, type RunRecord } from './store/types.js';
 import { version } from './version.js';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 /**
@@ -193,6 +204,14 @@ const CorpusSchema = z
   .max(10)
   .optional()
   .describe('File Search store names (fileSearchStores/…) to ground the run in. Adds a hierarchy-of-truth instruction and asks for an explicit contradictions section.');
+
+const GroundedInSchema = z
+  .array(z.string().max(64))
+  .max(6)
+  .optional()
+  .describe(
+    'Completed Dossier runs this one builds on, from `research_ground`. The run records them, declares them in the header of everything that presents its report, and is told the rule: a prior report is your own document, primary evidence about what was concluded and never independent corroboration that it was right.',
+  );
 
 /**
  * Every follow-up answer carries this.
@@ -322,6 +341,40 @@ async function requireRun(deps: ServerDeps, runId: string): Promise<RunRecord> {
   return run;
 }
 
+/**
+ * Check the runs a caller says this one builds on, and hand back the ids.
+ *
+ * Validated at the start rather than trusted, for the reason every declaration
+ * is: the ids go into the run record, into the prompt, and into the header of
+ * every later presentation of the report. A grounding claim naming a run that
+ * does not exist, or one that never produced a report, is a header that lies to
+ * whoever reads it next.
+ */
+async function resolveGrounding(
+  deps: ServerDeps,
+  runIds: readonly string[] | undefined,
+): Promise<readonly string[]> {
+  if (!runIds || runIds.length === 0) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of runIds) {
+    const id = raw.trim();
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const run = await deps.store.getRun(id);
+    if (!run) {
+      throw new UserError(
+        `\`${id}\` is not a run in this store, so it cannot ground anything. List them with \`research_list\`.`,
+      );
+    }
+    if (run.state !== 'completed') {
+      throw new UserError(`\`${id}\` is ${run.state}, not completed. ${stateHint(run.state)}`);
+    }
+    out.push(run.id);
+  }
+  return out;
+}
+
 function buildTools(corpusStores: readonly string[] | undefined): ResearchToolSpec[] {
   const tools: ResearchToolSpec[] = [
     { type: 'google_search' },
@@ -348,11 +401,14 @@ function resolvePrompt(args: {
   archetype?: Archetype | undefined;
   scope?: ResearchScope | undefined;
   corpusStores?: readonly string[] | undefined;
+  groundedInRunIds?: readonly string[] | undefined;
 }): { prompt: string; archetype: Archetype; preEngineered: boolean; warnings?: readonly string[] } {
   const hasCorpus = (args.corpusStores?.length ?? 0) > 0;
+  const priorRuns = args.groundedInRunIds?.length ?? 0;
   const built = buildPrompt({
     question: args.question,
     corpusGrounding: hasCorpus,
+    ...(priorRuns > 0 ? { priorResearchRuns: priorRuns } : {}),
     ...(args.archetype ? { archetype: args.archetype } : {}),
     ...(args.scope ? { scope: args.scope } : {}),
   });
@@ -361,10 +417,17 @@ function resolvePrompt(args: {
   // re-anchor where one exists, rather than after it — appending after the
   // final `<core_directive>` is what made the instruction invisible once.
   let prompt = built.prompt;
-  if (hasCorpus && built.preEngineered) {
+  const insertBeforeAnchor = (text: string): void => {
     const anchor = prompt.lastIndexOf('<core_directive>');
-    const insert = `<corpus_grounding>\n${CORPUS_GROUNDING_BLOCK}\n\n${CORPUS_OUTPUT_REQUIREMENT}\n</corpus_grounding>\n\n`;
-    prompt = anchor > 0 ? prompt.slice(0, anchor) + insert + prompt.slice(anchor) : `${insert}${prompt}`;
+    prompt = anchor > 0 ? prompt.slice(0, anchor) + text + prompt.slice(anchor) : `${text}${prompt}`;
+  };
+  if (hasCorpus && built.preEngineered) {
+    insertBeforeAnchor(
+      `<corpus_grounding>\n${CORPUS_GROUNDING_BLOCK}\n\n${CORPUS_OUTPUT_REQUIREMENT}\n</corpus_grounding>\n\n`,
+    );
+  }
+  if (priorRuns > 0 && built.preEngineered) {
+    insertBeforeAnchor(`<prior_research>\n${priorResearchBlock(priorRuns)}\n</prior_research>\n\n`);
   }
   return {
     prompt,
@@ -447,6 +510,7 @@ export function createServer(deps: ServerDeps): FastMCP {
       archetype: ArchetypeSchema.optional(),
       scope: ScopeSchema,
       corpusStores: CorpusSchema,
+      groundedInRunIds: GroundedInSchema,
       collaborativePlanning: z
         .boolean()
         .default(false)
@@ -473,6 +537,7 @@ export function createServer(deps: ServerDeps): FastMCP {
         ...(args.archetype ? { archetype: args.archetype } : {}),
         ...(args.scope ? { scope: args.scope } : {}),
         ...(args.corpusStores ? { corpusStores: args.corpusStores } : {}),
+        ...(args.groundedInRunIds ? { groundedInRunIds: args.groundedInRunIds } : {}),
       });
       const tools = buildTools(args.corpusStores);
       const routingForPlan = deps.providers.route({
@@ -550,6 +615,11 @@ export function createServer(deps: ServerDeps): FastMCP {
         `- **What drives that estimate**: ${duration.factors.join('; ')}`,
         `- **Tools**: ${tools.map((t) => t.type).join(', ')}`,
         `- **Plan review**: ${args.collaborativePlanning ? 'ON, you will approve a plan before the run executes' : 'OFF, the run executes autonomously'}`,
+        ...((args.groundedInRunIds?.length ?? 0) > 0
+          ? [
+              `- **Grounded in prior Dossier output**: ${(args.groundedInRunIds ?? []).map((id) => `\`${id}\``).join(', ')}. The report will declare it, and those reports never count as independent corroboration.`,
+            ]
+          : []),
         `- **Budget**: $${budget.committedUsd.toFixed(2)} committed of $${budget.budgetUsd.toFixed(2)} in the last ${budget.windowHours}h; $${budget.remainingUsd.toFixed(2)} remaining.`,
         `- **Backend**: ${overridden && args.provider ? `${deps.providers.get(args.provider)?.label ?? args.provider}, you asked for this one, so routing was not consulted` : routing.provider ? `${routing.provider.label}, ${routing.reason}` : 'none available'}`,
         ...(overridden || !routing.runnerUp ? [] : [`- **Runner-up**: ${routing.runnerUp.label}`]),
@@ -596,6 +666,7 @@ export function createServer(deps: ServerDeps): FastMCP {
       archetype: ArchetypeSchema.optional(),
       scope: ScopeSchema,
       corpusStores: CorpusSchema,
+      groundedInRunIds: GroundedInSchema,
       collaborativePlanning: z
         .boolean()
         .default(false)
@@ -630,11 +701,13 @@ export function createServer(deps: ServerDeps): FastMCP {
       // only one is the caller's actual problem when the arguments are wrong,
       // and reporting "no credentials" for a contract mismatch hides the bug
       // the handshake exists to catch. Cheap local checks first (CP §6.1).
+      const grounded = await resolveGrounding(deps, args.groundedInRunIds);
       const resolved = resolvePrompt({
         question: args.question,
         ...(args.archetype ? { archetype: args.archetype } : {}),
         ...(args.scope ? { scope: args.scope } : {}),
         ...(args.corpusStores ? { corpusStores: args.corpusStores } : {}),
+        ...(grounded.length > 0 ? { groundedInRunIds: grounded } : {}),
       });
       const tools = buildTools(args.corpusStores);
       // Resolve the backend the same way planning did, so the fingerprint
@@ -704,6 +777,7 @@ export function createServer(deps: ServerDeps): FastMCP {
           visualization: true,
           preEngineered: resolved.preEngineered,
           members,
+          ...(grounded.length > 0 ? { groundedIn: grounded } : {}),
           ...(args.label ? { label: args.label } : {}),
           ...(args.tags ? { tags: args.tags } : {}),
           ...(args.attachments ? { attachments: args.attachments } : {}),
@@ -765,6 +839,7 @@ export function createServer(deps: ServerDeps): FastMCP {
         visualization: true,
         preEngineered: resolved.preEngineered,
         provider: chosen,
+        ...(grounded.length > 0 ? { groundedIn: grounded } : {}),
         ...(args.label ? { label: args.label } : {}),
         ...(args.tags ? { tags: args.tags } : {}),
         ...(args.attachments ? { attachments: args.attachments } : {}),
@@ -990,13 +1065,20 @@ export function createServer(deps: ServerDeps): FastMCP {
       // could read an outline of a 48,000-character report without learning
       // that the report was on disk or which model wrote it.
       const provenance = describeProvenance(run, store.reportPath(run.id));
+      // The header, opposite the provenance footer. A run given earlier Dossier
+      // reports to work from has to say so above the text rather than below it:
+      // a reader who has already read the findings cannot un-read them, and the
+      // whole question is whether what they just read is accumulated evidence or
+      // an echo of what Dossier said last time.
+      const declaration = renderGroundingDeclaration(run.groundedIn ?? []);
+      const withHeader = (body: string): string => (declaration ? `${declaration}\n\n${body}` : body);
 
       switch (args.mode) {
         case 'summary': {
           const outline = outlineReport(markdown);
           const exec = outline.find((s) => /executive summary/i.test(s.title));
           const body = exec ? readSection(markdown, exec) : markdown.slice(0, 4000);
-          return [
+          return withHeader([
             run.title ? `# ${run.title}` : `# Report ${run.id}`,
             run.summary ? `\n${run.summary}\n` : '',
             `_${run.sourceCount} cited sources · ~${estimateTokens(markdown)} estimated tokens · ${outline.length} sections_`,
@@ -1004,11 +1086,11 @@ export function createServer(deps: ServerDeps): FastMCP {
             clampToTokens(body, args.maxTokens).text,
             '',
             provenance,
-          ].join('\n');
+          ].join('\n'));
         }
         case 'outline':
           await recordRead(store, args.runId, { mode: 'outline', sections: [], chars: 0, at: new Date().toISOString() });
-          return `${renderOutline(markdown)}\n\n${provenance}`;
+          return withHeader(`${renderOutline(markdown)}\n\n${provenance}`);
         case 'section': {
           if (!args.section) throw new UserError('mode "section" needs a `section` (index or heading substring).');
           const found = findSection(markdown, args.section);
@@ -1025,13 +1107,15 @@ export function createServer(deps: ServerDeps): FastMCP {
             chars: clamped.text.length,
             at: new Date().toISOString(),
           });
-          return `_Section ${found.index}/${outlineReport(markdown).length} · ~${found.estimatedTokens} estimated tokens_\n\n${clamped.text}\n\n${provenance}`;
+          return withHeader(
+            `_Section ${found.index}/${outlineReport(markdown).length} · ~${found.estimatedTokens} estimated tokens_\n\n${clamped.text}\n\n${provenance}`,
+          );
         }
         case 'grep': {
           if (!args.pattern) throw new UserError('mode "grep" needs a `pattern`.');
           const hits = grepReport(markdown, args.pattern, { regex: args.regex, maxHits: 60 });
           if (hits.length === 0) return `No matches for "${args.pattern}" in \`${run.id}\`.`;
-          return [
+          return withHeader([
             `${hits.length} match(es) for "${args.pattern}":`,
             '',
             ...hits.map((h) => `- **L${h.line}** _(${h.section})_: ${h.text}`),
@@ -1039,13 +1123,15 @@ export function createServer(deps: ServerDeps): FastMCP {
             'Read a whole section with `research_read { mode: "section", section: "<heading>" }`.',
             '',
             provenance,
-          ].join('\n');
+          ].join('\n'));
         }
         case 'full': {
           const clamped = clampToTokens(markdown, args.maxTokens);
-          return clamped.truncated
-            ? `${clamped.text}\n\n_Tip: \`mode: "outline"\` then \`mode: "section"\` reads the whole report without a single oversized response._\n\n${provenance}`
-            : `${clamped.text}\n\n${provenance}`;
+          return withHeader(
+            clamped.truncated
+              ? `${clamped.text}\n\n_Tip: \`mode: "outline"\` then \`mode: "section"\` reads the whole report without a single oversized response._\n\n${provenance}`
+              : `${clamped.text}\n\n${provenance}`,
+          );
         }
         default: {
           const _exhaustive: never = args.mode;
@@ -1108,12 +1194,20 @@ export function createServer(deps: ServerDeps): FastMCP {
         ...(run.toolsUsed.length > 0 ? [`tools: [${run.toolsUsed.join(', ')}]`] : []),
         ...(typeof run.estimatedCostUsd === 'number' ? [`estimated_cost_usd: ${run.estimatedCostUsd.toFixed(2)}`] : []),
         `completed: ${run.completedAt ?? run.updatedAt}`,
+        ...groundingFrontMatter(run.groundedIn ?? []),
         '---',
         '',
       ].join('\n');
 
+      // The same declaration `research_read` puts above the text. An exported
+      // file outlives the tool call that produced it and is the copy someone
+      // reads in six months, so the header has to travel with the bytes rather
+      // than sit in a response nobody kept.
+      const declaration = renderGroundingDeclaration(run.groundedIn ?? []);
+      const body = declaration ? `${declaration}\n\n${markdown}` : markdown;
+
       const reportFile = join(dir, `${base}.md`);
-      await writeFile(reportFile, front + markdown, 'utf8');
+      await writeFile(reportFile, front + body, 'utf8');
       const written = [`${reportFile} (${markdown.length.toLocaleString()} chars)`];
 
       if (args.sources) {
@@ -1425,6 +1519,7 @@ export function createServer(deps: ServerDeps): FastMCP {
   registerEvidenceTools(server, deps);
   registerLoopTools(server, deps);
   registerLocalCorpusTools(server, deps);
+  registerGroundingTools(server, deps);
   registerCorpusTools(server, deps);
   registerAgentTools(server, deps);
   registerResources(server, deps);
@@ -3164,6 +3259,168 @@ function registerLocalCorpusTools(server: FastMCP, deps: ServerDeps): void {
         ]),
         '> [!IMPORTANT]',
         '> These are **your own documents**. They are the best evidence available about your own position, decisions and history, and they are never independent corroboration of a fact about the world. Citing your own file back as confirmation is circular: the report looks sourced and proves nothing.',
+      ].join('\n');
+    },
+  });
+}
+
+// ───────────────────────────── a finished report, as an input to the next one ────
+/**
+ * `research_ground`: make completed runs available to ground the next question.
+ *
+ * Two destinations, and which one is the default is the whole security story.
+ *
+ * **Local** writes into a directory the operator already granted through
+ * `DOSSIER_LOCAL_CORPUS_DIRS`, needs no credentials, opens no socket, and is
+ * found afterwards by `corpus_local_search` like any other file there. It is the
+ * default because it is the option that cannot surprise anybody.
+ *
+ * **Upload** puts the report in a File Search store, which sends it to Google.
+ * It has to be asked for by name, the description says where the bytes go, and
+ * the annotation is non-read-only, on the rule in `CLAUDE.md` that a tool sending
+ * data to a third party says so.
+ *
+ * The caller never picks a directory. `DOSSIER_LOCAL_CORPUS_DIRS` is operator-set
+ * and there is deliberately no tool that adds one; a write primitive an agent can
+ * aim is strictly worse than the read primitive that rule was written for, so
+ * this writes into a fixed subdirectory of the first granted root and says which
+ * root it used.
+ */
+function registerGroundingTools(server: FastMCP, deps: ServerDeps): void {
+  const local = new LocalCorpus(deps.config.localCorpusDirs);
+
+  async function documentFor(runId: string): Promise<{ run: RunRecord; document: string }> {
+    const run = await requireRun(deps, assertGroundableRunId(runId));
+    const markdown = await deps.store.readReport(run.id);
+    if (!markdown) {
+      throw new UserError(
+        `No report for \`${run.id}\` (state: ${run.state}), so there is nothing to ground the next run in. ${stateHint(run.state)}`,
+      );
+    }
+    return { run, document: renderGroundingDocument({ run, markdown }) };
+  }
+
+  server.addTool({
+    name: 'research_ground',
+    description:
+      'Make one or more COMPLETED runs available as grounding for the next research run, with no export-and-upload round trip: this is how a finished report becomes an input to the next question instead of every question starting from nothing. Default destination is LOCAL, which writes the report into a directory the operator already granted via DOSSIER_LOCAL_CORPUS_DIRS, needs no API key, opens no network connection, and is searched afterwards by `corpus_local_search`. Pass destination:"upload" and it goes into a Gemini File Search store instead, which SENDS THE REPORT TO GOOGLE, so only do that for research you are willing to disclose to a third-party API. You cannot choose the local directory or the file name; the grant lives with the operator. Then pass the same runIds to `research_start` as `groundedInRunIds` so the new report declares what it was built on. A Dossier report is your own document: primary evidence about what was previously concluded, and never independent corroboration that the conclusion was right.',
+    annotations: {
+      title: 'Ground the next run in a finished report (uploads only if you ask)',
+      readOnlyHint: false,
+      destructiveHint: false,
+      openWorldHint: true,
+    },
+    parameters: z.object({
+      runIds: z
+        .array(z.string().max(64))
+        .min(1)
+        .max(6)
+        .describe('Completed runs whose reports should ground the next question.'),
+      destination: z
+        .enum(['local', 'upload'])
+        .default('local')
+        .describe(
+          'local (default) writes into the operator-granted local corpus and sends nothing anywhere. upload puts the report in a Gemini File Search store, which SENDS IT TO GOOGLE.',
+        ),
+      storeName: z
+        .string()
+        .max(300)
+        .optional()
+        .describe(
+          'Upload only, and required for it: an existing fileSearchStores/… from `corpus_list`. No store is ever created for you.',
+        ),
+    }),
+    execute: async (args, { log }) => {
+      const prepared = [];
+      for (const id of args.runIds) prepared.push(await documentFor(id));
+
+      if (args.destination === 'upload') {
+        if (!deps.corpus) {
+          throw new UserError(
+            'Uploading needs a Gemini Developer API key (GEMINI_API_KEY); File Search stores are not available on Vertex. The local destination needs no key at all, and is the default.',
+          );
+        }
+        if (!args.storeName) {
+          throw new UserError(
+            'destination "upload" needs a `storeName`. List them with `corpus_list`, or make one with `corpus_create`. No store is created implicitly: a grounding request must not quietly create a remote resource.',
+          );
+        }
+        const storeName = assertStoreName(args.storeName);
+        log.info('Uploading grounding documents', { store: storeName, runs: prepared.length });
+        // Written to a private temp directory and deleted afterwards, because
+        // `uploadFile` takes a path. Nothing is left in a granted corpus
+        // directory by the upload path: the two destinations do one thing each.
+        const scratch = await mkdtemp(join(tmpdir(), 'dossier-ground-'));
+        const uploaded: string[] = [];
+        try {
+          for (const { run, document } of prepared) {
+            const name = groundingFileName(run.id);
+            const file = join(scratch, name);
+            await writeFile(file, document, { encoding: 'utf8', mode: 0o600 });
+            await deps.corpus.uploadFile({
+              storeName,
+              filePath: file,
+              displayName: name,
+              mimeType: 'text/markdown',
+            });
+            uploaded.push(`\`${run.id}\` as \`${name}\``);
+          }
+        } finally {
+          await rm(scratch, { recursive: true, force: true });
+        }
+        return [
+          `## Uploaded ${String(uploaded.length)} report(s) to \`${storeName}\``,
+          '',
+          ...uploaded.map((u) => `- ${u}`),
+          '',
+          '> [!WARNING]',
+          '> These reports have been **sent to Google**. Indexing may take a moment; `corpus_list` shows the pending count.',
+          '',
+          `Ground the next run with \`research_start { question, corpusStores: ["${storeName}"], groundedInRunIds: [${args.runIds.map((i) => `"${i}"`).join(', ')}] }\`.`,
+          '',
+          '> [!IMPORTANT]',
+          '> A Dossier report is your own document. It is primary evidence about what was previously concluded and never independent corroboration that the conclusion was right, so a claim the new report repeats from one of these counts once, not twice.',
+        ].join('\n');
+      }
+
+      if (!local.configured) {
+        throw new UserError(
+          'No local corpus is configured, so there is nowhere on this machine a grounding report is allowed to go. The operator grants directories by setting `DOSSIER_LOCAL_CORPUS_DIRS` (colon or comma separated absolute paths) and restarting the server. ' +
+            'There is deliberately no tool that grants one: a tool that reads or writes arbitrary local files is an exfiltration primitive, so the grant lives where the human is. ' +
+            'Or pass destination:"upload" with a storeName, which sends the report to Google.',
+        );
+      }
+      // The FIRST granted root, and the caller has no say in it. Choosing one is
+      // unavoidable; letting the caller choose is the thing being prevented.
+      // Announcing which one keeps the decision with the operator, who can
+      // reorder the variable if they want a different directory.
+      const root = deps.config.localCorpusDirs[0]!;
+      const dir = join(root, GROUNDING_SUBDIR);
+      await mkdir(dir, { recursive: true, mode: 0o700 });
+      await chmod(dir, 0o700);
+
+      const written: string[] = [];
+      for (const { run, document } of prepared) {
+        const file = join(dir, groundingFileName(run.id));
+        await writeFile(file, document, { encoding: 'utf8', mode: 0o600 });
+        // `writeFile`'s mode applies on create only, so re-grounding an already
+        // written report would otherwise keep whatever mode it had.
+        await chmod(file, 0o600);
+        written.push(`\`${file}\` (${document.length.toLocaleString()} chars)`);
+      }
+
+      return [
+        `## Grounded ${String(written.length)} report(s) locally, nothing was sent anywhere`,
+        '',
+        ...written.map((w) => `- ${w}`),
+        '',
+        `Written into \`${GROUNDING_SUBDIR}/\` under \`${root}\`, the first directory the operator granted with \`DOSSIER_LOCAL_CORPUS_DIRS\`. You cannot choose the directory or the file name, and no key was needed.`,
+        '',
+        `\`corpus_local_search\` now finds these like any other file there. Ground the next run with \`research_start { question, groundedInRunIds: [${args.runIds.map((i) => `"${i}"`).join(', ')}] }\`, which is what makes the new report declare what it was built on.`,
+        '',
+        '> [!IMPORTANT]',
+        '> A Dossier report is your own document. It is primary evidence about what was previously concluded and never independent corroboration that the conclusion was right, so a claim the new report repeats from one of these counts once, not twice. Cite one as ' +
+          `\`${groundingUri(prepared[0]?.run.id ?? 'RUN_ID')}\` and it will never be counted as an independent source.`,
       ].join('\n');
     },
   });
