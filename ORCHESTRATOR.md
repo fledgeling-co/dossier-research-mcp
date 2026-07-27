@@ -50,11 +50,11 @@ BENCH-09 is hand-authoring work and is the long pole in wall-clock terms. It sta
 |---|---|---|---|---|---|
 | BENCH-01 | Task format, gold-set schema and loader | none | **Merged** | `ai/bench-01` | 853 tests green; found 4 cross-brief defects |
 | BENCH-02 | The run harness | 01 | **Merged** | `ai/bench-02` | 1072 tests; adoption split on evidence |
-| BENCH-03 | Citation integrity scorers | 01 | **Resumed** | | |
-| BENCH-04 | Accuracy and relevance scorers | 01 | **Resumed** | | |
-| BENCH-05 | Due weight, viewpoint coverage | 01 | **Resumed** | | |
+| BENCH-03 | Citation integrity scorers | 01 | **Merged** | `ai/bench-03` | 1674 tests; falsified the registry claim |
+| BENCH-04 | Accuracy and relevance scorers | 01 | **Merged** | `ai/bench-04` | accuracy and relevance |
+| BENCH-05 | Due weight, viewpoint coverage | 01 | **Merged** | `ai/bench-05` | 11 defects found and fixed |
 | BENCH-06 | Calibration and refusal correctness | 01 | **Merged** | `ai/bench-06` | 954 tests; took recency, found a product bug |
-| BENCH-07 | Source quality and syndication | 01 | **Resumed** | | |
+| BENCH-07 | Source quality and syndication | 01 | **Merged** | `ai/bench-07` | syndication, 12 critic defects |
 | BENCH-08 | Reporting and comparison | 02, scorers | Blocked | | |
 | BENCH-09 | The seed task corpus | 01 | **Merged** | `ai/bench-09` | 1001 tests; 7 admitted, 20 quarantined, $0 spent |
 | BENCH-10 | Self-eval of Dossier's own checking | 01, 03 | Blocked | | |
