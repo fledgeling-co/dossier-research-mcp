@@ -526,6 +526,32 @@ The two failure modes here are silent. A gold fact missed on number formatting r
 | **ACCREL-22** | `exact` is strict equality with no hidden width: a reported `0` does not satisfy a gold of `1e-13` | unit: `numbers` | ✓ |
 | **ACCREL-23** | A character whose numeric meaning Unicode normalisation would change is blanked first, so ten squared is not read as 102 and a circled digit is not read as a figure | unit: `accuracy` | ✓ |
 
+### BENCH-07 — source quality, independence and syndication
+
+| AC | Criterion (from the contract) | Test | Status |
+|---|---|---|---|
+| **SRCQ-01** | Four printings of one wire story across four domains collapse to one source, and the raw count still reads four | unit: `source-quality` | ✓ |
+| **SRCQ-02** | Four genuinely independent articles on the same event across four domains do not collapse; raw and collapsed both read four | unit: `source-quality` | ✓ |
+| **SRCQ-03** | A wire story republished at part length is still detected, by containment rather than resemblance, and the basis says which | unit: `syndication`, `source-quality` | ✓ |
+| **SRCQ-04** | Two pages too short to characterise never collapse their domains, and both domains are named unchecked with the reason | unit: `syndication`, `source-quality` | ✓ |
+| **SRCQ-05** | Syndication is transitive: a chain whose ends share nothing directly still merges to one source | unit: `source-quality` | ✓ |
+| **SRCQ-06** | The raw count agrees with `assessSupport` and with `profileEvidence`'s own domain count, so the three cannot drift | unit: `source-quality` | ✓ |
+| **SRCQ-07** | Citations that are not resolvable web addresses are discarded once, before either count, and reported | unit: `source-quality` | ✓ |
+| **SRCQ-08** | A report citing nothing usable returns not-applicable with the reason, never a zero | unit: `source-quality` | ✓ |
+| **SRCQ-09** | Both counts are always returned together, the collapsed one never exceeds the raw one, and every cluster carries its domains, its URLs and its linking scores | unit: `source-quality` | ✓ |
+| **SRCQ-10** | A page on a domain the report never cited takes no part, and a repeated page is not compared with itself | unit: `source-quality` | ✓ |
+| **SRCQ-11** | The thresholds, the shingle width and both resource caps are exported constants and are returned as values | unit: `syndication`, `source-quality` | ✓ |
+| **SRCQ-12** | The same page cited four different ways is one source, deduplicated by canonical URL before either count | unit: `source-quality` | ✓ |
+| **SRCQ-13** | A domain contributing both a syndicated page and an unrelated original page merges, and the understatement is named in the notes | unit: `source-quality` | ✓ |
+| **SRCQ-14** | Two pages on one domain are never compared and never form a cluster | unit: `source-quality` | ✓ |
+| **SRCQ-15** | Resemblance is 1 for identical text, 0 when either side is empty, and the decision is correct immediately below, exactly at and immediately above the threshold | unit: `syndication` | ✓ |
+| **SRCQ-16** | Containment is taken over the smaller set in either argument order, and its decision is correct immediately below and exactly at the threshold | unit: `syndication` | ✓ |
+| **SRCQ-17** | Case, punctuation and reflowed whitespace do not break a shingle match; a page shorter than the shingle width yields no shingles | unit: `syndication` | ✓ |
+| **SRCQ-18** | Hashing is deterministic, unsigned and 32-bit, and a shingle set holds each distinct window once | unit: `syndication` | ✓ |
+| **SRCQ-19** | Page text past the character cap is compared on a prefix and the truncation is reported, never silent | unit: `syndication`, `source-quality` | ✓ |
+| **SRCQ-20** | Pages past the page ceiling are reported unexamined, and their domains are named unchecked for that reason rather than for a missing page | unit: `source-quality` | ✓ |
+| **SRCQ-21** | Neither module reaches a filesystem or a network, and the same input scores identically twice | unit: `syndication`, `source-quality` | ✓ |
+
 ### The paid project
 
 `tests/paid/` spends real money against the live API, so it is a **separate vitest project that is deliberately excluded from `test:all` and therefore from the gate**. It cannot block a deploy. It needs both `DOSSIER_PAID_TESTS=1` and a real `GEMINI_API_KEY`, and skips itself entirely without them.

@@ -69,7 +69,9 @@ Two task families where the correct answer is not an answer:
 
 ### 7. Source quality and independence
 
-All existing code. `classifySource` for the official / academic / journalism / community mix, `registrableDomain` for independent-domain counting, `countsAsCorroboration` for the rule that agreement between backends is not corroboration.
+All existing code. `classifySource` for the official / academic / journalism / community mix, `registrableDomain` for domain identity, and `assessSupport` for the rule that agreement between backends is not corroboration, which it enforces by counting independent registrable domains after canonicalisation.
+
+**Corrected 27 July 2026.** This section named `countsAsCorroboration` as the counter. It is not one: it takes a single classified source and returns whether that source is public enough to count at all, which is the rule that keeps a user's own documents out of independent corroboration. It counts nothing. BENCH-01 verified the error and BENCH-07 corrected it here rather than leaving the governing document contradicting the item built from it.
 
 One addition: **syndication detection**, by shingled hashing of fetched page text. Four domains carrying the same wire story are one source wearing four hats, and independent-domain counting alone cannot see it.
 

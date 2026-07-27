@@ -22,6 +22,7 @@ serially, through the orchestrator.
 | BENCH-05 | Due weight, viewpoint coverage | [brief](BENCH-05-due-weight.md) | In Review | [spec](../specs/spec-BENCH-05.md) | [plan](../plans/plan-BENCH-05.md) |
 | BENCH-06 | Calibration and refusal correctness | [brief](BENCH-06-calibration-refusal.md) | Untriaged | | |
 | BENCH-07 | Source quality and syndication | [brief](BENCH-07-source-quality.md) | Untriaged | | |
+| BENCH-07 | Source quality and syndication | [brief](BENCH-07-source-quality.md) | In Review | [spec](../specs/spec-BENCH-07.md) | [plan](../plans/plan-BENCH-07.md) |
 | BENCH-08 | Reporting and comparison | [brief](BENCH-08-reporting.md) | Untriaged | | |
 | BENCH-09 | The seed task corpus | [brief](BENCH-09-seed-corpus.md) | In Review | [spec](../specs/spec-BENCH-09.md) | [plan](../plans/plan-BENCH-09.md) |
 | BENCH-10 | Self-eval of Dossier's own checking | [brief](BENCH-10-self-eval.md) | Untriaged | | |

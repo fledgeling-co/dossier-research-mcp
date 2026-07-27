@@ -97,6 +97,8 @@ docs/                   the documentation set; README is the approachable entry 
   test-plan.md          the AC-traceability matrix
   bench/task-format.md  the benchmark task format, for whoever hand-writes a gold set
   bench/scoring.md      what the scorers measure, and what each number cannot mean
+  bench/source-quality.md  the source mix, independence, syndication, and the
+                        provenance of every threshold
   bench/run-harness.md  the matrix, the spend refusal, resume, and why the
                         harness is built rather than adopted from promptfoo
   bench/due-weight.md   the viewpoint-coverage scorers, and every limit they carry
@@ -146,6 +148,10 @@ bench/                  the benchmark. NOT compiled into dist/ and NOT published
   src/score/calibration.ts pairs a stated confidence with the outcome; Brier + reliability
   src/score/refusal.ts     the two families where the right answer is not an answer
   src/score/recency.ts     the durability axis the design assumed existed and did not
+  src/score/syndication.ts  near-duplicate detection over page text; the thresholds
+                        and where each of them came from
+  src/score/source-quality.ts  the source mix, the independent-domain count, and the
+                        same count after syndication is collapsed. Both, always
   src/run/cell.ts       what one matrix cell is; the resume key, the cell
                         record schema, the spread floor
   src/run/plan.ts       build the matrix, subtract what is recorded, total the

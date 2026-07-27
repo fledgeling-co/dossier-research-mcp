@@ -8,7 +8,9 @@
  *
  * `confidence.ts` parses markers, `calibration.ts` turns them into a Brier
  * score, `refusal.ts` grades the two families where the right answer is not an
- * answer, and `recency.ts` grades a source set against the task's as-of date.
+ * answer, `recency.ts` grades a source set against the task's as-of date, and
+ * `source-quality.ts` grades the source mix and the independence behind it,
+ * including the syndication that independent-domain counting cannot see.
  *
  * `accuracy.ts` decides whether each recorded answer was actually stated, and
  * `relevance.ts` whether the report is about the right subject at all. Those two
@@ -131,3 +133,36 @@ export {
   unitSurfaceForms,
 } from './units.js';
 export type { CanonicalUnit, FoldedUnit, UnitMatch } from './units.js';
+export {
+  containment,
+  hashShingle,
+  MAX_PAGE_CHARS,
+  MIN_SHINGLES,
+  normaliseForShingling,
+  resemblance,
+  sameStory,
+  shingleHashes,
+  SHINGLE_WORDS,
+  SYNDICATION_CONTAINMENT,
+  SYNDICATION_RESEMBLANCE,
+} from './syndication.js';
+export type { SameStoryBasis, SameStoryVerdict } from './syndication.js';
+
+export { MAX_PAGES, scoreSourceQuality } from './source-quality.js';
+export type {
+  FetchedPage,
+  SourceQualityNotApplicable,
+  SourceQualityResult,
+  SourceQualityScored,
+  SyndicationCluster,
+  SyndicationLink,
+  UncheckedDomain,
+} from './source-quality.js';
+
+/**
+ * Re-exported for the same reason `Freshness` and `SourceType` are above:
+ * `SourceQualityScored.sources` and `.profile` are typed by them, so a consumer
+ * that could not name them would have to reach into `src/research/evidence.js`
+ * to describe a value this module handed it.
+ */
+export type { ClassifiedSource, EvidenceProfile } from '../../../src/research/evidence.js';
