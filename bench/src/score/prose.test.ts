@@ -55,6 +55,16 @@ describe('extractProse strips every citation form (ACCREL-06)', () => {
     const prose = extractProse('alpha<https://x.test/a>beta');
     expect(prose).not.toContain('alphabeta');
   });
+
+  it('strips a link target that contains a closing parenthesis', () => {
+    // Wikipedia-style URLs really do carry one, and the inline-link pattern
+    // stops at the first `)`. What matters is that no digit escapes; a stray
+    // bracket left in the prose cannot be mistaken for a figure.
+    const md = 'See [wiki](https://en.wikipedia.org/wiki/Foo_(1200000000)) here.';
+    const prose = extractProse(md);
+    expect(prose).not.toContain('1200000000');
+    expect(prose).not.toContain('wikipedia');
+  });
 });
 
 describe('link text (ACCREL-07)', () => {

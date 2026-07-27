@@ -180,6 +180,11 @@ const LEXICON: ReadonlyArray<readonly [string, CanonicalUnit]> = [
 
 const LEXICON_MAP: ReadonlyMap<string, CanonicalUnit> = new Map(LEXICON);
 
+/** Longest first, so `percentage points` is never read as `percentage`. */
+const SORTED_LEXICON_FORMS: readonly string[] = [...new Set(LEXICON.map(([s]) => s))].sort(
+  (a, b) => b.length - a.length,
+);
+
 /** Currency forms that may sit *before* a number rather than after it. */
 const CURRENCY_PREFIXES: readonly string[] = LEXICON.filter(
   ([, canonical]) => canonical.length === 3 && /^[a-z]{3}$/.test(canonical),
@@ -319,9 +324,14 @@ export function matchUnitAt(
   while (at < text.length && (text[at] === ' ' || text[at] === '\t')) at += 1;
   if (at >= text.length) return null;
 
-  const candidates = [...new Set([...LEXICON.map(([s]) => s), ...extraForms])].sort(
-    (a, b) => b.length - a.length,
-  );
+  // Built once at module load for the common case. `matchUnitAt` runs per number
+  // per reading per gold fact, so rebuilding and re-sorting the lexicon inside it
+  // is the repeated-work-in-a-loop shape CP §6.14 names — and a report is a long
+  // document with a lot of numerals in it.
+  const candidates =
+    extraForms.length === 0
+      ? SORTED_LEXICON_FORMS
+      : [...new Set([...SORTED_LEXICON_FORMS, ...extraForms])].sort((a, b) => b.length - a.length);
 
   for (const surface of candidates) {
     if (surface === '') continue;
