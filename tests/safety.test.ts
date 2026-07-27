@@ -212,10 +212,27 @@ describe('contract fingerprint', () => {
     expect(fingerprint({ ...withRepeat, window: '30d' })).not.toBe(ref);
     expect(fingerprint({ ...withRepeat, collaborativePlanning: true })).not.toBe(ref);
     expect(fingerprint({ ...withRepeat, attachments: ['document:https://x.test/a.pdf'] })).not.toBe(ref);
-    // And a repeat cannot be forged by writing the token into the prompt: the
-    // prompt is lower-cased and space-collapsed, then joined with a space, so
-    // this must not collide with repeat 2.
-    expect(fingerprint({ ...base, prompt: `${base.prompt} repeat:2` })).not.toBe(ref);
+  });
+
+  // REPEAT-07. A repeat must not be forgeable from any user-controlled field.
+  // The first implementation appended `repeat:N` to a space-joined canonical
+  // string whose LAST element is `wideSpec`, so `wideSpec: "foo"` with repeat 7
+  // hashed identically to `wideSpec: "foo repeat:7"` with no repeat, and a
+  // caller could collide a deliberate purchase onto an ordinary one. Found by
+  // an out-of-family review that ran it rather than reasoned about it.
+  it('REPEAT-07: no user-controlled field can forge a repetition index', () => {
+    const wide = { ...base, wideSpec: 'foo' };
+    expect(fingerprint({ ...wide, repeat: 7 })).not.toBe(
+      fingerprint({ ...base, wideSpec: 'foo repeat:7' }),
+    );
+    expect(fingerprint({ ...base, repeat: 2 })).not.toBe(
+      fingerprint({ ...base, prompt: `${base.prompt} repeat:2` }),
+    );
+    expect(fingerprint({ ...base, repeat: 2 })).not.toBe(
+      fingerprint({ ...base, window: 'repeat:2' }),
+    );
+    // And two different indices never collide with each other.
+    expect(fingerprint({ ...base, repeat: 12 })).not.toBe(fingerprint({ ...base, repeat: 1 }));
   });
 
   it('ignores MCP auth headers so a rotated token does not fork the dedupe key', () => {

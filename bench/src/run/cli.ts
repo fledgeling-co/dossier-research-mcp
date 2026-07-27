@@ -1,6 +1,7 @@
 import { join, resolve } from 'node:path';
 import { argv } from 'node:process';
 import { pathToFileURL } from 'node:url';
+import { UTILITY_CALL_BAND } from '../../../src/gemini/cost.js';
 import { buildDeps } from '../../../src/server.js';
 import type { ProviderId } from '../../../src/providers/types.js';
 import type { StartRunArgs } from '../../../src/research/runner.js';
@@ -24,7 +25,7 @@ import { createCellExecutor } from './dossier.js';
  * habit is worth keeping: a later `--json` flag should own stdout alone.
  */
 
-interface CliArgs {
+export interface CliArgs {
   readonly tasksDir: string;
   readonly outPath: string;
   readonly providers: readonly ProviderId[];
@@ -46,27 +47,60 @@ const USAGE = `Usage: bench-run --providers <a,b> --repeat <n> --ceiling <usd> [
   --include-failed    re-queue cells whose recorded outcome was a failure
   --dry-run           plan and print, start nothing`;
 
-function parseArgs(argv: readonly string[]): CliArgs {
+/** Flags taking a value, and flags that are switches. Nothing else is accepted. */
+const VALUE_FLAGS = new Set(['providers', 'ceiling', 'repeat', 'tasks', 'out', 'concurrency']);
+const SWITCH_FLAGS = new Set(['include-failed', 'dry-run']);
+
+/** Exported for the arg-parsing tests; a mistyped flag here spends money. */
+export function parseArgs(argv: readonly string[]): CliArgs {
   const flags = new Map<string, string>();
   const bare = new Set<string>();
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
-    if (arg === undefined || !arg.startsWith('--')) continue;
-    const name = arg.slice(2);
-    const next = argv[i + 1];
-    if (next !== undefined && !next.startsWith('--')) {
-      flags.set(name, next);
-      i += 1;
-    } else {
-      bare.add(name);
+    if (arg === undefined) continue;
+    if (!arg.startsWith('--')) {
+      throw new Error(`Unexpected argument "${arg}".\n\n${USAGE}`);
     }
+    // `--flag=value` is accepted, because a caller who types it and is ignored
+    // has just started a paid batch they thought they were dry-running.
+    const eq = arg.indexOf('=');
+    const name = eq === -1 ? arg.slice(2) : arg.slice(2, eq);
+    const inline = eq === -1 ? undefined : arg.slice(eq + 1);
+
+    // An unknown flag is refused rather than ignored. `--dry-rnu` silently
+    // dropped is a typo that spends money, which is the whole class of failure
+    // this tool is supposed to be careful about.
+    if (!VALUE_FLAGS.has(name) && !SWITCH_FLAGS.has(name)) {
+      throw new Error(`Unknown flag "--${name}".\n\n${USAGE}`);
+    }
+    if (SWITCH_FLAGS.has(name)) {
+      if (inline !== undefined && inline !== 'true') {
+        throw new Error(`--${name} is a switch and takes no value; got "--${name}=${inline}".`);
+      }
+      bare.add(name);
+      continue;
+    }
+    if (inline !== undefined) {
+      flags.set(name, inline);
+      continue;
+    }
+    const next = argv[i + 1];
+    if (next === undefined || next.startsWith('--')) {
+      throw new Error(`--${name} needs a value.\n\n${USAGE}`);
+    }
+    flags.set(name, next);
+    i += 1;
   }
 
-  const providers = (flags.get('providers') ?? '')
+  const requested = (flags.get('providers') ?? '')
     .split(',')
     .map((s) => s.trim())
     .filter((s) => s !== '');
-  if (providers.length === 0) throw new Error(`--providers is required.\n\n${USAGE}`);
+  if (requested.length === 0) throw new Error(`--providers is required.\n\n${USAGE}`);
+  // Deduplicated: the same backend named twice would give two matrix cells the
+  // same coordinates, so one would overwrite the other in the store and the
+  // matrix would silently be smaller than the plan reported.
+  const providers = [...new Set(requested)];
 
   const ceilingRaw = flags.get('ceiling');
   if (ceilingRaw === undefined) {
@@ -129,6 +163,22 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
         recorded.unreadableLines.map((l) => `line ${String(l.line)} (${l.reason})`).join('; '),
     );
   }
+  if (recorded.supersededRows > 0) {
+    say(
+      `Note: ${String(recorded.supersededRows)} row(s) of ${args.outPath} were superseded by a later row for the same cell, and only the later one counts.`,
+    );
+  }
+
+  // Fail closed on an unknown backend rather than costing it at zero. A `?? 0`
+  // fallback made an unknown id free, so the ceiling could not refuse it and
+  // the batch started and then failed every one of its cells at `Runner.start`.
+  for (const id of args.providers) {
+    if (!deps.providers.get(id)) {
+      throw new Error(
+        `Unknown backend "${id}". Run \`research_doctor\` to see which are configured.`,
+      );
+    }
+  }
 
   const budget = await deps.runner.budget();
   const plan = planBatch({
@@ -139,10 +189,13 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
     failedKeys: recorded.failedKeys,
     includeFailed: args.includeFailed,
     // The same estimate the runner will reserve, so the projection and the gate
-    // cannot drift apart.
+    // cannot drift apart, PLUS the utility call the runner reserves separately
+    // on every completed run to title and summarise it. That call is outside
+    // every provider's band, so leaving it out understated a 4,000-cell batch by
+    // up to $0.08 a cell and let spend past the batch ceiling unaccounted.
     estimateCellUsd: (provider) =>
-      deps.providers.get(provider as ProviderId)?.estimate({ tier: 'fast', tools: ['google_search'] })
-        .cost.highUsd ?? 0,
+      (deps.providers.get(provider as ProviderId)?.estimate({ tier: 'fast', tools: ['google_search'] })
+        .cost.highUsd ?? 0) + UTILITY_CALL_BAND.highUsd,
     ceilingUsd: args.ceilingUsd,
     rollingRemainingUsd: budget.remainingUsd,
   });

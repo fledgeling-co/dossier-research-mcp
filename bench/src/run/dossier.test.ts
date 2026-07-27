@@ -219,4 +219,70 @@ describe('the live cell executor', () => {
     expect(budget.runsInWindow).toBe(3);
     expect(budget.committedUsd).toBeGreaterThan(0);
   });
+
+  // The claim `harness.test.ts` makes about the crash window, measured rather
+  // than asserted in a comment. A cell that finished and did not reach the
+  // store is executed again on resume, because buying a report and recording it
+  // cannot be one atomic act. What bounds the damage is Dossier's own
+  // fingerprint dedupe: the re-executed cell carries the same task, backend and
+  // repetition, so it returns the run already bought and costs nothing more.
+  it('a re-executed cell returns the run already bought rather than buying a second', async () => {
+    let created = 0;
+    const client: DeepResearchClient = {
+      ...scriptedClient([snapshot({ status: 'completed', markdown: '# R' })]),
+      async createRun() {
+        created += 1;
+        return snapshot({ interactionId: `int_${String(created)}` });
+      },
+    };
+    const runner = new Runner(store, config, () => client);
+    const execute = createCellExecutor({
+      runner,
+      store,
+      tasks: new Map([['t1', task('t1')]]),
+      startArgs,
+      pollIntervalMs: 0,
+      sleep: async () => {
+        await runner.tick();
+      },
+    });
+
+    const cell = { taskId: 't1', provider: 'gemini' as const, repeat: 2 };
+    const first = await execute(cell);
+    const again = await execute(cell);
+
+    expect(first.outcome).toBe('ok');
+    expect(again.outcome).toBe('ok');
+    expect(first.runId).toBe(again.runId);
+    // One paid creation for two executions of the same cell.
+    expect(created).toBe(1);
+    expect((await store.listRuns())).toHaveLength(1);
+  });
+
+  // The cell's backend and repetition are not the caller's to choose. A
+  // `startArgs` that omitted `repeat` would collapse five cell keys onto one
+  // report; one that named another backend would run one the planner never
+  // costed. Both corrupt the matrix silently rather than failing it.
+  it('binds the cell own backend and repetition over whatever startArgs returned', async () => {
+    const runner = new Runner(store, config, () =>
+      scriptedClient([snapshot({ status: 'completed', markdown: '# R' })]),
+    );
+    const execute = createCellExecutor({
+      runner,
+      store,
+      tasks: new Map([['t1', task('t1')]]),
+      // Deliberately wrong on both axes.
+      startArgs: (t) => ({ ...startArgs(t, { repeat: 1 }), provider: 'perplexity', repeat: 1 }),
+      pollIntervalMs: 0,
+      sleep: async () => {
+        await runner.tick();
+      },
+    });
+
+    const result = await execute({ taskId: 't1', provider: 'gemini', repeat: 4 });
+    expect(result.outcome).toBe('ok');
+    const run = await store.getRun(result.runId as string);
+    expect(run?.provider).toBe('gemini');
+    expect(run?.repeat).toBe(4);
+  });
 });

@@ -322,7 +322,12 @@ export class Runner {
       ...(args.shape ? { shape: args.shape } : {}),
       ...(args.window ? { window: args.window } : {}),
       ...(args.wideSpec ? { wideSpec: args.wideSpec } : {}),
-      ...(args.repeat ? { repeat: args.repeat } : {}),
+      // `!== undefined`, never truthiness. `NaN` is falsy, so a truthiness test
+      // silently DROPPED a malformed repetition index and let it dedupe onto
+      // the no-repeat purchase, which is the exact collapse this field exists
+      // to prevent, arriving through the guard meant to stop it. Passing it on
+      // makes `fingerprint()` throw, which is the fail-closed answer.
+      ...(args.repeat !== undefined ? { repeat: args.repeat } : {}),
     });
   }
 
@@ -420,8 +425,9 @@ export class Runner {
         ...(args.wideSpec ? { wideSpec: args.wideSpec } : {}),
         // Recorded, not merely hashed. A stored cell has to be attributable to
         // its repetition an hour later, or a resumed batch cannot tell which of
-        // five it already bought.
-        ...(args.repeat ? { repeat: args.repeat } : {}),
+        // five it already bought. Unreachable with a malformed index, because
+        // `fingerprintFor` above has already thrown on one.
+        ...(args.repeat !== undefined && args.repeat > 0 ? { repeat: args.repeat } : {}),
         fingerprint: fp,
         createdAt: at,
         updatedAt: at,

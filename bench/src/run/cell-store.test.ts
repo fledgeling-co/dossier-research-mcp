@@ -161,6 +161,34 @@ describe('cell store', () => {
     expect(() => appendCell(path, { ...okCell(), surprise: 1 } as unknown as CellRecord)).toThrow();
   });
 
+  // BATCH-13. A schema-valid line whose key belongs to a different cell would
+  // mark that cell completed even though it was never bought, and it would then
+  // never be bought. The key is derived and checked rather than trusted.
+  it('BATCH-13: a key that disagrees with its own coordinates is refused', () => {
+    expect(() => appendCell(path, okCell({ key: 'somewhere-else/gemini/1' }))).toThrow();
+    expect(() => appendCell(path, okCell({ key: 't1/gemini/2' }))).toThrow();
+    expect(readCells(path).cells).toHaveLength(0);
+  });
+
+  // Two rows can legitimately share a key: a retry after a failure, or two
+  // batches over one store where the second collapses onto the first through
+  // Dossier's fingerprint dedupe. Double-counting them in every downstream
+  // average is the exact defect measured in promptfoo's resume.
+  it('BATCH-11: two rows for one cell collapse to the later one, and the fact is reported', () => {
+    appendCell(path, failedCell());
+    appendCell(path, okCell({ key: 't2/xai/2', taskId: 't2', provider: 'xai', repeat: 2 }));
+    appendCell(path, okCell());
+
+    const result = readCells(path);
+    expect(result.cells).toHaveLength(2);
+    expect(result.supersededRows).toBe(1);
+    expect(result.completedKeys.size).toBe(2);
+    // Last write wins, so the retry's success is what counts.
+    expect(result.cells.find((c) => c.key === 't2/xai/2')?.outcome).toBe('ok');
+    // And the record list and the completed set can never disagree.
+    expect(new Set(result.cells.map((c) => c.key))).toEqual(result.completedKeys);
+  });
+
   it('BATCH-13: a report is referenced, never inlined', () => {
     appendCell(path, okCell());
     // 4,000 cells at ~60k tokens each would make the store unopenable, so the

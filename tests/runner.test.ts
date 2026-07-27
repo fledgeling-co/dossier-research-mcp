@@ -164,6 +164,26 @@ describe('start', () => {
     expect(plain.run.repeat).toBeUndefined();
   });
 
+  // REPEAT-07. `NaN` is falsy, so the first version of this threading used a
+  // truthiness test and SILENTLY DROPPED a malformed repetition index, letting
+  // it dedupe onto the no-repeat purchase. That is the exact collapse the field
+  // exists to prevent, arriving through the guard meant to stop it. Found by an
+  // out-of-family review.
+  it('REPEAT-07: a malformed repetition index is refused at the runner, not dropped', async () => {
+    const client = scriptedClient([snapshot({})]);
+    const runner = new Runner(store, config, () => client);
+    await runner.start(START);
+    expect(client.created).toHaveLength(1);
+
+    for (const bad of [Number.NaN, -1, 1.5]) {
+      await expect(runner.start({ ...START, repeat: bad }), String(bad)).rejects.toThrow(
+        /repeat must be a non-negative integer/,
+      );
+    }
+    // Nothing was bought by any of them.
+    expect(client.created).toHaveLength(1);
+  });
+
   it('refuses a run that would cross the budget ceiling', async () => {
     const tight = { ...config, budgetUsd: 3 };
     const runner = new Runner(store, tight, () => scriptedClient([snapshot({})]));

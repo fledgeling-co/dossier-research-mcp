@@ -51,6 +51,8 @@ Two details that matter more than they look:
 - **The projection covers the remainder, not the matrix.** A plan that totalled the whole matrix would refuse a resume that costs almost nothing, and a gate that refuses the cheap case is a gate people turn off.
 - **The worst case, not the midpoint.** Reserving the midpoint for a batch that runs at the top of its band is not a ceiling. The estimate comes from the same `estimate()` the runner reserves with, so the two cannot drift.
 
+The per-cell figure is the backend's own band **plus the utility call** Dossier reserves separately to title and summarise every completed run. That call sits outside every provider's band, so leaving it out understated a 4,000-cell batch by up to $0.08 a cell and let real spend past the batch ceiling unaccounted.
+
 There are two ceilings and both apply. The harness refuses on its own batch ceiling up front; every cell still goes through `Runner.start()` and therefore through dedupe, the concurrency cap, the per-provider budget, the rolling-window budget and the ledger, exactly as any other run does. The plan **reports** the rolling-window headroom and does not refuse on it, because that window rolls while a multi-day batch runs.
 
 `--ceiling` is required. A batch with no ceiling is the one that quietly buys four figures of research.
@@ -68,6 +70,16 @@ A cell is persisted **before** its slot is released, so a process killed mid-bat
 A cell that failed has a recorded outcome and is not retried by default. `--include-failed` re-queues them, for an operator who knows the failure was free.
 
 A torn last line, which is what a process killed mid-append leaves, is reported and skipped rather than making the rest of the file unreadable. This is the one place in the benchmark where skip-and-continue is right: the corpus loader fails a whole load because a dropped *task* narrows the sample, whereas a damaged *result* line is a cell that will simply be re-run.
+
+Two rows can legitimately carry the same cell key: a cell that failed and was later retried, or two batches over one store. The reader collapses them last-wins and reports how many rows were superseded, so a cell cannot be double-counted in a downstream average. Criticising promptfoo for duplicate rows at the same coordinates and then shipping them here would be indefensible.
+
+### What resume does not promise
+
+**This is at-least-once, not exactly-once, and it cannot be anything else.** Buying a report and recording it are two acts, so a process killed between them leaves a cell that was paid for and is not in the store, and the resume executes it again. The harness test asserts this directly: a 24-cell matrix interrupted after the ninth record takes **25 executions** to complete, not 24.
+
+What bounds the damage is not the harness. It is Dossier's own fingerprint dedupe: the re-executed cell carries the same task, backend and repetition, so it computes the same fingerprint and returns the run already bought, for nothing. That holds inside the dedupe window, 24 hours by default. Outside it, or with `DOSSIER_DEDUPE_TTL_MINUTES=0`, the re-execution is a second purchase.
+
+**Two batches pointed at one store are not prevented.** There is no cross-process batch lock. Both plan from the same store, both queue the same cells, and both execute them. The same dedupe closes the spend hole under the same condition, and the last-wins reader closes the double-counting hole unconditionally, but the wall clock is wasted either way. Run one batch per store.
 
 ## Stale tasks
 

@@ -1,4 +1,5 @@
 import type { Store } from '../../../src/store/store.js';
+import type { ProviderId } from '../../../src/providers/types.js';
 import type { Runner } from '../../../src/research/runner.js';
 import type { RunRecord } from '../../../src/store/types.js';
 import { TERMINAL_STATES } from '../../../src/store/types.js';
@@ -91,14 +92,36 @@ export function createCellExecutor(
 
     let run: RunRecord;
     try {
-      const started = await runner.start(startArgs(task, ref));
+      // The cell's own backend and repetition are bound here, over whatever the
+      // caller's `startArgs` returned. They are not the caller's to choose: a
+      // `startArgs` that omitted `repeat` would collapse five distinct cell keys
+      // onto one report, and one that named a different backend would run a
+      // backend the planner never costed. Both are silent, and both corrupt the
+      // matrix rather than failing it.
+      const started = await runner.start({
+        ...startArgs(task, ref),
+        provider: ref.provider as ProviderId,
+        repeat: ref.repeat,
+      });
       run = started.run;
     } catch (e: unknown) {
       // Includes the budget and concurrency refusals. Recorded as a failed
       // cell rather than allowed to end the batch: a run refused because the
       // rolling window is momentarily full is a cell to re-plan later, not a
       // reason to abandon the cells already bought.
-      return { outcome: 'failed', reason: e instanceof Error ? e.message : String(e) };
+      //
+      // The run id is genuinely not recoverable here, because `start()` throws
+      // before returning one. Said plainly rather than left implied: some of
+      // these throws happen AFTER the ledger reserved, so this cell can carry a
+      // charge that the record cannot point at.
+      return {
+        outcome: 'failed',
+        reason:
+          `${e instanceof Error ? e.message : String(e)}\n\n` +
+          'This cell has no run id because the failure happened during creation. If the reason above ' +
+          'describes an uncertain outcome rather than a refusal, a run may exist and may have been ' +
+          `charged; look for a run tagged with this question on ${ref.provider}.`,
+      };
     }
 
     const deadline = Date.now() + cellTimeoutMs;

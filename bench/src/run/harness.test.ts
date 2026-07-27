@@ -275,14 +275,18 @@ describe('runBatch', () => {
     const first = planBatch(spec);
     expect(first.queue).toHaveLength(24);
 
-    // A "process death" after 9 cells: the tenth never records.
+    // A "process death" after 9 cells: the tenth executes and never records.
     const recorded: CellRecord[] = [];
+    let executed = 0;
     const boom = new Error('killed');
     await expect(
       runBatch({
         queue: first.queue,
         concurrency: 1,
-        execute: async () => ok(),
+        execute: async () => {
+          executed += 1;
+          return ok();
+        },
         record: async (c) => {
           if (recorded.length === 9) throw boom;
           recorded.push(c);
@@ -290,6 +294,7 @@ describe('runBatch', () => {
       }),
     ).rejects.toThrow('killed');
     expect(recorded).toHaveLength(9);
+    expect(executed).toBe(10);
 
     // Resume: plan again from exactly what reached the store.
     const second = planBatch({ ...spec, completedKeys: recorded.map((c) => c.key) });
@@ -301,13 +306,16 @@ describe('runBatch', () => {
     await runBatch({
       queue: second.queue,
       concurrency: 3,
-      execute: async () => ok(),
+      execute: async () => {
+        executed += 1;
+        return ok();
+      },
       record: async (c) => {
         resumed.push(c);
       },
     });
 
-    // Exactly the matrix, exactly once. No cell bought twice, none skipped.
+    // Every cell of the matrix is recorded exactly once, and none is skipped.
     const all = [...recorded, ...resumed].map((c) => c.key);
     expect(all).toHaveLength(24);
     expect(new Set(all).size).toBe(24);
@@ -315,6 +323,47 @@ describe('runBatch', () => {
 
     // And a third plan has nothing left to do.
     expect(planBatch({ ...spec, completedKeys: all }).queue).toHaveLength(0);
+
+    // The honest part, asserted rather than glossed: 25 executions for a
+    // 24-cell matrix. The cell that finished and did not reach the store is
+    // executed a second time on resume, and NO at-least-once system can avoid
+    // that, because buying a report and recording it cannot be one atomic act.
+    //
+    // An earlier version of this test counted only the recorded cells and so
+    // asserted the opposite of what it proved. What bounds the damage is not
+    // the harness: it is Dossier's own fingerprint dedupe, which returns the
+    // existing run for free when the re-executed cell carries the same task,
+    // backend and repetition, inside the dedupe window. That is measured in
+    // `dossier.test.ts`; here it is named so nobody reads this as exactly-once.
+    expect(executed).toBe(25);
+  });
+
+  // BATCH-10. The other half of a persistence failure: siblings must stop
+  // claiming cells, and must be awaited rather than left running detached while
+  // the caller believes the batch has ended and starts its cleanup.
+  it('BATCH-10: a persistence failure stops the batch instead of leaving paid cells in flight', async () => {
+    let started = 0;
+    let settled = 0;
+    await expect(
+      runBatch({
+        queue: queueOf(30),
+        concurrency: 4,
+        execute: async () => {
+          started += 1;
+          await new Promise((r) => setTimeout(r, 5));
+          settled += 1;
+          return ok();
+        },
+        record: async () => {
+          throw new Error('disk full');
+        },
+      }),
+    ).rejects.toThrow('disk full');
+
+    // Nothing is still running when the caller regains control.
+    expect(settled).toBe(started);
+    // And it stopped near the first failure rather than working through 30.
+    expect(started).toBeLessThanOrEqual(8);
   });
 
   it('refuses a nonsensical concurrency rather than running unbounded', async () => {

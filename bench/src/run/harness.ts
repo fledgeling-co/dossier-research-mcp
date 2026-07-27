@@ -118,9 +118,19 @@ export async function runBatch(options: RunBatchOptions): Promise<BatchOutcome> 
   let peakInFlight = 0;
   let ok = 0;
   let failed = 0;
+  /**
+   * Set when persistence fails, so no worker claims another cell.
+   *
+   * Without it, `Promise.all` rejects on the first failure while its siblings
+   * carry on **starting paid research** that can no longer be recorded, and the
+   * caller has already moved on to its cleanup. Every worker is still awaited
+   * below before the failure is rethrown, so nothing is left running detached.
+   */
+  let aborted: unknown = null;
 
   const worker = async (): Promise<void> => {
     for (;;) {
+      if (aborted !== null) return;
       const index = cursor;
       cursor += 1;
       const ref = queue[index];
@@ -185,7 +195,13 @@ export async function runBatch(options: RunBatchOptions): Promise<BatchOutcome> 
       // opposite situations: one backend having a bad afternoon must not lose
       // the cells already bought, whereas a store that cannot be written to
       // means every further cell is money spent that no resume can find.
-      await record(cell);
+      try {
+        await record(cell);
+      } catch (e: unknown) {
+        aborted = e;
+        inFlight -= 1;
+        return;
+      }
       records.push(cell);
       if (cell.outcome === 'ok') ok += 1;
       else failed += 1;
@@ -195,7 +211,19 @@ export async function runBatch(options: RunBatchOptions): Promise<BatchOutcome> 
   };
 
   const workers = Array.from({ length: Math.min(concurrency, queue.length) }, () => worker());
-  await Promise.all(workers);
+  // `allSettled`, not `all`: every worker must be awaited before this returns,
+  // or a rejected `all` hands control back while paid cells are still in
+  // flight. The abort flag stops them claiming new work; this waits for the
+  // ones already running.
+  await Promise.allSettled(workers);
+  if (aborted !== null) {
+    // Rethrown verbatim when it is an Error, so the caller sees the real cause
+    // (`ENOSPC`, a permission failure) rather than a paraphrase of it.
+    if (aborted instanceof Error) throw aborted;
+    throw new Error('the cell store could not be written, and the batch stopped', {
+      cause: aborted,
+    });
+  }
 
   return { attempted: queue.length, ok, failed, peakInFlight, records };
 }

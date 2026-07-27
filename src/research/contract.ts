@@ -123,11 +123,22 @@ export function fingerprint(input: FingerprintInput): string {
     input.shape ?? 'deep',
     input.window ?? 'none',
     input.wideSpec ?? '',
-    // Appended only when a repeat was actually asked for, so the ordinary run
-    // hashes to the byte-identical string it did before this field existed.
-    ...(repeat > 0 ? [`repeat:${String(repeat)}`] : []),
   ].join(' ');
-  return createHash('sha256').update(canonical).digest('hex').slice(0, 32);
+  const base = createHash('sha256').update(canonical).digest('hex');
+  // No repeat is the byte-identical answer this returned before the field
+  // existed, so no stored fingerprint is invalidated by the upgrade.
+  if (repeat === 0) return base.slice(0, 32);
+  // A repeat is hashed in a SECOND round over the first digest, rather than
+  // appended to the canonical string.
+  //
+  // Appending was the obvious thing and it was forgeable: the fields are joined
+  // with single spaces and `wideSpec` is last, so `wideSpec: "foo"` with
+  // `repeat: 7` produced the same string as `wideSpec: "foo repeat:7"` with no
+  // repeat, and a caller could therefore collide a deliberate purchase onto an
+  // ordinary one. Verified by an out-of-family review that ran it. Nothing
+  // user-controlled can reach the input below except through `base`, which is
+  // always 64 hex characters.
+  return createHash('sha256').update(`${base}:repeat:${String(repeat)}`).digest('hex').slice(0, 32);
 }
 
 /** Constant-time-ish comparison. Cheap, and avoids a needless timing signal. */

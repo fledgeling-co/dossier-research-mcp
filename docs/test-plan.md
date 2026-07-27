@@ -443,6 +443,7 @@ The matrix is task times backend times repetition, and the money is spent one ce
 | **REPEAT-04** | Every other field still changes the fingerprint with a repetition index present, so the new field cannot mask an existing one | unit: `contract` | ✓ |
 | **REPEAT-05** | Two runs differing only in repetition index both start and neither dedupes; two identical runs still dedupe onto one | unit: `runner` | ✓ |
 | **REPEAT-06** | The repetition index is stored on the run record, so a cell is attributable to its repetition later | unit: `runner` | ✓ |
+| **REPEAT-07** | No user-controlled field can forge a repetition index, and a malformed one is refused at the runner rather than dropped by a truthiness test | unit: `contract`, `runner` | ✓ |
 | **BATCH-01** | The matrix is task times backend times repetition, and every cell has a distinct key | unit: `plan` | ✓ |
 | **BATCH-02** | Cells with a recorded outcome are subtracted, so a re-plan queues exactly the remainder | unit: `plan` | ✓ |
 | **BATCH-03** | A projection over the ceiling refuses before anything starts and names the total it needed | unit: `plan` | ✓ |
@@ -456,7 +457,12 @@ The matrix is task times backend times repetition, and the money is spent one ce
 | **BATCH-11** | The cell store round-trips, appends rather than rewrites, and a missing file reads as empty | unit: `cell-store` | ✓ |
 | **BATCH-12** | A torn or malformed line is reported and skipped rather than making the other cells unreadable | unit: `cell-store` | ✓ |
 | **BATCH-13** | A record the reader would reject is refused at write time, so no cell can be written invisible to resume | unit: `cell-store` | ✓ |
-| **BATCH-14** | Killing a batch mid-run and re-planning from the store queues exactly the cells that never finished | unit: `harness` | ✓ |
+| **BATCH-14** | Killing a batch mid-run and re-planning from the store queues the cells that never finished, and the cell paid for but not recorded is re-executed rather than lost, which is the at-least-once bound asserted rather than glossed | unit: `harness` | ✓ |
+| **BATCH-15** | A cell re-executed after a lost write returns the run already bought instead of buying a second | unit: `dossier` | ✓ |
+| **BATCH-16** | A persistence failure stops workers claiming new cells and awaits the ones in flight, rather than leaving paid cells running detached | unit: `harness` | ✓ |
+| **BATCH-17** | A record whose key disagrees with its own coordinates is refused, and two rows for one cell collapse last-wins with the fact reported | unit: `cell-store` | ✓ |
+| **BATCH-18** | The executor binds the cell's own backend and repetition over whatever the caller supplied | unit: `dossier` | ✓ |
+| **BATCH-19** | An unknown or malformed CLI flag is refused rather than ignored, backends are de-duplicated, and a batch without a ceiling will not start | unit: `cli` | ✓ |
 
 ### The paid project
 

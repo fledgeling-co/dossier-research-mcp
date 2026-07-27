@@ -107,7 +107,21 @@ export const CellFailedSchema = z.strictObject({
   failureStatus: z.number().int().optional(),
 });
 
-export const CellRecordSchema = z.discriminatedUnion('outcome', [CellOkSchema, CellFailedSchema]);
+/**
+ * A cell record, with its key checked against the coordinates it claims.
+ *
+ * The refinement is the load-bearing part. Validating `key`, `taskId`,
+ * `provider` and `repeat` independently leaves a schema-valid line whose key
+ * belongs to a different cell, and `readCells` trusts the key: a resume would
+ * then mark a cell completed that was never bought, and it would never be
+ * bought. Derived here rather than trusted, so the two can never disagree.
+ */
+export const CellRecordSchema = z
+  .discriminatedUnion('outcome', [CellOkSchema, CellFailedSchema])
+  .refine((c) => c.key === cellKey(c), {
+    message: 'key does not match its own taskId, provider and repeat',
+    path: ['key'],
+  });
 
 export type CellOk = z.infer<typeof CellOkSchema>;
 export type CellFailed = z.infer<typeof CellFailedSchema>;

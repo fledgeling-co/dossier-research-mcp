@@ -22,7 +22,21 @@ import { CellRecordSchema, type CellRecord } from './cell.js';
  */
 
 export interface ReadCellsResult {
+  /**
+   * One record per cell key, last write wins.
+   *
+   * Deduplicated here rather than left to every reader. Two rows can legitimately
+   * share a key: a cell that failed and was later retried, or two batches
+   * pointed at one store, where the second collapses onto the first through
+   * Dossier's own fingerprint dedupe and records a second row for the same
+   * research. Leaving both in would double-count that cell in every downstream
+   * average, which is exactly the defect measured in promptfoo's resume and
+   * written up in `docs/bench/run-harness.md`. Criticising it there and
+   * shipping it here would be indefensible.
+   */
   readonly cells: readonly CellRecord[];
+  /** How many rows were superseded by a later row for the same cell. */
+  readonly supersededRows: number;
   /** Keys with any recorded outcome. This is what resume subtracts. */
   readonly completedKeys: ReadonlySet<string>;
   /** Keys whose recorded outcome was a failure. A subset of the above. */
@@ -42,6 +56,7 @@ export interface ReadCellsResult {
 
 const EMPTY: ReadCellsResult = {
   cells: [],
+  supersededRows: 0,
   completedKeys: new Set(),
   failedKeys: new Set(),
   unreadableLines: [],
@@ -63,10 +78,12 @@ export function readCells(path: string): ReadCellsResult {
     throw e;
   }
 
-  const cells: CellRecord[] = [];
-  const completedKeys = new Set<string>();
+  // Insertion-ordered, and re-setting a key keeps its original position, which
+  // is what makes "last write wins" preserve the order cells were first bought.
+  const byKey = new Map<string, CellRecord>();
   const failedKeys = new Set<string>();
   const unreadableLines: { line: number; reason: string }[] = [];
+  let supersededRows = 0;
 
   const lines = text.split('\n');
   for (const [index, raw] of lines.entries()) {
@@ -89,13 +106,21 @@ export function readCells(path: string): ReadCellsResult {
       });
       continue;
     }
-    cells.push(result.data);
-    completedKeys.add(result.data.key);
+    if (byKey.has(result.data.key)) supersededRows += 1;
+    byKey.set(result.data.key, result.data);
     if (result.data.outcome === 'failed') failedKeys.add(result.data.key);
     else failedKeys.delete(result.data.key);
   }
 
-  return { cells, completedKeys, failedKeys, unreadableLines };
+  return {
+    cells: [...byKey.values()],
+    supersededRows,
+    // The keys ARE the map's keys, so the completed set and the record list can
+    // never disagree about which cells exist.
+    completedKeys: new Set(byKey.keys()),
+    failedKeys,
+    unreadableLines,
+  };
 }
 
 /**
