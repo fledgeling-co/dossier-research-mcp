@@ -118,7 +118,7 @@ None. No new dependency. `bench/` is already wired into `tsconfig.json`, the vit
 
 - [ ] A report citing the dissenting URL scores recall even when the distinguishing term is absent, and `reachedBy` is `url`.
 - [ ] A report using a synonym of the distinguishing term, and not citing the URL, scores 0 recall, and the returned `limits` states that only the literal term and the exact URL count.
-- [ ] The dissenting URL is matched after canonicalisation, so `http://`, a `www.` prefix, a trailing slash, a `?utm_source=…` parameter and a fragment all still score recall; a different path on the same host does not.
+- [ ] The dissenting URL is matched after canonicalisation, so `http://`, a `www.` prefix, a trailing slash, a `?utm_source=…` parameter and a fragment all still score recall; a different path on the same host, and a non-tracking query parameter, do not. Measured rather than assumed: `canonicaliseUrl` preserves the scheme, so the `http`/`https` fold is this scorer's own layer on top of it and is documented as such.
 - [ ] A distinguishing term is matched case-insensitively, across a line break, and through a curly apostrophe; it is **not** matched when it appears inside a longer word.
 - [ ] A task recording two dissents of which the report reaches one scores 0.5, and the findings name which one was missed.
 - [ ] A report containing both conflicting figures under their declared tolerances scores full credit and is reported `both-figures`; the magnitude forms `1.2 billion`, `1,200,000,000` and `$1.2bn` all match a gold value of `1200000000` under an `exact` tolerance.
