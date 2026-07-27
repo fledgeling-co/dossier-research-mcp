@@ -202,3 +202,44 @@ describe('corpus grounding placement', () => {
     expect(prompt).not.toContain('Contradictions with the attached corpus');
   });
 });
+
+describe('prior research placement', () => {
+  // GROUND-15
+  it('puts the prior-research block BEFORE the final re-anchor, never after it', () => {
+    // Exactly the rule the corpus block is held to, and for exactly the same
+    // reason: the closing directive re-anchors synthesis after an hour of
+    // recursive search, and it only works because it is last.
+    const { prompt } = buildPrompt({ question: 'Has X changed since?', priorResearchRuns: 2 });
+    const priorAt = prompt.indexOf('<prior_research>');
+    const lastAnchor = prompt.lastIndexOf('<core_directive>');
+    expect(priorAt).toBeGreaterThan(-1);
+    expect(priorAt).toBeLessThan(lastAnchor);
+    expect(prompt.trimEnd().endsWith('</core_directive>')).toBe(true);
+    expect((prompt.match(/<core_directive>/g) ?? [])).toHaveLength(2);
+  });
+
+  // GROUND-16
+  it('carries the count and the rule, and no text from the prior reports', () => {
+    const { prompt } = buildPrompt({ question: 'Has X changed?', priorResearchRuns: 3 });
+    expect(prompt).toContain('3 earlier Dossier research runs');
+    expect(prompt).toContain('never independent corroboration');
+    expect(prompt).toContain('Count support in independent sources, never in reports');
+  });
+
+  it('sits alongside corpus grounding rather than displacing it', () => {
+    const { prompt } = buildPrompt({
+      question: 'q',
+      corpusGrounding: true,
+      priorResearchRuns: 1,
+    });
+    const lastAnchor = prompt.lastIndexOf('<core_directive>');
+    expect(prompt.indexOf('<corpus_grounding>')).toBeLessThan(lastAnchor);
+    expect(prompt.indexOf('<prior_research>')).toBeLessThan(lastAnchor);
+    expect(prompt.trimEnd().endsWith('</core_directive>')).toBe(true);
+  });
+
+  it('omits the block when the run was grounded in nothing', () => {
+    expect(buildPrompt({ question: 'q' }).prompt).not.toContain('prior_research');
+    expect(buildPrompt({ question: 'q', priorResearchRuns: 0 }).prompt).not.toContain('prior_research');
+  });
+});
