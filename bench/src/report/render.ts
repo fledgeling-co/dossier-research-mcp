@@ -202,9 +202,13 @@ function scorecardFor(
   metrics: readonly MetricDescriptor[],
   title: string,
   preamble: string,
+  // Passed rather than rewritten afterwards. A `.replace('## x', '### x')` on
+  // the rendered string works until somebody edits the title, and then it
+  // silently stops working and the section nests wrongly with nothing failing.
+  level: '##' | '###' = '##',
 ): string {
   if (metrics.length === 0 || agg.backends.length === 0) {
-    return [`## ${title}`, '', preamble, '', '_No cells recorded._'].join('\n');
+    return [`${level} ${title}`, '', preamble, '', '_No cells recorded._'].join('\n');
   }
   const header = ['Backend', 'Completion rate', ...metrics.map((m) => m.label)];
   const rows = agg.backends.map((b) => [
@@ -213,7 +217,7 @@ function scorecardFor(
     ...metrics.map((m) => formatValue(b.metrics[m.id], formatterFor(m))),
   ]);
   return [
-    `## ${title}`,
+    `${level} ${title}`,
     '',
     preamble,
     '',
@@ -265,14 +269,20 @@ function renderCitations(agg: BenchAggregate): string {
     '',
     '**Accuracy and volume are two tables and never one number.** Published measurement finds citation count and citation correctness close to orthogonal in current systems, and finds human preference tracking the count. A blended score would hide exactly the failure this benchmark exists to catch.',
     '',
-    scorecardFor(agg, accuracyMetrics, 'Citation accuracy', 'Rates. Higher is better. Support comes from token containment, which is not entailment and is never claim verification.').replace(
-      '## Citation accuracy',
-      '### Citation accuracy',
+    scorecardFor(
+      agg,
+      accuracyMetrics,
+      'Citation accuracy',
+      'Rates. Higher is better. Support comes from token containment, which is not entailment and is never claim verification.',
+      '###',
     ),
     '',
-    scorecardFor(agg, volumeMetrics, 'Citation volume', 'Counts. **These are never ranked and never combined with the rates above.** They say how much a backend did, not how well.').replace(
-      '## Citation volume',
-      '### Citation volume',
+    scorecardFor(
+      agg,
+      volumeMetrics,
+      'Citation volume',
+      'Counts. **These are never ranked and never combined with the rates above.** They say how much a backend did, not how well.',
+      '###',
     ),
     '',
     '### Registry checks per backend',
@@ -316,7 +326,13 @@ function renderMatrix(agg: BenchAggregate, metric: MetricDescriptor): string {
             ? 'nothing completed'
             : `withheld (${String(group.tasksCompleted)}/${String(group.tasksInCorpus)} tasks)`;
         }
-        return formatValue(group.metrics[metric.id], formatterFor(metric));
+        const value = formatValue(group.metrics[metric.id], formatterFor(metric));
+        // A figure whose tasks were each run too few times still has a real
+        // spread across tasks, and that spread says nothing about how much
+        // this backend varies between two runs of one task. Printed, marked,
+        // and never ranked; an unmarked spread here would read as run-to-run
+        // variance to anybody skimming.
+        return group.repetitionFloor.met || value === 'not measured' ? value : `${value} \u2020`;
       }),
     ];
   });
@@ -341,6 +357,8 @@ function renderMatrices(agg: BenchAggregate): string {
     underSampled.length === 0
       ? '_Every category in the corpus clears the task floor._'
       : `**Under-sampled and therefore unscored:** ${underSampled.map((u) => `${u.category} (${String(u.tasksInCorpus)} task${u.tasksInCorpus === 1 ? '' : 's'})`).join(', ')}. The fix is authoring tasks, not re-running research.`,
+    '',
+    'A value marked \u2020 comes from tasks that were not repeated enough for its spread to say anything about run-to-run variation. The number is real; it is never ranked.',
     '',
     bodies.length === 0 ? '_No categories to show._' : bodies.join('\n\n'),
   ].join('\n');
