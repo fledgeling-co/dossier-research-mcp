@@ -193,6 +193,18 @@ export interface AggregateInput {
 
 const EMPTY_REGISTRY: RegistryCounts = { present: 0, absent: 0, unchecked: 0, invalid: 0 };
 
+/**
+ * The key two coordinates are grouped under.
+ *
+ * A task id is a slug, a provider id is an enum member and a category is one of
+ * ten fixed words, so none of them can contain a `/`. The same reasoning, and
+ * the same separator, as `cellKey` in `bench/src/run/cell.ts`: a key two
+ * different groups can collide on is two backends silently averaged together.
+ */
+function groupKey(a: string, b: string): string {
+  return `${a}/${b}`;
+}
+
 function addRegistry(a: RegistryCounts, b: RegistryCounts): RegistryCounts {
   return {
     present: a.present + b.present,
@@ -287,7 +299,7 @@ function groupBy<T>(items: readonly T[], key: (item: T) => string): Map<string, 
  */
 function buildTaskGroups(cells: readonly ScoredCell[]): TaskGroup[] {
   const groups: TaskGroup[] = [];
-  for (const bucket of groupBy(cells, (c) => `${c.taskId} ${c.provider}`).values()) {
+  for (const bucket of groupBy(cells, (c) => groupKey(c.taskId, c.provider)).values()) {
     const first = bucket[0];
     if (first === undefined) continue;
     const counts = completion(bucket);
@@ -417,7 +429,7 @@ function buildCategoryGroups(
   staleByCategory: Readonly<Record<TaskCategory, number>>,
   minTasks: number,
 ): CategoryGroup[] {
-  const byKey = groupBy(taskGroups, (g) => `${g.provider} ${g.category}`);
+  const byKey = groupBy(taskGroups, (g) => groupKey(g.provider, g.category));
   const groups: CategoryGroup[] = [];
 
   // Every provider is crossed with every category that exists in the corpus,
@@ -428,7 +440,7 @@ function buildCategoryGroups(
     for (const category of TASK_CATEGORIES) {
       const tasksInCorpus = tasksByCategory[category];
       if (tasksInCorpus === 0) continue;
-      const bucket = byKey.get(`${provider} ${category}`) ?? [];
+      const bucket = byKey.get(groupKey(provider, category)) ?? [];
       const counts = mergeCompletion(bucket.map((g) => g.completion));
       const scored = bucket.filter((g) => g.completion.completed > 0);
       const tasksCompleted = scored.length;
