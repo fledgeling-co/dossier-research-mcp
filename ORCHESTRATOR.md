@@ -56,7 +56,7 @@ BENCH-09 is hand-authoring work and is the long pole in wall-clock terms. It sta
 | BENCH-06 | Calibration and refusal correctness | 01 | **Merged** | `ai/bench-06` | 954 tests; took recency, found a product bug |
 | BENCH-07 | Source quality and syndication | 01 | Paused | | |
 | BENCH-08 | Reporting and comparison | 02, scorers | Blocked | | |
-| BENCH-09 | The seed task corpus | 01 | **Resumed** | | |
+| BENCH-09 | The seed task corpus | 01 | **Merged** | `ai/bench-09` | 1001 tests; 7 admitted, 20 quarantined, $0 spent |
 | BENCH-10 | Self-eval of Dossier's own checking | 01, 03 | Blocked | | |
 | BENCH-11 | Which combination is best | 02, scorers | Blocked | | |
 | BENCH-12 | A finished report is an input to the next one | none | Queued | | |
@@ -119,3 +119,10 @@ Nothing was lost, but the cost was real: four worktrees held uncommitted source 
   It found a bug in the **product** doing so: `assessStaleness` compared a rounded day count, and `Math.round(-0.4)` is `-0` while `-0 < 0` is false, so a source stamped up to twelve hours after the as-of date was graded fresh. Fixed here, with a test proven to fail against the old check. This is the argument for building a second implementation of a rule and diffing it against the first.
 
   Its own reviewer found that a refusal test **locked the defect in**: a report was scored as correctly refusing whenever acknowledgement wording appeared anywhere, even with another paragraph asserting the fabrication outright with a date and venue. The test was rewritten. No Codex lane was available, so the out-of-family critic is a logged downgrade to an independent Opus reviewer with fresh context.
+- **27 Jul, BENCH-09 merged** — 1001 tests green. **7 tasks admitted, 20 quarantined**, and the quarantine is the result worth having. It authored 27, verified every gold fact against a live source, then applied the fail-first rule and it rejected most of its own work.
+
+  The finding: all 27 were anchored on immutable post-cutoff events, and closed-book none were answerable from weights, so the anchoring worked. Search-enabled, **Claude Code already passed 23 of 27**. A single primary source at a stable URL is a lookup, not research. Two shapes survived, and they are what the next batch is built from: answers that are an absence, and fabricated premises. Neither is retrievable from one document because there is no document to retrieve.
+
+  It spent **$0**: every fail-check ran on free CLI backends, ~65 `claude -p` and 23 `codex exec`, and no paid backend was run against the corpus.
+
+  Two categories are empty and were not padded: social-sentiment needs live X access to establish gold, and settled-with-fringe needs a documented fringe claim on a settled question, which means citing a source published to mislead.
