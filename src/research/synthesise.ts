@@ -38,7 +38,14 @@ export interface MergedSource {
 
 export interface MergedEvidence {
   readonly sources: readonly MergedSource[];
-  /** Distinct registrable domains across every backend. The real breadth number. */
+  /**
+   * Distinct registrable domains across every backend. The real breadth number.
+   *
+   * Counted over the sources that can corroborate at all, so a prior Dossier
+   * report a run was grounded in is listed as a source and adds nothing to the
+   * breadth. It is the requester's own document; counting it would let a merge
+   * report wider evidence for having re-read its own earlier conclusion.
+   */
   readonly independentDomains: number;
   /** Sources exactly one backend found. Usually coverage, occasionally the whole point. */
   readonly uniqueByProvider: readonly { provider: string; count: number; sources: readonly number[] }[];
@@ -107,7 +114,9 @@ export function mergeEvidence(runs: readonly RunEvidence[]): MergedEvidence {
 
   return {
     sources,
-    independentDomains: new Set(sources.map((s) => s.domain)).size,
+    independentDomains: new Set(
+      sources.filter((s) => s.countsAsCorroboration).map((s) => s.domain),
+    ).size,
     uniqueByProvider,
     citedByAll,
     overlapRatio: sources.length === 0 ? 0 : shared / sources.length,

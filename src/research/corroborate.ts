@@ -1,3 +1,5 @@
+import { isPriorDossierReport } from './grounding.js';
+
 /**
  * Comparing two backends' answers to the same question.
  *
@@ -81,6 +83,11 @@ export function registrableDomain(raw: string): string {
  * Syndication defeats even this: one wire story republished across twenty
  * outlets is twenty domains and one source. That is flagged rather than solved,
  * because solving it properly needs provenance the sources rarely publish.
+ *
+ * Grounding defeats it a third way, and that one **is** solved here: a run given
+ * an earlier Dossier report to work from can repeat a claim it read there, and
+ * the claim then appears in two reports on the strength of one. A prior report is
+ * the requester's own document, so it never counts as a domain.
  */
 export function assessSupport(claims: readonly ProviderClaim[]): CorroborationVerdict {
   const providers = [...new Set(claims.map((c) => c.provider))];
@@ -92,6 +99,11 @@ export function assessSupport(claims: readonly ProviderClaim[]): CorroborationVe
       // claim `corroborated` on the strength of three admissions that there
       // was no source. Only a resolvable http(s) URL counts.
       if (!isHttpUrl(u)) continue;
+      // Belt and braces. `dossier://run/…` is not an http URL, so the guard
+      // above already excludes the canonical form, but a prior report is also
+      // cited by file name and this rule is too important to rest on a scheme
+      // check written for a different reason.
+      if (isPriorDossierReport(u)) continue;
       domains.add(registrableDomain(canonicaliseUrl(u)));
     }
   }

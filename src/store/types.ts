@@ -147,6 +147,19 @@ export const RunRecordSchema = z.object({
 
   toolsUsed: z.array(z.string().max(80)).max(20).default([]),
   corpusStores: z.array(z.string().max(300)).max(20).default([]),
+  /**
+   * Prior Dossier runs this one was given to work from.
+   *
+   * Optional rather than defaulted, on the same reasoning as `panelId` and
+   * `repeat`: absent means "not grounded", which is what every record written
+   * before this existed means, and a migration that invalidated existing runs
+   * would lose reports people paid for.
+   *
+   * Present, it is the thing every downstream presentation declares. A report
+   * grounded in earlier Dossier output has to say so, or a reader cannot tell
+   * accumulated evidence from an echo of what Dossier already said.
+   */
+  groundedIn: z.array(z.string().max(64)).max(6).optional(),
 
   error: z.string().max(4000).optional(),
   /**

@@ -126,6 +126,14 @@ export interface StartRunArgs {
   readonly repeat?: number;
   readonly label?: string;
   readonly tags?: readonly string[];
+  /**
+   * Prior Dossier runs this one was given to work from.
+   *
+   * Recorded rather than only hashed into the prompt, because every downstream
+   * presentation of the report has to declare it: a reader who cannot see the
+   * grounding cannot tell accumulated evidence from an echo.
+   */
+  readonly groundedIn?: readonly string[];
   readonly attachments?: readonly {
     readonly kind: 'document' | 'image';
     readonly uri: string;
@@ -449,6 +457,9 @@ export class Runner {
         corpusStores: args.tools.flatMap((t) =>
           t.type === 'file_search' ? [...t.fileSearchStoreNames] : [],
         ),
+        ...(args.groundedIn && args.groundedIn.length > 0
+          ? { groundedIn: [...args.groundedIn] }
+          : {}),
         ...(args.label ? { label: args.label } : {}),
       };
       await this.store.saveRun(record);
@@ -703,6 +714,9 @@ export class Runner {
           corpusStores: args.tools.flatMap((t) =>
             t.type === 'file_search' ? [...t.fileSearchStoreNames] : [],
           ),
+          ...(args.groundedIn && args.groundedIn.length > 0
+            ? { groundedIn: [...args.groundedIn] }
+            : {}),
           ...(args.label ? { label: args.label } : {}),
         };
         await this.store.saveRun(record);

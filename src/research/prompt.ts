@@ -3,6 +3,7 @@ import {
   selectArchetype,
   type Archetype,
 } from './archetypes.js';
+import { priorResearchBlock } from './grounding.js';
 
 /**
  * The prompt architect — the executable form of the bundled
@@ -49,6 +50,15 @@ export interface BuildPromptArgs {
    * appended after it (see `corpusGrounding` handling below for why).
    */
   readonly corpusGrounding?: boolean;
+  /**
+   * How many prior Dossier runs this one was given to work from.
+   *
+   * Adds the anti-laundering block, placed before the re-anchor for exactly the
+   * reason the corpus block is. It carries **no text from those reports**: a
+   * locally-grounded report has just been promised never to leave the machine,
+   * and a report is around sixty thousand tokens besides.
+   */
+  readonly priorResearchRuns?: number;
 }
 
 export interface BuiltPrompt {
@@ -199,6 +209,7 @@ export function buildPrompt(args: BuildPromptArgs): BuiltPrompt {
 
   const lenses = [...o.lens, ...(scope.analysisLenses ?? [])];
   const corpus = args.corpusGrounding === true;
+  const priorRuns = Math.max(0, Math.trunc(args.priorResearchRuns ?? 0));
 
   const sections = [
     block(
@@ -315,6 +326,8 @@ export function buildPrompt(args: BuildPromptArgs): BuiltPrompt {
     ),
     // Corpus grounding sits HERE, before the re-anchor, never after it.
     ...(corpus ? [block('corpus_grounding', CORPUS_GROUNDING_BLOCK)] : []),
+    // And prior research on the same rule. Same position, same reason.
+    ...(priorRuns > 0 ? [block('prior_research', priorResearchBlock(priorRuns))] : []),
     // The anti-drift re-anchor: the directive repeated verbatim at the very end.
     // Nothing may follow this block.
     block('core_directive', directive),

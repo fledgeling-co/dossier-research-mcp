@@ -1,5 +1,6 @@
 import type { CitationVerdict } from '../store/types.js';
 import { canonicaliseUrl, registrableDomain } from './corroborate.js';
+import { isPriorDossierReport } from './grounding.js';
 import { extractCitedUrls } from './report.js';
 
 /**
@@ -55,6 +56,19 @@ export function classifySource(
   const canonical = canonicaliseUrl(url);
   const domain = registrableDomain(canonical);
 
+  // Detected, never flagged. A prior Dossier report is recognisable from the
+  // reference itself, and auto-detection is the only version of this rule that
+  // cannot be forgotten at a call site — the two opt-in flags below are already
+  // set by no production path, which is exactly the failure to avoid here.
+  if (isPriorDossierReport(canonical)) {
+    return {
+      url: canonical,
+      domain,
+      accessibility: 'private-user-owned',
+      type: 'other',
+      basis: 'a prior Dossier report, which is your own document rather than a source',
+    };
+  }
   if (opts.local) {
     return {
       url: canonical,
@@ -108,6 +122,12 @@ export function classifySource(
  * Citing someone's own file back to them as though it confirmed something about
  * the world is circular verification: it produces a report that looks sourced
  * and proves nothing.
+ *
+ * A **prior Dossier report** is one of those documents, and the sharpest case:
+ * a run grounded in an earlier report can launder a claim by repeating it, so
+ * the weakly-supported assertion now appears twice and reads as accumulation.
+ * `classifySource` recognises one without being told, so this stays true wherever
+ * grounding reaches.
  */
 export function countsAsCorroboration(source: ClassifiedSource): boolean {
   return source.accessibility === 'public' || source.accessibility === 'semi-public';
