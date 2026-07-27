@@ -35,3 +35,13 @@ Research is the expensive part and scoring is the part that will keep changing. 
 ## Non-goals
 
 No scoring, no rendering.
+
+## Blocking defect found by BENCH-01, verified
+
+**Repetition dedupe is broken today, and it silently destroys every variance measurement.** `FingerprintInput` in `src/research/contract.ts` carries prompt, tier, tools, planning, attachments, provider, shape and window, and **no repetition index**. So `n = 5` of the same task on the same backend inside the dedupe window collapses onto one paid run, and every spread, every `pass^k` and every non-determinism figure would be computed over a single sample while reporting five.
+
+Dedupe exists to stop *accidental* duplicate spend, and a deliberate repeat is not accidental. Fix it by making a repeat expressible rather than by weakening dedupe: the benchmark says it means it, and the fingerprint reflects that. Do not simply add a nonce to every request, or the protection disappears for the case it was built for.
+
+## Contradiction between two documents, needs one answer
+
+`benchmark.md` says a stale task is "reported as stale rather than scored". BENCH-01's brief says it loads and is counted, and BENCH-01 implemented the latter. BENCH-02 and BENCH-08 both depend on which is true. Decide, write it in one place, and make the other reference it.

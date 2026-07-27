@@ -48,7 +48,7 @@ BENCH-09 is hand-authoring work and is the long pole in wall-clock terms. It sta
 
 | ID | Title | Deps | Status | Branch | Outcome |
 |---|---|---|---|---|---|
-| BENCH-01 | Task format, gold-set schema and loader | none | **Running** | _(worktree pending)_ | |
+| BENCH-01 | Task format, gold-set schema and loader | none | **Merged** | `ai/bench-01` | 853 tests green; found 4 cross-brief defects |
 | BENCH-02 | The run harness | 01 | Blocked | | |
 | BENCH-03 | Citation integrity scorers | 01 | Blocked | | |
 | BENCH-04 | Accuracy and relevance scorers | 01 | Blocked | | |
@@ -96,3 +96,7 @@ Merges are serialized by the orchestrator, one branch at a time, so conflicts in
   It reversed two decisions. **BENCH-02 is now an adoption, not a build**: promptfoo already is a TypeScript multi-provider harness with custom JavaScript scorers, and building a runner, provider abstraction and result store is months of undifferentiated work. **BENCH-03 adopts DeepTRACE's published dimensions** instead of metrics I invented, in particular the accuracy-versus-thoroughness-versus-necessity split that catches over-citing.
 
   **BENCH-13 is new and covers what the design had none of: statistics.** Paired-difference tests with bootstrap intervals, standard errors clustered on category (naive errors inflate up to threefold on a corpus of ten categories of ten related tasks, which is exactly this one), `pass^k` beside `pass@1`, and completion rate as a validity metric. That last one is not hypothetical here: `local-codex` is 0-for-3 and `openai` 0-for-2 in this repo's own ledger, and both would have silently vanished from a naive average.
+- **27 Jul, BENCH-01 merged** — 853 tests green, gate run twice on the rebased branch and again on main. Its out-of-family critic found four real bugs in its own code, two only by exercising, including a directory walk that followed symlinks out of the corpus. The source-hygiene lint caught a NUL byte it had introduced, which is the exact v0.2.1 defect that lint exists for.
+
+  It also verified four defects outside its own scope, now recorded in the owning briefs: repetition dedupe collapses `n=5` onto one paid run and would silently make every spread a single sample (BENCH-02); BENCH-07 named the wrong function for domain counting; recency is a scored dimension nobody owns and the rule it assumes does not exist (BENCH-06); and `benchmark.md` and BENCH-01 contradict each other on whether a stale task is scored.
+- **27 Jul, Codex and spend fixes merged** — `local-codex` was 0-for-3 on an invalid `--search` flag, and two OpenAI runs cost $18 to fail on 429s that asked to be retried in about a second. Both fixed. `research_doctor` now argv-tests every adapter on the default path, since the check that finds this bug class was worthless behind a flag nobody sets.

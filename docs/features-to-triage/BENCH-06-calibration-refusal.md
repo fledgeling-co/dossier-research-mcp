@@ -21,3 +21,9 @@ These are the only categories where a long, confident, fluent report is the wors
 
 - Confidence markers are parsed from the report's own format, and a report with no markers scores unmeasurable rather than zero. Unmeasurable and badly-calibrated are different findings.
 - A false-premise task where the backend correctly pushes back scores full marks even if it also says nothing else useful.
+
+## Orphan: recency has no owner, and the rule it assumes does not exist
+
+`benchmark.md` lists recency as a scored dimension and says the weighting rule already exists. BENCH-01 checked: `HORIZONS` is keyed by source type with **no standard-versus-benchmark distinction**, which is exactly the distinction the design describes ("a standard from 2019 is current, a benchmark from 2019 is not"). No fleet item owns building it.
+
+Take it here, since calibration and recency both turn on whether a report's confidence is justified by what it read, or split it out and say so. What must not happen is it staying in the design as a scored dimension nobody built.

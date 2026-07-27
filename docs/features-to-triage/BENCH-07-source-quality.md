@@ -2,7 +2,9 @@
 
 ## What already exists
 
-`classifySource` for the official, academic, journalism and community mix. `registrableDomain` for independent-domain counting. `countsAsCorroboration` for the rule that agreement between backends is not corroboration. Reuse all three; do not reimplement.
+`classifySource` for the official, academic, journalism and community mix. `registrableDomain` for independent-domain counting. `assessSupport` for counting independent domains. Reuse all three; do not reimplement.
+
+**Correction from BENCH-01, verified:** an earlier draft of this brief named `countsAsCorroboration` as the domain counter. It is not; it only filters a user's own documents out of independent corroboration. `assessSupport` is the one that counts domains.
 
 ## What is new: syndication detection
 
