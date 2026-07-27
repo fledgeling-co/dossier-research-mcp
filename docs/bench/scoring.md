@@ -31,13 +31,23 @@ The rule is mechanical, and it is the whole of `units.ts`:
 - A unit the lexicon has never heard of is **its own class**, so an author unit like `questions` compares equal to itself and unequal to everything else.
 - A gold unit may carry its own scale word. `1.2` with unit `USD billions` and `$1.2bn` in a report are one fact.
 
+**A unit is read before the figure as well as after it.** A report writes "the CVSS v3.1 base score was 8.8", never "8.8 CVSS v3.1 base score". Looking only forward made every such figure read as unit-unstated, which turned the wrong-unit rule off for exactly the answers whose unit is most worth checking.
+
 **Unstated is not wrong.** A figure with no recognised unit written beside it still counts, and is reported as `unstated` rather than as equal to a stated one. The corpus really does carry units like `CVSS v3.1 base score` that no report will ever write out, and refusing those would be a false negative in the category where false negatives are most expensive. A figure carrying a *recognised different* unit is refused outright.
+
+**A different member of the same family is a wrong unit, not an absent one.** `CVSS v3.1 base score` and `CVSS v4.0 base score` are two units of one family, and neither can live in a global lexicon. So a multi-word author unit contributes its first token as a family name: if a report names the family near the figure without naming *this* member of it, the figure is quoting a different unit and does not recover. Without this, a report stating the v4.0 score was credited with the v3.1 gold, which is the wrong-unit rule failing against a real corpus task rather than a fixture.
+
+A single-token unit has no family to be wrong about, so a gold of `questions` against a report writing `303 answers` stays an unstated unit rather than becoming a wrong one.
 
 ### Citations are not prose
 
 Matching runs over the report's prose with every citation form stripped: markdown link destinations, images, CommonMark autolinks, reference definitions, bare URLs and `cite` tags. That is every form `extractCitedUrls` recognises, and a test reads them out of that module rather than trusting this list to stay in step.
 
 Link *text* is kept, because "as Reuters reported" is prose the model wrote. Text that is itself a bare hostname is dropped with its URL, because `[arxiv.org](https://arxiv.org/...)` is this repo's own citation style and the visible half is part of the citation.
+
+A **numeric label** goes too. The server rewrites stored citations into a bracketed number followed by a parenthesised link, so a bare `1` left in the prose would let a gold value of 1 be recovered from a citation marker. Capped at three digits, so a link whose text is a real figure stays prose.
+
+Characters whose *numeric meaning* Unicode normalisation would change are blanked before any of this: NFKC turns a superscript two into a plain `2`, so `10` squared would otherwise read as `102`, and circled digits and vulgar fractions do the same.
 
 Without this, a backend that pasted a URL containing the figure would score for reasoning it never did.
 
@@ -49,6 +59,8 @@ The scope is the clause containing the match, bounded by a contrast word and by 
 
 This is a cue list, not comprehension. It cannot see "the claim that revenue reached 1.2 billion is disputed", and the result says so in its notes rather than implying it read the sentence. `ignoreNegation` re-runs a corpus with the rule off, so its effect is measured rather than argued about.
 
+**A date states no number.** `2026-07-01` holds a `07`, and because an unstated unit is compatible with any gold unit, a gold of seven would otherwise be recovered from a publication date. Whole date shapes are blanked before scanning, length-preserving so every other offset survives. Whole shapes only: `2026-07-27` and `50-60%` look identical at the hyphen, and both numbers in a range are real.
+
 ### Dates
 
 The accepted written forms are enumerated rather than handed to `Date.parse`, which accepts a bare year as a date and differs between engines. `2026-07-08`, `2026/07/08`, `8 July 2026`, `July 8, 2026`, three-letter months and ordinal suffixes all match. A month and year with no day does not: naming the month is not finding the day.
@@ -59,7 +71,7 @@ The accepted written forms are enumerated rather than handed to `Date.parse`, wh
 
 | Arm | Test |
 |---|---|
-| `exact` | within `1e-12` relative. A float-noise allowance, not a width |
+| `exact` | strict equality. Safe only because both sides are parsed decimal-safely; an earlier draft allowed a `1e-12` relative guard "for float noise", and that is a tolerance in disguise, accepting a reported `0` for a gold of `1e-13` |
 | `absolute` | `abs(reported - gold) <= value` |
 | `relative` | `abs(reported - gold) <= fraction * abs(gold)`. At a gold of zero this has no width and behaves as equality, which is noted on the result rather than left to be discovered |
 | `significantFigures` | both sides rounded to the stated digits, then compared |
@@ -253,6 +265,14 @@ One narrow, deliberate divergence from the product. `assessStaleness` rounds the
 An undated source is carried as its own number and never counted as current: a recency figure that quietly counts undated as fresh rewards a backend for citing pages that carry no date. A source dated after the as-of date is a transcription error or a back-dated source rather than a fresh one, so it is excluded too. An empty source list returns `not-applicable`, because an empty set is not a fresh one, and a set where nothing could be dated returns `unmeasurable`.
 
 An unreadable **as-of** date throws. It is the caller's argument rather than the corpus's data, and reporting it per source produced the worst possible message: every source blamed for a missing date it plainly had, which sends whoever is debugging it to the gold set instead of to the one broken line. The loader already takes this position on an invalid reference date, and this matches it.
+
+## Deferred, and recorded rather than hidden
+
+**Two numeric implementations exist and should become one.** The due-weight scorer needs the same decimal-safe shifting and the same tolerance comparison, and reached both independently while this item was in flight; its own source says the same thing from the other side. Neither could safely edit the other's file while both were unmerged, so the duplication is deliberate and temporary. They agree on `exact`, on the four tolerance arms and on masking whole date shapes, which is the reassuring half; they differ on which magnitude words they accept, which is the half that will drift. Unify now that both have merged.
+
+**Backward negation only.** A cue is looked for before the figure, never after, so "8.8, not 7.2" correctly leaves 8.8 asserted while "8.8 is not the assigned score" is missed. Scanning forward as well would fix the second and break the first, and the first is the commoner shape. Recorded as a known limit rather than traded silently.
+
+**A wrong unit stated before a figure, whose family cannot be named.** The family rule needs a multi-word author unit. A single-token unit stated wrongly before a figure still reads as unstated.
 
 ## Using them
 

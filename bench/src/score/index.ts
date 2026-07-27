@@ -106,6 +106,7 @@ export { extractProse, isNegated, NEGATION_CUES, NEGATION_WINDOW_WORDS } from '.
 
 export {
   isZeroWidthTolerance,
+  maskDateShapes,
   readNumbers,
   shiftDecimal,
   toPlainString,
@@ -123,7 +124,10 @@ export {
   foldScaleWord,
   matchCurrencyPrefix,
   matchUnitAt,
+  matchUnitBefore,
   SCALE_WORDS,
+  UNIT_LOOKBEHIND_CHARS,
+  unitFamilyToken,
   unitSurfaceForms,
 } from './units.js';
 export type { CanonicalUnit, FoldedUnit, UnitMatch } from './units.js';

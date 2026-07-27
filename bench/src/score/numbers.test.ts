@@ -58,7 +58,7 @@ describe('shiftDecimal (ACCREL-10)', () => {
   it('is exact where multiplication is not', () => {
     // The whole reason this function exists rather than `value * 10 ** e`. Each
     // of these is a figure a report plausibly writes, and each lands off the
-    // exact answer by multiplication — enough to fail an `exact` tolerance for
+    // exact answer by multiplication, enough to fail an `exact` tolerance for
     // reasons having nothing to do with research. The cases were found by
     // sweep rather than guessed; an earlier version of this test asserted
     // `1.1 * 1e6` was inexact, which it is not.
@@ -168,10 +168,30 @@ describe('what is deliberately not parsed', () => {
     expect(has(say('1.200.000'), 1.2)).toBe(true);
   });
 
-  it('does not manufacture a negative out of an ISO date', () => {
-    const mentions = say('published 2026-07-01');
-    expect(has(mentions, -7)).toBe(false);
-    expect(has(mentions, 7)).toBe(true);
+  it('reads no number at all out of a date shape', () => {
+    // The whole run is masked before scanning. Without it a gold of 7 would be
+    // recovered from a publication date, because an unstated unit is compatible
+    // with any gold unit. The same rule the due-weight scorer reached
+    // independently, and for the same reason.
+    expect(say('published 2026-07-01')).toHaveLength(0);
+    expect(say('published 8 July 2026')).toHaveLength(0);
+    expect(say('published July 8, 2026')).toHaveLength(0);
+    expect(say('published 01/07/2026')).toHaveLength(0);
+  });
+
+  it('leaves a range alone, which shares a date shape at the hyphen', () => {
+    // `2026-07-27` and `50-60%` look the same at the hyphen, so the mask covers
+    // whole shapes only. Both numbers in a range are real.
+    expect(has(say('between 50-60%'), 50, 'percent') || has(say('between 50-60%'), 50)).toBe(true);
+    expect(has(say('between 50-60%'), 60, 'percent')).toBe(true);
+  });
+
+  it('masks without moving any other offset', () => {
+    const text = 'on 2026-07-01 the score was 8.8';
+    const mention = say(text)[0];
+    expect(mention?.readings[0]?.value).toBe(8.8);
+    // The mask is length-preserving, so the index still points at the real text.
+    expect(text.slice(mention?.start ?? 0, (mention?.start ?? 0) + 3)).toBe('8.8');
   });
 
   it('does not let a scale letter attach to the word after it', () => {
@@ -187,10 +207,18 @@ describe('withinTolerance (ACCREL-09)', () => {
   const relative: Tolerance = { kind: 'relative', fraction: 0.01 };
   const sig: Tolerance = { kind: 'significantFigures', digits: 3 };
 
-  it('exact allows float noise and nothing wider', () => {
+  it('exact is strict equality, with no hidden width', () => {
+    // An earlier draft allowed a 1e-12 relative guard "for float noise". The
+    // out-of-family review was right that it is a tolerance in disguise: it
+    // accepted a reported 0 for a gold of 1e-13. Strict equality is safe only
+    // because both sides are parsed decimal-safely, which is the invariant the
+    // shiftDecimal cases above protect.
     expect(withinTolerance(8.8, 8.8, exact)).toBe(true);
-    expect(withinTolerance(0.1 + 0.2, 0.3, exact)).toBe(true);
+    expect(withinTolerance(shiftDecimal('1.005', 6), 1_005_000, exact)).toBe(true);
     expect(withinTolerance(8.81, 8.8, exact)).toBe(false);
+    expect(withinTolerance(0, 1e-13, exact)).toBe(false);
+    expect(withinTolerance(1e-12, 0, exact)).toBe(false);
+    expect(withinTolerance(0.1 + 0.2, 0.3, exact)).toBe(false);
   });
 
   it.each([

@@ -197,7 +197,7 @@ const CURRENCY_PREFIXES: readonly string[] = LEXICON.filter(
  *
  * Periods are deliberately left alone. `p.p.` is a lexicon key, and trimming its
  * trailing stop would make the abbreviation for percentage points fail to
- * canonicalise — turning the sharpest of the three confusable classes back into
+ * canonicalise, turning the sharpest of the three confusable classes back into
  * an unrecognised unit.
  */
 function tidy(text: string): string {
@@ -256,7 +256,7 @@ export function foldScaleWord(unit: string): FoldedUnit {
   // Only a spelled-out scale word counts here. A bare `m` or `b` in an author's
   // unit is far more likely to be metres or bytes than a multiplier, and reading
   // it as a multiplier would silently move a gold value by six orders of
-  // magnitude — the loudest possible version of this scorer being wrong.
+  // magnitude, the loudest possible version of this scorer being wrong.
   const scaleAt = words.findIndex(
     (w) => SCALE_WORDS.has(w) && !AMBIGUOUS_SCALE_SUFFIXES.has(w),
   );
@@ -326,7 +326,7 @@ export function matchUnitAt(
 
   // Built once at module load for the common case. `matchUnitAt` runs per number
   // per reading per gold fact, so rebuilding and re-sorting the lexicon inside it
-  // is the repeated-work-in-a-loop shape CP §6.14 names — and a report is a long
+  // is the repeated-work-in-a-loop shape CP §6.14 names, and a report is a long
   // document with a lot of numerals in it.
   const candidates =
     extraForms.length === 0
@@ -344,6 +344,68 @@ export function matchUnitAt(
     return { surface, canonical: canonicaliseUnit(surface), end: at + surface.length };
   }
   return null;
+}
+
+/** How far before a figure a unit phrase may sit and still be its unit. */
+export const UNIT_LOOKBEHIND_CHARS = 60;
+
+/**
+ * Words that may sit between a unit phrase and the figure it governs.
+ *
+ * "CVSS v3.1 base score **was** 8.8" and "a base score **of** 8.8" both attach.
+ * Kept to a short closed list, because anything longer starts attaching a unit
+ * to a figure in a different sentence.
+ */
+const UNIT_CONNECTORS = /(?:\s|[:=,]|\bwas\b|\bis\b|\bof\b|\bat\b|\bscored\b|\bassigned\b)*$/;
+
+/**
+ * Whether one of `forms` is the unit phrase written *before* `index`.
+ *
+ * The forward matcher cannot see this shape, and the shape is the normal way a
+ * multi-word unit is written: a report says "the CVSS v3.1 base score was 8.8",
+ * never "8.8 CVSS v3.1 base score". Without it every such figure reads as
+ * unit-unstated, and the wrong-unit rule stops biting on exactly the answers
+ * whose unit is most worth checking.
+ *
+ * **`text` must already be lower case**, as with the other two matchers.
+ */
+export function matchUnitBefore(
+  text: string,
+  index: number,
+  forms: readonly string[],
+): UnitMatch | null {
+  if (forms.length === 0) return null;
+  const from = Math.max(0, index - UNIT_LOOKBEHIND_CHARS);
+  const window = text.slice(from, index);
+  const stem = window.replace(UNIT_CONNECTORS, '');
+  for (const surface of [...forms].sort((a, b) => b.length - a.length)) {
+    if (surface === '' || !stem.endsWith(surface)) continue;
+    const before = stem[stem.length - surface.length - 1];
+    if (before !== undefined && ALPHANUMERIC.test(before)) continue;
+    return { surface, canonical: canonicaliseUnit(surface), end: index };
+  }
+  return null;
+}
+
+/**
+ * The token that names the *family* a multi-word author unit belongs to.
+ *
+ * `CVSS v3.1 base score` and `CVSS v4.0 base score` are two different units of
+ * one family, and the corpus really does carry the first as gold while a report
+ * may legitimately quote the second. Neither can be in a global lexicon, so the
+ * family token is what lets the scorer tell "the report named this measurement
+ * but a different member of it" apart from "the report stated no unit at all".
+ *
+ * `null` for a single-token unit, because there is no family to be wrong about:
+ * a gold unit of `questions` against a report writing `303 answers` is an
+ * unstated unit, not a wrong one.
+ */
+export function unitFamilyToken(rawUnit: string): string | null {
+  const words = tidy(rawUnit).split(' ').filter((w) => w !== '');
+  if (words.length < 2) return null;
+  const first = words[0];
+  if (first === undefined || first.length < 3) return null;
+  return LEXICON_MAP.has(first) ? null : first;
 }
 
 /**

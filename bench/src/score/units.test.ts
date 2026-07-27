@@ -5,6 +5,8 @@ import {
   foldScaleWord,
   matchCurrencyPrefix,
   matchUnitAt,
+  matchUnitBefore,
+  unitFamilyToken,
   unitSurfaceForms,
 } from './units.js';
 
@@ -117,7 +119,7 @@ describe('a gold unit may carry its own scale word (ACCREL-04)', () => {
 
   it('does not read a bare letter in an author unit as a multiplier', () => {
     // `m` in a unit is far likelier to be metres than a million, and reading it
-    // as a multiplier would move a gold value by six orders of magnitude — the
+    // as a multiplier would move a gold value by six orders of magnitude, the
     // loudest possible way for this scorer to be wrong.
     expect(foldScaleWord('m').exponent).toBe(0);
     expect(foldScaleWord('m').canonical).toBe('metre');
@@ -160,5 +162,49 @@ describe('matchUnitAt respects word boundaries', () => {
   it('accepts an extra form the caller supplies', () => {
     expect(matchUnitAt('303 questions', 3)).toBeNull();
     expect(matchUnitAt('303 questions', 3, ['questions'])?.canonical).toBe('question');
+  });
+});
+
+describe('a unit written before its figure (ACCREL-02)', () => {
+  it('attaches across the ordinary connectors', () => {
+    const forms = unitSurfaceForms('cvss v3.1 base score', 'CVSS v3.1 base score');
+    for (const text of [
+      'the cvss v3.1 base score was 8.8',
+      'the cvss v3.1 base score of 8.8',
+      'cvss v3.1 base score: 8.8',
+      'cvss v3.1 base score 8.8',
+    ]) {
+      expect(matchUnitBefore(text, text.indexOf('8.8'), forms)?.canonical).toBe(
+        'cvss v3.1 base score',
+      );
+    }
+  });
+
+  it('does not reach across a whole sentence', () => {
+    const forms = unitSurfaceForms('cvss v3.1 base score', 'CVSS v3.1 base score');
+    const text = `cvss v3.1 base score${' '.repeat(80)}8.8`;
+    expect(matchUnitBefore(text, text.indexOf('8.8'), forms)).toBeNull();
+  });
+
+  it('finds nothing when no form is supplied', () => {
+    expect(matchUnitBefore('the score was 8.8', 14, [])).toBeNull();
+  });
+});
+
+describe('the family token (ACCREL-02)', () => {
+  it('names the family of a multi-word author unit', () => {
+    expect(unitFamilyToken('CVSS v3.1 base score')).toBe('cvss');
+    expect(unitFamilyToken('RACE overall score')).toBe('race');
+  });
+
+  it('is null for a single-token unit, which has no family to be wrong about', () => {
+    // A gold unit of `questions` against a report writing `303 answers` is an
+    // unstated unit rather than a wrong one, and must stay that way.
+    expect(unitFamilyToken('questions')).toBeNull();
+    expect(unitFamilyToken('dimensionless')).toBeNull();
+  });
+
+  it('is null when the first token is a known unit, which the lexicon handles', () => {
+    expect(unitFamilyToken('USD billions')).toBeNull();
   });
 });

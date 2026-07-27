@@ -3,6 +3,7 @@ import { loadCorpusFromDirectory } from '../tasks/files.js';
 import { GOLD_FACT_KINDS, type BenchTaskFile, type GoldFact } from '../tasks/schema.js';
 import { scoreAccuracy, factRecovery } from './accuracy.js';
 import { scoreCalibration } from './calibration.js';
+import { scoreRelevance } from './relevance.js';
 import { toPlainString } from './numbers.js';
 
 /**
@@ -359,7 +360,7 @@ describe('the seam with calibration (ACCREL-17)', () => {
   it('cannot rescue a numeric answer whose label the report never uses', () => {
     // Worth pinning as a cross-item fact rather than discovering it in a
     // scorecard. Calibration pairs on the label first and falls back to
-    // `String(value)`, which for a large figure is the plain integer — and a
+    // `String(value)`, which for a large figure is the plain integer, and a
     // report writing "$1.2 billion" never contains "1200000000". So a numeric
     // answer whose label the report does not use goes unpaired however well this
     // scorer recovered it. That is calibration's own documented limit, and the
@@ -386,6 +387,100 @@ describe('the seam with calibration (ACCREL-17)', () => {
     const accuracy = scoreAccuracy('No such merger took place.', t);
     const calibration = scoreCalibration('No such merger took place.', t, factRecovery(accuracy));
     expect(calibration.status).toBe('not-applicable');
+  });
+});
+
+describe('a unit written before its figure (ACCREL-02)', () => {
+  // The real corpus fact: containerd-label-propagation-cve carries
+  // `8.8` with unit `CVSS v3.1 base score`. A report will write the unit before
+  // the figure, never after it.
+  const cvss = (): GoldFact =>
+    number({ value: 8.8, unit: 'CVSS v3.1 base score', tolerance: { kind: 'exact' } });
+
+  it('counts a preposed unit as stated, not as absent', () => {
+    const result = scored('The CVSS v3.1 base score was 8.8.', task([cvss()]));
+    expect(result.facts[0]?.recovered).toBe(true);
+    expect(result.facts[0]?.unitEvidence).toBe('stated');
+  });
+
+  it('scores zero for a different member of the same family', () => {
+    // Before this rule the v4.0 sentence recovered the v3.1 gold, because the
+    // wrong unit precedes the figure and the figure therefore read as
+    // unit-unstated. That is the second acceptance criterion failing against a
+    // real corpus task rather than a fixture.
+    const result = scored('The CVSS v4.0 base score was 8.8.', task([cvss()]));
+    expect(result.facts[0]?.recovered).toBe(false);
+    expect(result.facts[0]?.why).toContain('wrong unit');
+  });
+
+  it('still accepts the figure when no family member is named at all', () => {
+    // "NVD assigned it 8.8" states no unit. Unstated is not wrong.
+    const result = scored('NVD assigned it 8.8.', task([cvss()]));
+    expect(result.facts[0]?.recovered).toBe(true);
+    expect(result.facts[0]?.unitEvidence).toBe('unstated');
+  });
+
+  it('does not veto on a single-token author unit', () => {
+    // `questions` has no family, so `303 answers` is an unstated unit rather
+    // than a wrong one and still recovers.
+    const fact = number({ value: 303, unit: 'questions' });
+    expect(recovers('The corpus holds 303 answers.', fact)).toBe(true);
+    expect(recovers('The corpus holds 303 questions.', fact)).toBe(true);
+  });
+});
+
+describe('a citation label is not a figure (ACCREL-06)', () => {
+  it('does not recover a gold of 1 from a numeric link label', () => {
+    // The server rewrites stored citations into this shape, so the label is a
+    // marker rather than a claim.
+    const fact = number({ value: 1, unit: 'dimensionless' });
+    expect(recovers('The finding holds [1](https://x.test/a).', fact)).toBe(false);
+    expect(recovers('The finding holds <cite url="https://x.test/a">1</cite>.', fact)).toBe(false);
+  });
+
+  it('still treats a real figure in link text as prose', () => {
+    expect(
+      recovers(
+        'Revenue reached [1,200,000,000](https://x.test/a).',
+        number({ unit: 'dimensionless' }),
+      ),
+    ).toBe(true);
+  });
+});
+
+describe('normalisation cannot invent a figure (ACCREL-01)', () => {
+  it('does not read ten squared as one hundred and two', () => {
+    // NFKC turns a superscript two into a plain 2, so `10\u00B2` would otherwise
+    // become `102`. Masked before normalisation, because afterwards the damage
+    // is indistinguishable from a figure the report really wrote.
+    expect(recovers('The scale is 10\u00B2 across.', number({ value: 102, unit: 'dimensionless' }))).toBe(
+      false,
+    );
+    expect(recovers('The scale is 10\u00B2 across.', number({ value: 10, unit: 'dimensionless' }))).toBe(
+      true,
+    );
+  });
+
+  it('does not read a circled digit as a figure', () => {
+    expect(recovers('See \u2460 for detail.', number({ value: 1, unit: 'dimensionless' }))).toBe(false);
+  });
+});
+
+describe('applicability agrees with the loader (ACCREL-14)', () => {
+  it('matches ApplicableMetrics on every corpus task', () => {
+    // The reviewer's point, and a fair one: this scorer checks the underlying
+    // condition rather than reading the derived flag, which is a second
+    // derivation of one rule however carefully it is commented. A parity test
+    // is what stops the two drifting.
+    const corpus = loadCorpusFromDirectory(new URL('../../tasks', import.meta.url).pathname, {
+      now: new Date('2026-07-27T00:00:00.000Z'),
+    });
+    for (const t of corpus.tasks) {
+      const accuracyApplies = scoreAccuracy('anything', t).status !== 'not-applicable';
+      expect(accuracyApplies, `task ${t.id}`).toBe(t.applicableMetrics.accuracy);
+      const relevanceApplies = scoreRelevance('anything', t).status !== 'not-applicable';
+      expect(relevanceApplies, `task ${t.id}`).toBe(t.applicableMetrics.relevance);
+    }
   });
 });
 

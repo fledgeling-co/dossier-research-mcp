@@ -4,7 +4,13 @@ import { findAllMentions, normaliseForSearch } from './confidence.js';
 import { goldDay, readDates } from './dates.js';
 import { isZeroWidthTolerance, readNumbers, shiftDecimal, toPlainString, withinTolerance } from './numbers.js';
 import { extractProse, isNegated } from './prose.js';
-import { foldScaleWord, unitSurfaceForms } from './units.js';
+import {
+  foldScaleWord,
+  matchUnitBefore,
+  UNIT_LOOKBEHIND_CHARS,
+  unitFamilyToken,
+  unitSurfaceForms,
+} from './units.js';
 
 /**
  * Accuracy: did the report actually state the answers the gold set records.
@@ -224,11 +230,18 @@ function scoreNumber(
   const forms = unitSurfaceForms(goldUnit, folded.rest === '' ? fact.unit : folded.rest);
 
   const mentions = readNumbers(prose, forms);
+  // A multi-word author unit is normally written *before* its figure: a report
+  // says "the CVSS v3.1 base score was 8.8", never "8.8 CVSS v3.1 base score".
+  // The family token is what separates "named a different member of this family"
+  // from "stated no unit at all"; see `unitFamilyToken`.
+  const family = unitFamilyToken(folded.rest === '' ? fact.unit : folded.rest);
 
   let best: { at: number; text: string; evidence: 'stated' | 'unstated' } | null = null;
   let deniedOnly = false;
+  let wrongFamilyMember = false;
 
   for (const mention of mentions) {
+    const before = matchUnitBefore(prose, mention.start, forms);
     for (const reading of mention.readings) {
       // The unit veto, and the whole of the second acceptance rule. A reading
       // carrying a recognised unit that is not the gold's is not a match at
@@ -241,6 +254,25 @@ function scoreNumber(
       // A reading with nothing attached is compatible with any gold unit. That
       // is the deliberate asymmetry: unstated is not wrong.
       if (reading.unit !== null && reading.unit !== goldUnit) continue;
+
+      // The unit may also be written before the figure. When it is, it is as
+      // binding as one written after: a stated unit that disagrees vetoes, and
+      // one that agrees upgrades the evidence from unstated to stated.
+      let evidence: 'stated' | 'unstated' = reading.unit === null ? 'unstated' : 'stated';
+      if (reading.unit === null) {
+        if (before !== null && before.canonical === goldUnit) {
+          evidence = 'stated';
+        } else if (family !== null && namesFamily(prose, mention.start, family)) {
+          // The report named this measurement family and did not name *this*
+          // member of it, so it is quoting a different unit. Without this, a
+          // report stating the CVSS v4.0 score would be credited with the v3.1
+          // gold, which is the second acceptance rule failing on a real corpus
+          // task rather than on a fixture.
+          wrongFamilyMember = true;
+          continue;
+        }
+      }
+
       if (!withinTolerance(reading.value, goldValue, fact.tolerance)) continue;
 
       const denied = !ignoreNegation && isNegated(prose, mention.start);
@@ -248,7 +280,6 @@ function scoreNumber(
         deniedOnly = true;
         continue;
       }
-      const evidence = reading.unit === null ? 'unstated' : 'stated';
       // A stated unit is stronger evidence, so it wins even if found later.
       if (best === null || (best.evidence === 'unstated' && evidence === 'stated')) {
         best = { at: mention.start, text: mention.text, evidence };
@@ -284,8 +315,22 @@ function scoreNumber(
     negatedOnly: deniedOnly,
     why: deniedOnly
       ? `every occurrence of ${toPlainString(goldValue)} sits inside a denial, so the report does not assert it`
-      : `no figure in the report's prose matches ${toPlainString(goldValue)} "${goldUnit}" within its tolerance`,
+      : wrongFamilyMember
+        ? `the report states ${toPlainString(goldValue)} against a different member of the "${family ?? ''}" family than the gold's "${goldUnit}", which is a wrong unit rather than an unstated one`
+        : `no figure in the report's prose matches ${toPlainString(goldValue)} "${goldUnit}" within its tolerance`,
   };
+}
+
+/**
+ * Whether the family token is named close before the figure.
+ *
+ * Word-boundary matched inside the same window `matchUnitBefore` searches, so a
+ * family named in an earlier sentence cannot veto a figure it has nothing to do
+ * with.
+ */
+function namesFamily(prose: string, at: number, family: string): boolean {
+  const from = Math.max(0, at - UNIT_LOOKBEHIND_CHARS);
+  return findAllMentions(prose.slice(from, at), family).length > 0;
 }
 
 function scoreDate(

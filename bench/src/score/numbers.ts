@@ -21,10 +21,13 @@ import {
  * Three decisions carry the weight.
  *
  * **Scaling shifts a decimal point in a string; it never multiplies.**
- * `1.1 * 1e6` is `1100000.0000000001` in IEEE 754, so a report writing
- * `1.1 million` against a gold of `1100000` would miss under an `exact`
- * tolerance for reasons having nothing to do with research. `shiftDecimal` moves
- * the point in the digits instead, which is exact for every form a report writes.
+ * `1.005 * 1e6` is `1004999.9999999999` and `0.267 * 1e9` is
+ * `267000000.00000003`, so a report stating either figure perfectly would miss
+ * under an `exact` tolerance for reasons having nothing to do with research.
+ * `shiftDecimal` moves the point through the digits instead, which is exact for
+ * every form a report writes. The cases were found by sweeping real two- and
+ * three-decimal figures; the first draft of the test asserted `1.1 * 1e6` was
+ * inexact, and it is not.
  *
  * **Nothing here may emit exponential notation.** `String(1e21)` and
  * `(1e21).toFixed(0)` are *both* `1e+21`; guarding only the first is a bug the
@@ -101,16 +104,20 @@ export function shiftDecimal(text: string, exponent: number): number {
  * tolerance" is not a specification and two implementations of it disagree
  * silently.
  *
- * `exact` carries a relative guard of 1e-12 rather than `===`. That is a
- * float-noise allowance, not a width: the task format requires a tolerance
- * precisely because comparing floats exactly is how a correct answer scores
- * zero, and re-introducing `===` here would put the defect back one layer down.
+ * `exact` is strict equality, and it is safe here only because both sides are
+ * parsed decimal-safely: `shiftDecimal` moves a decimal point through a digit
+ * string rather than multiplying, so a scaled figure lands on the same double
+ * the gold value has. An earlier draft allowed a relative guard of 1e-12 to
+ * absorb float noise, and the out-of-family review was right that it is a
+ * tolerance wearing a disguise: it accepted a reported `0` for a gold of
+ * `1e-13`. If the noise it was guarding against ever appears, the fix belongs
+ * in the parsing rather than in a fudge here.
  */
 export function withinTolerance(reported: number, gold: number, tolerance: Tolerance): boolean {
   if (!Number.isFinite(reported) || !Number.isFinite(gold)) return false;
   switch (tolerance.kind) {
     case 'exact':
-      return Math.abs(reported - gold) <= Math.max(Math.abs(gold), 1) * 1e-12;
+      return reported === gold;
     case 'absolute':
       return Math.abs(reported - gold) <= tolerance.value;
     case 'relative':
@@ -163,11 +170,52 @@ export interface NumberMention {
  * The numeral itself.
  *
  * Comma-grouped, plain, decimal, leading-dot, with an optional exponent. A sign
- * is only taken when the character before it is not a digit, so the `-07` inside
- * `2026-07-01` reads as `7` and a date cannot manufacture a negative number that
- * the report never wrote.
+ * is only taken when the character before it is not a digit, so a hyphen inside
+ * a date shape cannot manufacture a negative number the report never wrote.
+ * Whole date shapes are masked before this runs; this guard is what covers the
+ * ones the mask does not recognise.
  */
 const NUMERAL = /(?<![\d.])(?:(?<![\w])[-−])?(?:\d{1,3}(?:,\d{3})+|\d+|(?=\.\d))(?:\.\d+)?(?:[eE][+-]?\d+)?/g;
+
+const MONTH = '(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*';
+
+/**
+ * Date-shaped runs, blanked before any number is read.
+ *
+ * `2026-07-01` holds a `07`, and because an unstated unit is compatible with any
+ * gold unit, a gold value of seven would otherwise be recovered from a
+ * publication date. The whole shape is masked rather than a rule about the
+ * character after a number, because `2026-07-27` and `50-60%` have the same
+ * shape at the hyphen: any rule sharp enough to drop the date also drops the
+ * range, and a range is how a report writes two figures at once.
+ *
+ * Masking preserves length, so every index this module returns still refers to
+ * the same position in the caller's string.
+ *
+ * The due-weight scorer arrived at the same rule independently and its own
+ * comment records the same debt from the other side. See `deferred work` in
+ * `docs/bench/scoring.md`: the two implementations should become one now that
+ * both have merged, and neither could safely edit the other's file while both
+ * were in flight.
+ */
+const DATE_SHAPES = new RegExp(
+  [
+    String.raw`\d{4}-\d{2}-\d{2}`,
+    String.raw`\d{4}/\d{2}/\d{2}`,
+    String.raw`\d{1,2}/\d{1,2}/\d{4}`,
+    String.raw`\d{1,2}(?:st|nd|rd|th)?\.?\s+${MONTH}\.?,?\s+\d{4}`,
+    String.raw`${MONTH}\.?\s+\d{1,2}(?:st|nd|rd|th)?,?\s+\d{4}`,
+  ].join('|'),
+  'gi',
+);
+
+/** Replace a run with the same number of spaces, so every offset survives. */
+const blank = (run: string): string => ' '.repeat(run.length);
+
+/** Date runs blanked. Exported so the rule is testable on its own. */
+export function maskDateShapes(text: string): string {
+  return text.replace(DATE_SHAPES, blank);
+}
 
 /**
  * Read every number in `text`, with every plausible reading of each.
@@ -183,7 +231,11 @@ const NUMERAL = /(?<![\d.])(?:(?<![\w])[-−])?(?:\d{1,3}(?:,\d{3})+|\d+|(?=\.\d
  */
 export function readNumbers(text: string, extraUnitForms: readonly string[] = []): NumberMention[] {
   const out: NumberMention[] = [];
-  for (const m of text.matchAll(NUMERAL)) {
+  // Dates are masked here rather than in the caller, so no caller can forget.
+  // The mask is length-preserving, so units and negation still read the real
+  // characters around a number at the same offsets.
+  const masked = maskDateShapes(text);
+  for (const m of masked.matchAll(NUMERAL)) {
     const raw = m[0];
     if (raw === '' || !/\d/.test(raw)) continue;
     const start = m.index;
@@ -199,15 +251,15 @@ export function readNumbers(text: string, extraUnitForms: readonly string[] = []
 
     // A scale word or suffix, allowing a single space before it.
     let probe = cursor;
-    while (probe < text.length && (text[probe] === ' ' || text[probe] === '\t')) probe += 1;
-    const scaleMatch = /^[a-z]+/.exec(text.slice(probe, probe + 12));
+    while (probe < masked.length && (masked[probe] === ' ' || masked[probe] === '\t')) probe += 1;
+    const scaleMatch = /^[a-z]+/.exec(masked.slice(probe, probe + 12));
     if (scaleMatch) {
       const word = scaleMatch[0];
       // Longest scale word that is a whole token: `bn` before `b`.
       for (let len = word.length; len >= 1; len -= 1) {
         const candidate = word.slice(0, len);
         if (!SCALE_WORDS.has(candidate)) continue;
-        const after = text[probe + len];
+        const after = masked[probe + len];
         if (after !== undefined && /[\p{L}\p{N}]/u.test(after)) continue;
         scaleSurface = candidate;
         scaleExponent = SCALE_WORDS.get(candidate) ?? 0;
@@ -216,11 +268,11 @@ export function readNumbers(text: string, extraUnitForms: readonly string[] = []
       }
     }
 
-    const prefix = matchCurrencyPrefix(text, start);
+    const prefix = matchCurrencyPrefix(masked, start);
     const readings: NumberReading[] = [];
 
     const attach = (value: number, from: number): void => {
-      const unit = matchUnitAt(text, from, extraUnitForms);
+      const unit = matchUnitAt(masked, from, extraUnitForms);
       if (unit) {
         readings.push({ value, unit: unit.canonical, unitSurface: unit.surface });
       } else if (prefix) {
@@ -245,7 +297,7 @@ export function readNumbers(text: string, extraUnitForms: readonly string[] = []
       });
     }
 
-    out.push({ start, end: cursor, text: text.slice(start, cursor), readings });
+    out.push({ start, end: cursor, text: masked.slice(start, cursor), readings });
   }
   return out;
 }

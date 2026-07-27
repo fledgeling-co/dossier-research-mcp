@@ -503,11 +503,11 @@ The two failure modes here are silent. A gold fact missed on number formatting r
 | AC | Criterion (from the contract) | Test | Status |
 |---|---|---|---|
 | **ACCREL-01** | The ways a model writes one figure all recover one gold fact: `1.2 billion`, `1,200,000,000`, `1.2B`, `1.2 bn`, `$1.2B`, `USD 1.2 billion`, `1.2e9` and the grouped decimal forms | unit: `numbers`, `accuracy` | ✓ |
-| **ACCREL-02** | A right figure with a recognised wrong unit recovers nothing: percentage points against percent, one currency against another, and a stated unit against a `dimensionless` gold | unit: `accuracy` | ✓ |
+| **ACCREL-02** | A right figure with a recognised wrong unit recovers nothing: percentage points against percent, one currency against another, a stated unit against a `dimensionless` gold, and a different member of the same author-unit family stated *before* the figure (CVSS v4.0 against a v3.1 gold, from the real corpus) | unit: `accuracy`, `units` | ✓ |
 | **ACCREL-03** | A figure with no unit written beside it still recovers, and is reported as `unstated` rather than counted the same as a stated one | unit: `accuracy` | ✓ |
 | **ACCREL-04** | A gold unit carrying its own scale word folds into the value, so `1.2` in `USD billions` and `$1.2bn` are one fact | unit: `units`, `accuracy` | ✓ |
 | **ACCREL-05** | An ambiguous suffix is read every plausible way, so `450m` recovers both a gold of 450 million and a gold of 450 metres | unit: `numbers` | ✓ |
-| **ACCREL-06** | A figure present only inside a citation recovers nothing, once for each form the citation extractor recognises: markdown link target, autolink, reference definition, bare URL and `cite` tag | unit: `prose`, `accuracy` | ✓ |
+| **ACCREL-06** | A figure present only inside a citation recovers nothing, once for each form the citation extractor recognises: markdown link target, autolink, reference definition, bare URL and `cite` tag; and a numeric citation label, a bracketed number carrying the link, is a marker rather than a figure | unit: `prose`, `accuracy` | ✓ |
 | **ACCREL-07** | Link text that is a bare hostname is dropped with its URL; link text that is prose is kept | unit: `prose` | ✓ |
 | **ACCREL-08** | A value appearing only inside a denial does not recover; the same value also stated plainly does; a contrast word ends the denial's reach | unit: `prose`, `accuracy` | ✓ |
 | **ACCREL-09** | Each tolerance arm accepts immediately inside its bound and rejects immediately outside, including a relative tolerance against a zero gold, which is noted on the result | unit: `numbers`, `accuracy` | ✓ |
@@ -515,13 +515,16 @@ The two failure modes here are silent. A gold fact missed on number formatting r
 | **ACCREL-11** | Every accepted date form matches, a month and year with no day does not, an impossible calendar day is refused, and an ambiguous numeric date matches on either reading and says so | unit: `dates` | ✓ |
 | **ACCREL-12** | Names and identifiers match case-insensitively after Unicode normalisation, on word boundaries, by value or by any recorded alias | unit: `accuracy` | ✓ |
 | **ACCREL-13** | All four answer kinds are handled, proven against the exported kind tuple so a fifth cannot be added without failing here | unit: `accuracy` | ✓ |
-| **ACCREL-14** | A task with no gold facts is not-applicable rather than zero, and so is relevance on a task with no required terms | unit: `accuracy`, `relevance` | ✓ |
+| **ACCREL-14** | A task with no gold facts is not-applicable rather than zero, and so is relevance on a task with no required terms; and both agree with the loader's own derived `applicableMetrics` on every corpus task | unit: `accuracy`, `relevance` | ✓ |
 | **ACCREL-15** | Relevance is coverage minus weighted drift, clamped to zero and one, counting each term once, with an empty drift list scoring no penalty | unit: `relevance` | ✓ |
 | **ACCREL-16** | Relevance matches over prose, so a required term present only in a citation URL scores no coverage | unit: `relevance` | ✓ |
 | **ACCREL-17** | The recovery record the accuracy scorer returns is accepted by the calibration scorer unchanged, including the empty one from a not-applicable result | unit: `accuracy` | ✓ |
 | **ACCREL-18** | Every admitted corpus task scores without throwing, and a report built from a task's own gold recovers every one of its facts | unit: `accuracy` | ✓ |
 | **ACCREL-19** | Percent, percentage points and basis points never canonicalise together, and the longest unit form wins so `percentage points` is never read as `percentage` | unit: `units` | ✓ |
 | **ACCREL-20** | A drift weight that is negative or not a number is refused rather than producing a score nobody can read | unit: `relevance` | ✓ |
+| **ACCREL-21** | A date shape yields no number at all, so a gold of 7 is not recovered from a publication date, while a range keeps both of its figures | unit: `numbers` | ✓ |
+| **ACCREL-22** | `exact` is strict equality with no hidden width: a reported `0` does not satisfy a gold of `1e-13` | unit: `numbers` | ✓ |
+| **ACCREL-23** | A character whose numeric meaning Unicode normalisation would change is blanked first, so ten squared is not read as 102 and a circled digit is not read as a figure | unit: `accuracy` | ✓ |
 
 ### The paid project
 

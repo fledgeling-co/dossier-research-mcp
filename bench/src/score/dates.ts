@@ -112,7 +112,7 @@ const PATTERNS: readonly { readonly form: DateForm; readonly re: RegExp }[] = [
  * Every date in `text`, with every calendar day each could mean.
  *
  * `text` must already be in the scorers' one coordinate system, meaning
- * `normaliseForSearch(extractProse(report))` — which is lower case, hence the
+ * `normaliseForSearch(extractProse(report))`, which is lower case, hence the
  * lower-case month table.
  *
  * Overlaps are resolved by first match wins in pattern order, so an ISO date is

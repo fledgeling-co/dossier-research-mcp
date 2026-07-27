@@ -41,8 +41,14 @@
  */
 export function extractProse(markdown: string): string {
   return (
-    markdown
-      // 1. `<cite url="...">text</cite>` — the attribute goes, the text stays.
+    maskShapeShiftingDigits(markdown)
+      // 1. `<cite url="...">text</cite>`: the attribute goes, and the body
+      //    stays unless it is a bare numeric label. The server rewrites stored
+      //    citations into that shape, so a body of `1` is a marker rather than
+      //    a claim, and leaving it would put a bare 1 into the prose.
+      .replace(/<cite\s+[^>]*>([\s\S]*?)<\/cite\s*>/gi, (_whole, body: string) =>
+        isBareLocator(body) ? ' ' : ` ${body} `,
+      )
       .replace(/<cite\s+[^>]*>/gi, ' ')
       .replace(/<\/cite\s*>/gi, ' ')
       // 2. Reference definitions at the head of a line: `[label]: https://...`.
@@ -62,16 +68,46 @@ export function extractProse(markdown: string): string {
 }
 
 /**
- * Whether a link's visible text is a locator rather than prose.
+ * Characters whose *numeric meaning* Unicode normalisation changes.
  *
- * A hostname has no spaces, at least one dot, and a plausible top-level label.
+ * The matcher runs over `normaliseForSearch` output, which applies NFKC, and
+ * NFKC turns a superscript two into a plain `2`. So `10\u00B2` becomes `102` and a
+ * gold value of 102 would be recovered from a report that wrote ten squared;
+ * a circled digit and a vulgar fraction do the same thing. Blanked here, before
+ * normalisation, because afterwards the damage is indistinguishable from a
+ * figure the report really wrote.
+ *
+ * Blanked rather than expanded: a superscript in a research report is usually a
+ * footnote marker, and `10` is a more honest reading of `10\u00B2` than `102` is.
+ */
+const SHAPE_SHIFTING_DIGITS =
+  /[\u00B2\u00B3\u00B9\u00BC-\u00BE\u2070-\u209F\u2150-\u215F\u2460-\u24FF]/gu;
+
+function maskShapeShiftingDigits(text: string): string {
+  return text.replace(SHAPE_SHIFTING_DIGITS, ' ');
+}
+
+/**
+ * Whether a link's visible text is part of the citation rather than prose.
+ *
+ * Two shapes qualify.
+ *
+ * A **hostname**: no spaces, at least one dot, a plausible top-level label.
  * `arxiv.org` and `api.github.com` are locators; `Reuters` and `the 2019 filing`
  * are not. Deliberately narrow: misreading real prose as a citation would delete
  * text the model wrote, which is a false negative in the other direction.
+ *
+ * A **numeric label**: `1`, `12`, `[3]`, the footnote-style marker this repo's
+ * own stored reports carry after the server rewrites citations. Left in place it
+ * puts a bare `1` into the prose, and a gold value of 1 would be recovered from
+ * a citation marker. Capped at three digits so a link whose text is a real
+ * figure, `[1200000000](url)`, stays prose.
  */
 function isBareLocator(text: string): boolean {
   const t = text.trim();
-  if (t === '' || /\s/.test(t)) return false;
+  if (t === '') return false;
+  if (/^\[?\^?\d{1,3}\]?$/.test(t)) return true;
+  if (/\s/.test(t)) return false;
   if (/^https?:\/\//i.test(t)) return true;
   return /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*\.[a-z]{2,}$/i.test(t);
 }
