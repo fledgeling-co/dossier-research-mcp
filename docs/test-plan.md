@@ -624,6 +624,22 @@ The sharpest instrument in the benchmark, and the one whose wrong answer is most
 | **INTEG-41** | A truncated page body is carried as truncated through collection into the containment verdict | unit: `collect`, `containment` | ✓ |
 | **INTEG-42** | Number and text matching goes through the shared primitives, so two slices cannot disagree about a thousands separator | unit: `containment` | ✓ |
 | **INTEG-43** | An evidence snapshot read back from disk is Zod-parsed, and a malformed one is refused rather than scored against | unit: `evidence` | ✓ |
+| **GROUND-01** | `research_ground` registers, appears in `tools/list`, and grounds a completed run with no manual export call in between | `grounding` acceptance | ✓ |
+| **GROUND-02** | `destination` defaults to `local`, so an omitted argument cannot reach the upload path | unit: `grounding`, `grounding` acceptance | ✓ |
+| **GROUND-03** | The local path writes into the first granted `DOSSIER_LOCAL_CORPUS_DIRS` root, under the fixed `dossier-grounding/` subdirectory, and names the root it chose | `grounding` acceptance | ✓ |
+| **GROUND-04** | The local path takes no directory, filename or subdirectory from the caller: the tool schema has no such parameter | `grounding` acceptance | ✓ |
+| **GROUND-05** | The local path completes with no credentials and opens no socket, asserted by a failing `fetch` that would throw if called | unit: `grounding` | ✓ |
+| **GROUND-06** | With no root granted, the local path refuses and repeats the operator-grant rule rather than writing anywhere else | `grounding` acceptance | ✓ |
+| **GROUND-07** | A run id that is not `[A-Za-z0-9_-]{1,64}` is refused before it reaches a path | unit: `grounding` | ✓ |
+| **GROUND-08** | Grounding files are written `0600` inside a `0700` directory | `grounding` acceptance | ✓ |
+| **GROUND-09** | The upload path names Google in the tool description, is annotated non-read-only, and requires an existing store rather than creating one | `grounding` acceptance, `protocol` | ✓ |
+| **GROUND-10** | A prior Dossier report classifies as `private-user-owned` and `countsAsCorroboration` is false for it | unit: `grounding` | ✓ |
+| **GROUND-11** | A claim in both the grounding report and the new report counts once: two runs citing one page plus the grounding report score `single-source` on one independent domain | unit: `grounding` | ✓ |
+| **GROUND-12** | A claim supported only by the grounding report is `unsupported`, not corroborated: laundering scores zero independent domains | unit: `grounding` | ✓ |
+| **GROUND-13** | `mergeEvidence` excludes a prior report from `independentDomains` while still listing it as a source | unit: `synthesise` | ✓ |
+| **GROUND-14** | A grounded run declares its grounding in the header `research_read` returns and in the front matter and body `research_export` writes, naming the prior run ids | `grounding` acceptance | ✓ |
+| **GROUND-15** | `groundedInRunIds` puts the prior-research rule in the prompt before the final `<core_directive>`, and nothing follows that anchor | unit: `prompt` | ✓ |
+| **GROUND-16** | The prior-research prompt block carries no text from the prior reports | unit: `prompt` | ✓ |
 
 ### The paid project
 
