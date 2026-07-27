@@ -1,7 +1,7 @@
 # BENCH-07: Source quality, independence and syndication
 
 **ID:** BENCH-07
-**Status:** Triage
+**Status:** In Review
 **Created:** 2026-07-27
 **Last updated:** 2026-07-27
 **Brief:** [BENCH-07](../features-to-triage/BENCH-07-source-quality.md) · **Design of record:** [benchmark.md](../plan/benchmark.md)
