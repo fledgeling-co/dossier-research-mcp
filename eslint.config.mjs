@@ -15,7 +15,11 @@ import tseslint from 'typescript-eslint';
  */
 export default tseslint.config(
   {
-    ignores: ['dist/**', 'node_modules/**', 'coverage/**', 'assets/**'],
+    // `.worktrees/` holds git worktrees of this same repository, used by the
+    // feature pipeline. Linting them makes the main tree's gate fail on another
+    // branch's half-written code, which is both wrong and impossible to act on
+    // from here. Each worktree runs its own gate against its own branch.
+    ignores: ['dist/**', 'node_modules/**', 'coverage/**', 'assets/**', '.worktrees/**'],
   },
   js.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,

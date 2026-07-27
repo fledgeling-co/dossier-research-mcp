@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { loadConfig, type Config } from '../src/config.js';
 import { adapterFor, type CliAdapter } from '../src/local/cli.js';
-import { localProvider, localProviders } from '../src/providers/local.js';
+import { localProvider, localProviders, lastLines } from '../src/providers/local.js';
 
 /** There is one backend per CLI now, so a test names the one it is exercising. */
 const CLAUDE: CliAdapter = adapterFor('claude')!;
@@ -348,4 +348,30 @@ describe('the supervisor bounds what the CLI can do', () => {
     expect(after.status).toBe('failed');
     expect(after.error).toMatch(/cancelled/);
   }, 30_000);
+});
+
+describe('LOCAL-30: a failed CLI reports why, not just that', () => {
+  // Reported from a real panel: "Claude Code, CLI exited code 1" with no cause,
+  // across two panels, while the fleet was exhausting the same subscription the
+  // CLI backend spends. The reason was in the CLI's own captured output all
+  // along; the error threw it away and made an exhausted quota look like a
+  // broken adapter.
+  it('keeps the tail, where a CLI that failed partway puts its error', () => {
+    const out = lastLines('starting research\nreading sources\nUsage limit reached. Resets at 3pm.');
+    expect(out).toMatch(/Usage limit reached/);
+  });
+
+  it('does not offer the truncation marker as if it were the reason', () => {
+    const out = lastLines('real output here\n\n_[output truncated: the CLI exceeded the size limit]_');
+    expect(out).toBe('real output here');
+  });
+
+  it('is empty rather than noisy when the CLI said nothing', () => {
+    expect(lastLines('')).toBe('');
+    expect(lastLines('   \n\n  ')).toBe('');
+  });
+
+  it('caps its length, since this lands inside an error message', () => {
+    expect(lastLines('x'.repeat(900)).length).toBeLessThanOrEqual(300);
+  });
 });

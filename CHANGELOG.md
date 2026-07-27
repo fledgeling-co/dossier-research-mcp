@@ -8,6 +8,15 @@ This project follows [semantic versioning](https://semver.org/). Until 1.0 the m
 
 ## [Unreleased]
 
+### Fixed
+
+- **A failed CLI now says why it failed.** The error read `the CLI exited with code 1` and stopped there, while the reason sat in the CLI's own captured output the whole time. Reported from a real panel where Claude Code failed twice with a bare code 1; the actual cause was an exhausted subscription, and a bare exit code makes that look like a broken adapter. The tail of the output now travels with the error, the tail rather than the head because a CLI that fails partway writes progress first and the error last.
+
+- **A `--version` probe that timed out was reported as a binary that could not be identified.** Those are different findings and only one of them is the operator's problem. Under heavy local load a healthy CLI can miss the probe deadline, and `identity is unconfirmed` sends somebody to reinstall a tool that was never broken. A timeout now says it was a timeout, names the deadline, and says to re-run when the load drops.
+
+- **The gate linted other branches' worktrees.** `.worktrees/` holds git worktrees of this same repository, so a half-written file on another branch failed the main tree's lint. Each worktree runs its own gate against its own branch; the main one no longer runs theirs.
+
+
 ### Added
 
 - **A checked file format for benchmark tasks, under `bench/`.** One YAML file per task, parsed into a typed corpus by a loader that is pure and synchronous, so a scorer can be tested without a filesystem. Nothing here scores anything and nothing here touches the network; it is the contract the rest of the benchmark reads. Documented in [`docs/bench/task-format.md`](docs/bench/task-format.md).

@@ -270,13 +270,21 @@ export async function probeCli(adapter: CliAdapter, timeoutMs = 4_000): Promise<
   try {
     const { stdout, stderr } = await run(real, [...adapter.versionArgs], { timeout: timeoutMs });
     version = `${stdout} ${stderr}`.trim().split('\n')[0]?.trim() ?? '';
-  } catch {
+  } catch (e: unknown) {
+    // A timeout is not the same finding as a binary that answers wrongly, and
+    // conflating them blames an install for a busy machine. Under heavy local
+    // load a `--version` probe can exceed the timeout on a perfectly healthy
+    // CLI, and reporting that as "identity unconfirmed" sends the operator to
+    // reinstall something that was never broken.
+    const timedOut = e instanceof Error && /timed? ?out|ETIMEDOUT|SIGTERM/i.test(e.message);
     return {
       ...base,
       ...withCaution,
       state: 'ambiguous',
       path: real,
-      detail: 'the binary resolved but did not answer --version, so its identity is unconfirmed',
+      detail: timedOut
+        ? `the binary resolved but did not answer \`${adapter.versionArgs.join(' ')}\` within ${String(timeoutMs)}ms, so its identity is unconfirmed. This is usually a busy machine rather than a broken install; re-run \`research_doctor\` when the load drops`
+        : `the binary resolved but \`${adapter.versionArgs.join(' ')}\` failed, so its identity is unconfirmed: ${e instanceof Error ? e.message.slice(0, 160) : 'unknown error'}`,
     };
   }
 

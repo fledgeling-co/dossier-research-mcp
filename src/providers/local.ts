@@ -340,7 +340,15 @@ export function localProvider(config: Config, adapter: CliAdapter): ResearchProv
                   error: argvRejected
                     ? `\`${adapter.bin}\` refused the invocation Dossier built: ${firstLine(markdown)}`
                     : (parsed.data.error ??
-                      `the CLI exited with code ${String(parsed.data.exit)}${parsed.data.signal ? ` (signal ${parsed.data.signal})` : ''}`),
+                      // The CLI's own output is captured to the sidecar, and on
+                      // a non-zero exit it is the only place the reason exists.
+                      // Reporting a bare exit code throws it away and turns
+                      // "Claude Code: usage limit reached" into an unexplained
+                      // code 1, which reads as a broken adapter rather than an
+                      // exhausted subscription.
+                      `the CLI exited with code ${String(parsed.data.exit)}${parsed.data.signal ? ` (signal ${parsed.data.signal})` : ''}${
+                        lastLines(markdown) ? `: ${lastLines(markdown)}` : ''
+                      }`),
                 }),
           });
         }
@@ -486,6 +494,22 @@ export function localProvider(config: Config, adapter: CliAdapter): ResearchProv
 let counter = 0;
 
 /** The first non-empty line of a transcript: what the parser actually said. */
+/**
+ * The tail of a failed CLI's own output, which is where it says why.
+ *
+ * The tail rather than the head: a CLI that fails partway through has written
+ * progress first and the error last, so the head is the least informative part
+ * of it.
+ */
+export function lastLines(text: string, max = 3): string {
+  const lines = text
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0 && !l.startsWith('_['));
+  if (lines.length === 0) return '';
+  return lines.slice(-max).join(' / ').slice(0, 300);
+}
+
 function firstLine(text: string): string {
   return (text.split('\n').find((l) => l.trim().length > 0)?.trim() ?? '(no output)').slice(0, 300);
 }
