@@ -132,3 +132,30 @@ That separation is what makes a metric added in three months applicable to runs 
 ## Plan
 
 [plan-BENCH-03.md](../plans/plan-BENCH-03.md) — Standard tier, 12 steps, 43 acceptance criteria. Its cross-family plan review returned MATERIAL DEFECTS over fourteen findings, four of them real bugs; the dispositions are in the plan's own gate note.
+
+---
+
+## Progress — 2026-07-27
+
+**Branch:** `ai/bench-03` (local, based on `main` at `7fdd600`, **not rebased, not merged and not pushed, by instruction**; worktree `.worktrees/BENCH-03`). Fifteen commits.
+
+**What shipped.** Two halves, as the plan settled on after the first cross-family review.
+
+`bench/src/citations/` reaches the network: five registry adapters, an on-disk answer cache, a shared rate limiter, an in-process single-flight map, two live fetch adapters over the existing `safeFetch`, and an atomic evidence-snapshot store. `bench/src/score/` is pure and synchronous: identifier extraction, token containment and anchor honesty, the published statement-by-source algebra, and the scorer that assembles them over a report and a snapshot. `docs/bench/citation-integrity.md` carries the registry table, the dated live findings and what each number cannot mean.
+
+One file in `src/` changed. `judgeCitationStatus` and `judgeCitationError` were extracted unchanged from the private `verifyOne` in `src/research/citations.ts` and exported, so the benchmark reads an HTTP status the same way the product does. Two implementations of one rule eventually disagree about what a 403 means, and this slice is otherwise at pains to avoid exactly that.
+
+**What the live registries changed.** All five were checked against the real services rather than their documentation, and three do not behave as the brief assumed. Crossref alone would report a genuine reference as fabricated, because it is one DOI registration agency of several and a real Zenodo DOI is a 404 there and a 200 at the global handle directory. The book catalogue answers found for a fabricated number, because it is community-edited and really does hold a record listing it. arXiv refused every lookup across seven minutes with a 429, which makes `unchecked` the ordinary answer from that archive rather than the rare one. Two more answer HTTP 200 for something that does not exist. Reading any of those from documentation would have shipped a false accusation.
+
+**Verification.** `npm run gate` green **twice**: 1218 tests passed, 2 skipped, 53 files, on both runs. Plus the protocol-level stdio smoke against the built `dist/index.js`: `initialize` returned `dossier 0.9.0`, `tools/list` returned 36 tools including the whole citation surface, and `research_plan` returned 9527 characters with no non-JSON on stdout. `bench/` is not compiled into `dist/`, so the smoke is a regression check on the one `src/` file this touched. No test in the gate makes a network call; every registry, page fetch, clock and directory is injected.
+
+**Codex lane.** All three out-of-family gates ran at `max` effort, read-only, with no downgrade.
+
+- **Spec review (R1):** MATERIAL DEFECTS, ten findings. Seven accepted, two accepted in part, one made moot by a merge. The largest, accepted, split network collection from pure scoring; one was rejected on evidence, since Crossref's polite pool is reachable through a query parameter and `safeFetch`'s hardcoded identity did not need widening.
+- **Plan review (R1):** MATERIAL DEFECTS, fourteen findings. Twelve accepted, one in part, one rejected on evidence. **Four were real bugs and two of those were in the metric algebra**: necessity was being computed over the citation matrix where the paper computes it over the factual-support matrix, and an `unchecked` support cell was lowering citation accuracy exactly as a wrong citation would, which is the slice's own first rule inverted. Full dispositions in the plan's gate note.
+- **Completeness critic (R2):** see below.
+
+**Defects found by this item's own work, beyond the reviews.** A NUL byte in a template literal in `identifiers.ts`, which compiled, typechecked and linted clean while making the file binary to git and every `grep` for its contents return nothing; caught by `npm run lint:source`, which exists for exactly the v0.2.1 defect it repeated. A first reading of the necessity term that returns zero necessary sources whenever every statement is matched, killed by a two-statement worked example before it could ship. A bare-citation-row threshold generous enough to file an ordinary sentence carrying one link as a bibliography entry.
+
+**Deliberate gaps, named rather than left to be discovered.** No cross-process lock on the answer cache, because the harness is one process. Live registry probes are a manual step and never in the gate. `relevantStatements`, `oneSidedAnswer` and `overconfidentAnswer` are reported unavailable with a reason rather than approximated. `sourceNecessity` is reproducible but not canonical, and says so on every result. Nothing in the product calls the new surface yet: BENCH-08 owns reporting and BENCH-10 owns the detector eval, so the exports are producer-less on purpose.
+
