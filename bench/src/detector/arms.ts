@@ -40,7 +40,9 @@ export function pageEvidence(supportCase: LoadedSupportCase): SourceEvidence {
     truncated: supportCase.page.truncated,
     verdict: supportCase.page.verdict,
     completeHtml: supportCase.page.completeHtml,
-    anchors: supportCase.page.anchors,
+    // Empty on purpose. Containment never reads anchors, and the corpus does not
+    // carry them; anchor honesty is scored by BENCH-03 against live evidence.
+    anchors: [],
   };
 }
 

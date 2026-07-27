@@ -1,0 +1,13 @@
+id: registry-pmid-request-timed-out
+kind: pmid
+identifier: "32015507"
+reportSnippet: "The cohort study is cited as PMID: 32015507 in the evidence table."
+label: unchecked
+provenance: constructed
+observedAt: "2026-07-27"
+why: "The transport threw rather than answering. A timeout carries no information about the identifier at all, and the loop must reach unchecked without the response body it never received. This is the failure mode most likely to be mishandled, because a thrown error is the one path that does not go through the interpreter."
+responses:
+  - status: 0
+    body: ""
+    error: "the request timed out after 20000ms"
+    step: ncbi

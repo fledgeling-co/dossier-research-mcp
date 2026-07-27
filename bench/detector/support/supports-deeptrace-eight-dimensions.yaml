@@ -1,0 +1,16 @@
+id: deeptrace-eight-dimensions
+topic: "The DeepTRACE abstract page"
+claim: "DeepTRACE turns prior community-identified failure cases into eight measurable dimensions spanning answer text, sources, and citations."
+url: "https://arxiv.org/abs/2509.04499"
+label: supports
+why: "The abstract on the fetched page says DeepTRACE \"turns prior community-identified failure cases into eight measurable dimensions spanning answer text, sources, and citations\". This is the abstract almost verbatim, and is the easy end of the corpus on purpose: a detector that cannot get this right has no business being trusted on the hard cases."
+page:
+  provenance: captured
+  capturedAt: "2026-07-27T09:43:25.042Z"
+  verdict: live
+  httpStatus: 200
+  truncated: false
+  completeHtml: true
+  textFile: arxiv-2509-04499-deeptrace.txt
+  textSha256: "2604f4c5b88246c60c1b32a3bd4dd789460b66f01cce6144411547da6ffd78bc"
+  textChars: 10508

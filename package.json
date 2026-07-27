@@ -70,7 +70,8 @@
     "lint:source": "node scripts/check-source-hygiene.mjs",
     "bench:verify": "tsx bench/src/verify/cli.ts",
     "bench:failcheck": "tsx bench/src/failcheck/cli.ts",
-    "bench:report": "tsx bench/src/report/cli.ts"
+    "bench:report": "tsx bench/src/report/cli.ts",
+    "bench:detector": "tsx bench/src/detector/cli.ts"
   },
   "dependencies": {
     "@ai-sdk/google": "^4.0.24",

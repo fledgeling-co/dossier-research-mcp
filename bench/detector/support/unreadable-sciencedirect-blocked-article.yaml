@@ -1,0 +1,17 @@
+id: sciencedirect-blocked-article
+topic: "A publisher block page"
+claim: "The cited article reports that agentic planning improved task completion by 18 percentage points."
+url: "https://www.sciencedirect.com/science/article/pii/S0004370223002102"
+label: unreadable
+why: "The publisher returned HTTP 403 with a block page. The article text was never served, so the claim cannot be judged from what came back. This is the one wall in the corpus that link checking catches, because a 403 is visible in the status line, and it is here so the arm gets credit where credit is due."
+page:
+  provenance: constructed
+  capturedAt: "2026-07-27"
+  verdict: blocked
+  httpStatus: 403
+  truncated: false
+  completeHtml: false
+  textFile: sciencedirect-403.txt
+  textSha256: "8bc9ad304e29415336aded1ff90fd79698fb2aa8ef3145627ada899c92d6be09"
+  textChars: 947
+  note: "Captured from ScienceDirect on 2026-07-27 and edited: the live block page echoes the requesting IP address and a Cloudflare reference number back at the caller, and neither belongs in a committed fixture."

@@ -1,0 +1,10 @@
+id: registry-isbn-check-digit-wrong
+kind: isbn
+identifier: "9780262033849"
+reportSnippet: "The textbook is given as ISBN: 9780262033849 in the bibliography."
+label: invalid
+provenance: constructed
+observedAt: "2026-07-27"
+why: "The final digit disagrees with the rest of the number, which the grammar of an ISBN settles without asking anybody. A mistyped digit is a typo and not a fabrication, and sending it to a catalogue that will truthfully say it has never heard of it would read as a fabricated citation. No request is made at all, which is why the case scripts no response."
+responses:
+  []

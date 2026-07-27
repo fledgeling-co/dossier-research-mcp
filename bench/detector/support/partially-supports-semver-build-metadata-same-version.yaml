@@ -1,0 +1,16 @@
+id: semver-build-metadata-same-version
+topic: "Semantic Versioning 2.0.0"
+claim: "Because build metadata is ignored when determining precedence, Semantic Versioning 2.0.0 treats 1.0.0+001 and 1.0.0+002 as the same version."
+url: "https://semver.org/"
+label: partially_supports
+why: "The page says build metadata \"MUST be ignored when determining version precedence\" and that two versions differing only in build metadata \"have the same precedence\". Equal precedence is not identity, and the specification keeps build metadata as part of the version string, so the claim states something stronger than the page does."
+page:
+  provenance: captured
+  capturedAt: "2026-07-27T09:43:08.163Z"
+  verdict: live
+  httpStatus: 200
+  truncated: false
+  completeHtml: true
+  textFile: semver-2-0-0.txt
+  textSha256: "fcf9ecf6b360b9c058ef4ca75bff1e19f963298a11e9c16349ecabb6db899abd"
+  textChars: 20120

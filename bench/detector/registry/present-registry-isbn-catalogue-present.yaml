@@ -1,0 +1,12 @@
+id: registry-isbn-catalogue-present
+kind: isbn
+identifier: "9780262033848"
+reportSnippet: "The textbook is ISBN: 9780262033848 and the chapter reference points at it."
+label: present
+provenance: constructed
+observedAt: "2026-07-27"
+why: "OpenLibrary answers 200 with the bibkey present, which the rule reads as catalogue presence. The label is present because that is the verdict the detector should reach; what present may be taken to mean is narrower than the word suggests, and the detail on the answer says so in both directions."
+responses:
+  - status: 200
+    body: "{\"ISBN:9780262033848\":{\"info_url\":\"https://openlibrary.org/books/OL25718398M\"}}"
+    step: openlibrary

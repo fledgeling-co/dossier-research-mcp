@@ -1,0 +1,15 @@
+id: registry-doi-handle-404-not-its-own-body
+kind: doi
+identifier: "10.5555/proxy-error-example"
+reportSnippet: "The working paper is 10.5555/proxy-error-example in the reference list."
+label: unchecked
+provenance: constructed
+observedAt: "2026-07-27"
+why: "Crossref 404, then a handle-directory 404 whose body is an HTML error page rather than the directory answering responseCode 100. The status matches the absent path and the body does not, and the rule requires both. A proxy or a captive portal returning 404 is exactly the shape that would otherwise manufacture a fabrication verdict."
+responses:
+  - status: 404
+    body: "{\"status\":\"error\"}"
+    step: crossref
+  - status: 404
+    body: "<html><body>404 Not Found</body></html>"
+    step: doi-handle

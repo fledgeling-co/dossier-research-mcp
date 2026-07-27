@@ -1,0 +1,12 @@
+id: registry-pmid-fabricated
+kind: pmid
+identifier: "99999999"
+reportSnippet: "The trial is cited as PMID: 99999999 in the evidence table."
+label: absent
+provenance: constructed
+observedAt: "2026-07-27"
+why: "NCBI answers HTTP 200 carrying an error on the entry, which BENCH-03 verified live on 27 July 2026. Reading the status alone would score every fabricated PMID as real, so the case scripts the exact body shape that decides it."
+responses:
+  - status: 200
+    body: "{\"header\":{\"type\":\"esummary\"},\"result\":{\"uids\":[\"99999999\"],\"99999999\":{\"uid\":\"99999999\",\"error\":\"cannot get document summary\"}}}"
+    step: ncbi

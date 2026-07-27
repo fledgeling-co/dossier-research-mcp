@@ -1,0 +1,12 @@
+id: registry-arxiv-feed-names-another-paper
+kind: arxiv
+identifier: "2411.00640"
+reportSnippet: "The power analysis is arXiv:2411.00640, cited for the sample-size formula."
+label: unchecked
+provenance: constructed
+observedAt: "2026-07-27"
+why: "arXiv answers 200 with a feed reporting one result whose entry id is a different paper. A count is not an answer: a feed describing something else says nothing about the identifier that was asked about, and reading totalResults alone would turn any non-empty response into confirmation."
+responses:
+  - status: 200
+    body: "<?xml version=\"1.0\" encoding=\"UTF-8\"?><feed xmlns=\"http://www.w3.org/2005/Atom\"><opensearch:totalResults xmlns:opensearch=\"http://a9.com/-/spec/opensearch/1.1/\">1</opensearch:totalResults><entry><id>http://arxiv.org/abs/2106.09685v2</id><title>A paper</title></entry></feed>"
+    step: arxiv

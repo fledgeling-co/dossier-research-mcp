@@ -1,0 +1,17 @@
+id: consent-wall-quarterly-figures
+topic: "A cookie-consent interstitial"
+claim: "The publisher reported quarterly revenue of 4.1 billion euros, up 12% year on year."
+url: "https://example-news.invalid/2026/07/quarterly-figures"
+label: unreadable
+why: "The body is a cookie-consent interstitial served with HTTP 200: partner counts, purposes, and Accept and Reject buttons. No article text was served, so nothing here supports or contradicts the figures. A consent wall is the case the brief names specifically, and it is indistinguishable from a working page to anything that only reads a status code."
+page:
+  provenance: constructed
+  capturedAt: "2026-07-27"
+  verdict: live
+  httpStatus: 200
+  truncated: false
+  completeHtml: true
+  textFile: consent-wall.txt
+  textSha256: "3afc760b28329aa193b408750c1e7990e8150e4f558caf3739e8f10bb7107e02"
+  textChars: 681
+  note: "A cookie-consent interstitial, written to the shape those pages take rather than frozen from one: a real consent wall differs by region, by cookie jar and by week. HTTP 200 and a complete HTML document carrying no article text."

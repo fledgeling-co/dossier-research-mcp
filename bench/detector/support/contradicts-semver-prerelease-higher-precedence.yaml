@@ -1,0 +1,16 @@
+id: semver-prerelease-higher-precedence
+topic: "Semantic Versioning 2.0.0"
+claim: "Under Semantic Versioning 2.0.0 a pre-release version has higher precedence than the associated normal version."
+url: "https://semver.org/"
+label: contradicts
+why: "The page says the opposite in as many words: \"Pre-release versions have a lower precedence than the associated normal version.\" This is the sharpest case in the corpus for token containment, because every token the claim carries is on the page and only the direction of the relation is wrong."
+page:
+  provenance: captured
+  capturedAt: "2026-07-27T09:43:08.163Z"
+  verdict: live
+  httpStatus: 200
+  truncated: false
+  completeHtml: true
+  textFile: semver-2-0-0.txt
+  textSha256: "fcf9ecf6b360b9c058ef4ca75bff1e19f963298a11e9c16349ecabb6db899abd"
+  textChars: 20120

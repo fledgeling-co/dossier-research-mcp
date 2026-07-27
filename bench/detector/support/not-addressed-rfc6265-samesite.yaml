@@ -1,0 +1,16 @@
+id: rfc6265-samesite
+topic: "RFC 6265, HTTP state management"
+claim: "RFC 6265 defines the SameSite attribute and its Strict, Lax and None values."
+url: "https://www.rfc-editor.org/rfc/rfc6265.txt"
+label: not_addressed
+why: "SameSite appears nowhere in the fetched text. It was introduced by a later draft, RFC 6265bis, and readers routinely attribute it to 6265 because the document is about exactly this. That is the shape this label exists for: right topic, right document family, and the claim is simply not in the page."
+page:
+  provenance: captured
+  capturedAt: "2026-07-27T09:43:07.721Z"
+  verdict: live
+  httpStatus: 200
+  truncated: false
+  completeHtml: false
+  textFile: rfc6265-cookies.txt
+  textSha256: "19618972e266e7620cf58b9fd4d28bd5ff12b8ab38dc2680d4353f5f1c4cce20"
+  textChars: 79216

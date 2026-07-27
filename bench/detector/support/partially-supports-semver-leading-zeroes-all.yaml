@@ -1,0 +1,16 @@
+id: semver-leading-zeroes-all
+topic: "Semantic Versioning 2.0.0"
+claim: "Semantic Versioning 2.0.0 forbids leading zeroes in every identifier in a version string."
+url: "https://semver.org/"
+label: partially_supports
+why: "The page forbids leading zeroes in two narrower places: the X, Y and Z of a normal version, and numeric pre-release identifiers. Alphanumeric pre-release identifiers and build metadata are not covered by that rule, so \"every identifier\" is broader than what the page states."
+page:
+  provenance: captured
+  capturedAt: "2026-07-27T09:43:08.163Z"
+  verdict: live
+  httpStatus: 200
+  truncated: false
+  completeHtml: true
+  textFile: semver-2-0-0.txt
+  textSha256: "fcf9ecf6b360b9c058ef4ca75bff1e19f963298a11e9c16349ecabb6db899abd"
+  textChars: 20120

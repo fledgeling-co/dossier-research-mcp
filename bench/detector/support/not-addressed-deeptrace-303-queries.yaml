@@ -1,0 +1,16 @@
+id: deeptrace-303-queries
+topic: "The DeepTRACE abstract page"
+claim: "DeepTRACE evaluates 303 queries across nine generative search and deep-research systems."
+url: "https://arxiv.org/abs/2509.04499"
+label: not_addressed
+why: "This is true of the paper and absent from the abstract page that is cited. The page names the systems in passing and gives no corpus size at all. It is the most common real failure in a cited report: a fact taken from a document, attached to a URL that resolves to a summary of that document, where a reader clicking through would not find it."
+page:
+  provenance: captured
+  capturedAt: "2026-07-27T09:43:25.042Z"
+  verdict: live
+  httpStatus: 200
+  truncated: false
+  completeHtml: true
+  textFile: arxiv-2509-04499-deeptrace.txt
+  textSha256: "2604f4c5b88246c60c1b32a3bd4dd789460b66f01cce6144411547da6ffd78bc"
+  textChars: 10508

@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "model": "claude",
+  "judgedAt": "2026-07-27",
+  "note": "Run through the claude CLI, which spends a subscription quota rather than a metered balance. The CLI is not the utility model the product itself would call, so this measures a model of that class answering the product’s own question, not that exact model.",
+  "verdicts": [
+    {
+      "caseId": "consent-wall-quarterly-figures",
+      "verdict": "unreadable",
+      "note": "The supplied text is a cookie-consent/privacy banner (consent options, partner count, policy links) with no article body, so the claim cannot be assessed from it."
+    }
+  ],
+  "failures": []
+}

@@ -1,0 +1,12 @@
+id: registry-doi-crossref-present
+kind: doi
+identifier: "10.1145/3442188.3445922"
+reportSnippet: "Bender and colleagues set out the argument in 10.1145/3442188.3445922, which the report cites directly."
+label: present
+provenance: constructed
+observedAt: "2026-07-27"
+why: "Crossref answers 200 on the first step, which the rule reads as present without needing the handle directory at all. The easy direction, included so the corpus can tell a detector that is cautious from one that never says present."
+responses:
+  - status: 200
+    body: "{\"status\":\"ok\"}"
+    step: crossref

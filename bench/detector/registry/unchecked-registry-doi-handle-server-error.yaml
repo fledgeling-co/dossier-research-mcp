@@ -1,0 +1,15 @@
+id: registry-doi-handle-server-error
+kind: doi
+identifier: "10.1038/s41586-021-03819-2"
+reportSnippet: "The structure prediction result is 10.1038/s41586-021-03819-2 in the reference list."
+label: unchecked
+provenance: constructed
+observedAt: "2026-07-27"
+why: "Crossref answers 503 and the handle directory answers 500. Neither step said anything about the identifier, so nothing is known about it. This DOI is a real and very well known paper, which is the point: an outage must not be able to convert a genuine reference into an accusation."
+responses:
+  - status: 503
+    body: "Service Unavailable"
+    step: crossref
+  - status: 500
+    body: "Internal Server Error"
+    step: doi-handle

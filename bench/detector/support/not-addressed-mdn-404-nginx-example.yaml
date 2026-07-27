@@ -1,0 +1,16 @@
+id: mdn-404-nginx-example
+topic: "The MDN reference for HTTP 404"
+claim: "The MDN page shows an nginx configuration for serving a custom 404 page."
+url: "https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404"
+label: not_addressed
+why: "The page shows an Apache .htaccess ErrorDocument example and mentions nginx nowhere. The claim is about a real section of the page with the wrong server named, so the page is about the claim without containing it."
+page:
+  provenance: captured
+  capturedAt: "2026-07-27T09:43:25.274Z"
+  verdict: live
+  httpStatus: 200
+  truncated: false
+  completeHtml: true
+  textFile: mdn-http-404.txt
+  textSha256: "dbb65fe7cdcb9fbd19904c9ef86260c2492fafef88bde0a171706becf505b091"
+  textChars: 33521

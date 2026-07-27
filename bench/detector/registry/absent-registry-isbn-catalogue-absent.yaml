@@ -1,0 +1,12 @@
+id: registry-isbn-catalogue-absent
+kind: isbn
+identifier: "9786060606062"
+reportSnippet: "The monograph is listed as ISBN: 9786060606062 in the bibliography."
+label: absent
+provenance: captured
+observedAt: "2026-07-27"
+why: "BENCH-03 probed this number live on 27 July 2026 and OpenLibrary returned an empty object. The label is absent because that is the verdict the rule reaches and should reach. What it cannot mean is that the book does not exist: the same probe found that the fabricated 9789999999991 resolves to a real catalogue record, so the catalogue is evidence in neither direction and the answer says so."
+responses:
+  - status: 200
+    body: "{}"
+    step: openlibrary

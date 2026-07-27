@@ -1,0 +1,17 @@
+id: x-home-daily-active-users
+topic: "A script wall served with HTTP 200"
+claim: "X reported 611 million daily active users on its home timeline in 2026."
+url: "https://x.com/home"
+label: unreadable
+why: "The body is the JavaScript-required interstitial, 732 characters of browser advice and policy links, served with HTTP 200. Nothing about a timeline or a user count reached the client, so no verdict about support is available from this text."
+page:
+  provenance: captured
+  capturedAt: "2026-07-27T09:43:26.622Z"
+  verdict: live
+  httpStatus: 200
+  truncated: false
+  completeHtml: true
+  textFile: x-home-script-wall.txt
+  textSha256: "6d760e66f6d51e5d3d70acf41f80ac45150912da6917f0525511b107c5ccd768"
+  textChars: 732
+  note: "HTTP 200 carrying a JavaScript-required interstitial. Every word of the timeline it claims to serve is absent."

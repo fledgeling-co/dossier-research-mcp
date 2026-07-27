@@ -1,0 +1,12 @@
+id: registry-arxiv-rate-limited
+kind: arxiv
+identifier: "2509.04499"
+reportSnippet: "The audit framework is described in arXiv:2509.04499, which the report cites for its metric definitions."
+label: unchecked
+provenance: captured
+observedAt: "2026-07-27"
+why: "BENCH-03 probed arXiv live on 27 July 2026 and every request across a seven-minute span answered 429 Rate exceeded, after only a handful of calls. This paper is real, live and exactly what the identifier says it is, so unchecked is the only honest answer and absent would be a fabricated accusation produced entirely by somebody else being busy. For this archive unchecked is the ordinary answer rather than the rare one."
+responses:
+  - status: 429
+    body: "Rate exceeded"
+    step: arxiv

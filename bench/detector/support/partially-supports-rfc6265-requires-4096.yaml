@@ -1,0 +1,16 @@
+id: rfc6265-requires-4096
+topic: "RFC 6265, HTTP state management"
+claim: "RFC 6265 requires every user agent to support at least 4096 bytes per cookie."
+url: "https://www.rfc-editor.org/rfc/rfc6265.txt"
+label: partially_supports
+why: "The page states a weaker version on two counts. It says \"General-use user agents SHOULD provide each of the following minimum capabilities\", so the level is SHOULD rather than a requirement, and the subject is general-use user agents rather than every user agent. The figure is right and the modality is not, which is precisely what partially_supports is for."
+page:
+  provenance: captured
+  capturedAt: "2026-07-27T09:43:07.721Z"
+  verdict: live
+  httpStatus: 200
+  truncated: false
+  completeHtml: false
+  textFile: rfc6265-cookies.txt
+  textSha256: "19618972e266e7620cf58b9fd4d28bd5ff12b8ab38dc2680d4353f5f1c4cce20"
+  textChars: 79216

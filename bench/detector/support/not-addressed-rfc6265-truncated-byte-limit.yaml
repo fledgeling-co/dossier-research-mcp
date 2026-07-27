@@ -1,0 +1,17 @@
+id: rfc6265-truncated-byte-limit
+topic: "RFC 6265, read only as far as the byte cap"
+claim: "RFC 6265 asks general-use user agents to support at least 4096 bytes per cookie."
+url: "https://www.rfc-editor.org/rfc/rfc6265.txt"
+label: not_addressed
+why: "The label is a property of the text supplied, and the supplied text stops at the byte cap long before section 6.1, so the figure is not in it. The full document does state this, which is the point: the same claim against the complete capture is supported. It is here to price the abstention containment makes on a truncated body, which is a deliberate refusal to accuse and costs coverage rather than accuracy."
+page:
+  provenance: constructed
+  capturedAt: "2026-07-27"
+  verdict: live
+  httpStatus: 200
+  truncated: true
+  completeHtml: false
+  textFile: rfc6265-truncated.txt
+  textSha256: "a5e540019d1f4ccc6641ecdd6682c08d710ae65430c3dd225afb70685439d46c"
+  textChars: 4000
+  note: "The first 4000 characters of the captured RFC 6265 text, which is what the collector byte cap produces on a long document."

@@ -1,0 +1,16 @@
+id: deeptrace-judge-agreement
+topic: "The DeepTRACE abstract page"
+claim: "DeepTRACE uses an LLM judge whose agreement with human raters was strong."
+url: "https://arxiv.org/abs/2509.04499"
+label: partially_supports
+why: "The abstract says \"an LLM-judge with validated agreement to human raters\". Validated is not strong: the paper itself reports a Pearson correlation of 0.62 on factual support and calls that moderate. The page states a weaker version of the claim, which is the definition of this label."
+page:
+  provenance: captured
+  capturedAt: "2026-07-27T09:43:25.042Z"
+  verdict: live
+  httpStatus: 200
+  truncated: false
+  completeHtml: true
+  textFile: arxiv-2509-04499-deeptrace.txt
+  textSha256: "2604f4c5b88246c60c1b32a3bd4dd789460b66f01cce6144411547da6ffd78bc"
+  textChars: 10508

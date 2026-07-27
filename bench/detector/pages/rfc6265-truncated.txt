@@ -1,0 +1,90 @@
+
+
+
+
+
+
+Internet Engineering Task Force (IETF)                          A. Barth
+Request for Comments: 6265                                 U.C. Berkeley
+Obsoletes: 2965                                               April 2011
+Category: Standards Track
+ISSN: 2070-1721
+
+
+                    HTTP State Management Mechanism
+
+Abstract
+
+   This document defines the HTTP Cookie and Set-Cookie header fields.
+   These header fields can be used by HTTP servers to store state
+   (called cookies) at HTTP user agents, letting the servers maintain a
+   stateful session over the mostly stateless HTTP protocol.  Although
+   cookies have many historical infelicities that degrade their security
+   and privacy, the Cookie and Set-Cookie header fields are widely used
+   on the Internet.  This document obsoletes RFC 2965.
+
+Status of This Memo
+
+   This is an Internet Standards Track document.
+
+   This document is a product of the Internet Engineering Task Force
+   (IETF).  It represents the consensus of the IETF community.  It has
+   received public review and has been approved for publication by the
+   Internet Engineering Steering Group (IESG).  Further information on
+   Internet Standards is available in Section 2 of RFC 5741.
+
+   Information about the current status of this document, any errata,
+   and how to provide feedback on it may be obtained at
+   http://www.rfc-editor.org/info/rfc6265.
+
+Copyright Notice
+
+   Copyright (c) 2011 IETF Trust and the persons identified as the
+   document authors.  All rights reserved.
+
+   This document is subject to BCP 78 and the IETF Trust's Legal
+   Provisions Relating to IETF Documents
+   (http://trustee.ietf.org/license-info) in effect on the date of
+   publication of this document.  Please review these documents
+   carefully, as they describe your rights and restrictions with respect
+   to this document.  Code Components extracted from this document must
+   include Simplified BSD License text as described in Section 4.e of
+   the Trust Legal Provisions and are provided without warranty as
+   described in the Simplified BSD License.
+
+
+
+
+Barth                        Standards Track                    [Page 1]
+
+RFC 6265             HTTP State Management Mechanism          April 2011
+
+
+   This document may contain material from IETF Documents or IETF
+   Contributions published or made publicly available before November
+   10, 2008.  The person(s) controlling the copyright in some of this
+   material may not have granted the IETF Trust the right to allow
+   modifications of such material outside the IETF Standards Process.
+   Without obtaining an adequate license from the person(s) controlling
+   the copyright in such materials, this document may not be modified
+   outside the IETF Standards Process, and derivative works of it may
+   not be created outside the IETF Standards Process, except to format
+   it for publication as an RFC or to translate it into languages other
+   than English.
+
+Table of Contents
+
+   1. Introduction ....................................................3
+   2. Conventions .....................................................4
+      2.1. Conformance Criteria .......................................4
+      2.2. Syntax Notation ............................................5
+      2.3. Terminology ................................................5
+   3. Overview ........................................................6
+      3.1. Examples ...................................................6
+   4. Server Requirements .............................................8
+      4.1. Set-Cookie .................................................8
+           4.1.1. Syntax ..............................................8
+           4.1.2. Semantics (Non-Normative) ..........................10
+      4.2. Cookie ....................................................13
+           4.2.1. Syntax .............................................13
+           4.2.2. Semantics ..........................................13

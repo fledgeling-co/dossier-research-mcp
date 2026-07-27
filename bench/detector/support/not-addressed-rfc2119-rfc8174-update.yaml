@@ -1,0 +1,16 @@
+id: rfc2119-rfc8174-update
+topic: "RFC 2119, requirement-level key words"
+claim: "RFC 2119 was updated by RFC 8174, which restricted the key words to their upper-case forms."
+url: "https://www.ietf.org/rfc/rfc2119.txt"
+label: not_addressed
+why: "RFC 8174 is real and does that, and a 1997 document cannot mention a 2017 one. The fetched text is the original RFC without the status annotations a datatracker page would carry, so a true statement about the document is not in the document."
+page:
+  provenance: captured
+  capturedAt: "2026-07-27T09:43:25.082Z"
+  verdict: live
+  httpStatus: 200
+  truncated: false
+  completeHtml: false
+  textFile: rfc2119-key-words.txt
+  textSha256: "3c2ceb7bfc84cd34720f4a5271338ab9d8280d34bdd1eb250c64306202f2ed8b"
+  textChars: 4723

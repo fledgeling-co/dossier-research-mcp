@@ -1,0 +1,16 @@
+id: rfc2119-bcp-14
+topic: "RFC 2119, requirement-level key words"
+claim: "RFC 2119 is BCP 14, published in March 1997 by S. Bradner."
+url: "https://www.ietf.org/rfc/rfc2119.txt"
+label: supports
+why: "The header block reads \"Request for Comments: 2119 / S. Bradner / BCP: 14 / March 1997\". Every element of the claim is on the page in that block."
+page:
+  provenance: captured
+  capturedAt: "2026-07-27T09:43:25.082Z"
+  verdict: live
+  httpStatus: 200
+  truncated: false
+  completeHtml: false
+  textFile: rfc2119-key-words.txt
+  textSha256: "3c2ceb7bfc84cd34720f4a5271338ab9d8280d34bdd1eb250c64306202f2ed8b"
+  textChars: 4723

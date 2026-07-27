@@ -1,0 +1,15 @@
+id: registry-doi-handle-rescues
+kind: doi
+identifier: "10.5281/zenodo.3509134"
+reportSnippet: "The dataset is archived at 10.5281/zenodo.3509134 and the figures are drawn from it."
+label: present
+provenance: captured
+observedAt: "2026-07-27"
+why: "BENCH-03 probed this DOI live on 27 July 2026: Crossref answers 404 and the global handle directory answers 200, because Zenodo registers through DataCite rather than Crossref. It is the single most important case in this family. A detector that stopped at Crossref would report a real, live, citable dataset as a fabricated reference, which is the benchmark becoming the thing it exists to detect."
+responses:
+  - status: 404
+    body: "{\"status\":\"error\"}"
+    step: crossref
+  - status: 200
+    body: "{\"responseCode\":1,\"handle\":\"10.5281/zenodo.3509134\"}"
+    step: doi-handle

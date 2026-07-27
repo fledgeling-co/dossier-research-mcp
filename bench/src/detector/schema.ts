@@ -96,8 +96,13 @@ export const PageSnapshotSchema = z.strictObject({
   verdict: z.enum(PAGE_VERDICTS),
   httpStatus: z.number().int().min(0).max(599).optional(),
   truncated: z.boolean(),
+  /**
+   * Recorded because the capture pass establishes it, not because this corpus
+   * scores it. Anchor honesty is BENCH-03's check over live evidence, and
+   * carrying a second copy of every page's anchor set here would be a second
+   * source of truth about the same pages for no measurement in return.
+   */
   completeHtml: z.boolean(),
-  anchors: z.array(z.string().min(1).max(300)).max(5000).default([]),
   /** File name only, no separators. Resolved under the corpus's own pages directory. */
   textFile: z
     .string()

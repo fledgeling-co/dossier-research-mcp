@@ -1,0 +1,16 @@
+id: semver-major-increment
+topic: "Semantic Versioning 2.0.0"
+claim: "Semantic Versioning 2.0.0 says to increment the MAJOR version when you make incompatible API changes."
+url: "https://semver.org/"
+label: supports
+why: "The summary at the top of the fetched page reads \"MAJOR version when you make incompatible API changes\". The claim is that sentence with the subject restored, and nothing is added to it."
+page:
+  provenance: captured
+  capturedAt: "2026-07-27T09:43:08.163Z"
+  verdict: live
+  httpStatus: 200
+  truncated: false
+  completeHtml: true
+  textFile: semver-2-0-0.txt
+  textSha256: "fcf9ecf6b360b9c058ef4ca75bff1e19f963298a11e9c16349ecabb6db899abd"
+  textChars: 20120

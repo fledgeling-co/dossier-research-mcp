@@ -1,0 +1,15 @@
+id: registry-doi-fabricated
+kind: doi
+identifier: "10.9999/nonexistent.2026.0001"
+reportSnippet: "The claim is sourced to 10.9999/nonexistent.2026.0001, which the report gives as a journal article."
+label: absent
+provenance: constructed
+observedAt: "2026-07-27"
+why: "Crossref 404 and then the global handle directory answering 404 with responseCode 100, its own not-found code. Only the second of those decides anything, and requiring the code rather than the status means a proxy error page, which is also a 404, cannot be read as a fabricated reference."
+responses:
+  - status: 404
+    body: "{\"status\":\"error\"}"
+    step: crossref
+  - status: 404
+    body: "{\"responseCode\":100,\"handle\":\"10.9999/nonexistent.2026.0001\"}"
+    step: doi-handle

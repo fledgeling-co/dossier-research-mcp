@@ -1,0 +1,16 @@
+id: deeptrace-submitted-date
+topic: "The DeepTRACE abstract page"
+claim: "The DeepTRACE paper was submitted to arXiv on 2 September 2025."
+url: "https://arxiv.org/abs/2509.04499"
+label: supports
+why: "The page carries \"[Submitted on 2 Sep 2025]\". The claim is true of the page and a reader would accept it without hesitation. It is in the corpus because the page abbreviates the month and the claim does not, which is the kind of gap a string-matching detector is expected to fall into and a model is not. Scoring that gap is the point of running both."
+page:
+  provenance: captured
+  capturedAt: "2026-07-27T09:43:25.042Z"
+  verdict: live
+  httpStatus: 200
+  truncated: false
+  completeHtml: true
+  textFile: arxiv-2509-04499-deeptrace.txt
+  textSha256: "2604f4c5b88246c60c1b32a3bd4dd789460b66f01cce6144411547da6ffd78bc"
+  textChars: 10508

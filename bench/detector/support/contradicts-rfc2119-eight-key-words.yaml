@@ -1,0 +1,16 @@
+id: rfc2119-eight-key-words
+topic: "RFC 2119, requirement-level key words"
+claim: "RFC 2119 defines eight key words for indicating requirement levels."
+url: "https://www.ietf.org/rfc/rfc2119.txt"
+label: contradicts
+why: "The abstract lists ten: MUST, MUST NOT, REQUIRED, SHALL, SHALL NOT, SHOULD, SHOULD NOT, RECOMMENDED, MAY and OPTIONAL. Eight is a specific count incompatible with the list the page gives, and the word eight appears nowhere in the document."
+page:
+  provenance: captured
+  capturedAt: "2026-07-27T09:43:25.082Z"
+  verdict: live
+  httpStatus: 200
+  truncated: false
+  completeHtml: false
+  textFile: rfc2119-key-words.txt
+  textSha256: "3c2ceb7bfc84cd34720f4a5271338ab9d8280d34bdd1eb250c64306202f2ed8b"
+  textChars: 4723

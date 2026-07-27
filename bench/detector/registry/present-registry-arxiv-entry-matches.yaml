@@ -1,0 +1,12 @@
+id: registry-arxiv-entry-matches
+kind: arxiv
+identifier: "2509.04499"
+reportSnippet: "The metric algebra is set out in arxiv.org/abs/2509.04499, which the report leans on throughout."
+label: present
+provenance: constructed
+observedAt: "2026-07-27"
+why: "A feed reporting one result whose entry id is the identifier that was asked about, which is the positive counterpart to the feed that names another paper. Both are needed: a rule that requires the entry id would be untested in the direction that matters if the corpus only carried the failing case."
+responses:
+  - status: 200
+    body: "<?xml version=\"1.0\" encoding=\"UTF-8\"?><feed xmlns=\"http://www.w3.org/2005/Atom\"><opensearch:totalResults xmlns:opensearch=\"http://a9.com/-/spec/opensearch/1.1/\">1</opensearch:totalResults><entry><id>http://arxiv.org/abs/2509.04499v1</id><title>A paper</title></entry></feed>"
+    step: arxiv

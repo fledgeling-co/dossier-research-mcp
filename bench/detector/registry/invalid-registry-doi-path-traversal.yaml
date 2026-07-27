@@ -1,0 +1,10 @@
+id: registry-doi-path-traversal
+kind: doi
+identifier: "10.1234/../../etc/passwd"
+reportSnippet: "The reference is written 10.1234/../../etc/passwd, which the extractor sees as a DOI."
+label: invalid
+provenance: constructed
+observedAt: "2026-07-27"
+why: "The identifier came out of a model that was itself reading the open web and is about to be interpolated into a URL path, so it is untrusted input. A DOI has no legitimate reason to carry a traversal segment; it is refused before any URL is built, and refusing is the failure mode that cannot surprise anyone."
+responses:
+  []

@@ -1,0 +1,17 @@
+id: linkedin-feed-ai-posts
+topic: "A login wall served with HTTP 200"
+claim: "LinkedIn users published 3.2 million posts about AI safety in July 2026."
+url: "https://www.linkedin.com/feed/"
+label: unreadable
+why: "The URL returns HTTP 200 and the body is a sign-in wall: title, a sign-in form, and the footer links. There is no feed content of any kind, so the page cannot bear on the claim either way. Link checking calls this live and is not wrong about what it measured, which is exactly the gap this corpus exists to price."
+page:
+  provenance: captured
+  capturedAt: "2026-07-27T09:43:25.362Z"
+  verdict: live
+  httpStatus: 200
+  truncated: false
+  completeHtml: true
+  textFile: linkedin-feed-login-wall.txt
+  textSha256: "2c2f8fd961310e2556d26f185b95a3b7a68f85db555574e39b19d892953b0361"
+  textChars: 1199
+  note: "HTTP 200, a complete HTML document, and a sign-in wall. The whole reason link checking cannot see this class of failure."

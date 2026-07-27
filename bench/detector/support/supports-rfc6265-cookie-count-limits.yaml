@@ -1,0 +1,16 @@
+id: rfc6265-cookie-count-limits
+topic: "RFC 6265, HTTP state management"
+claim: "RFC 6265 asks general-use user agents to store at least 50 cookies per domain and at least 3000 cookies in total."
+url: "https://www.rfc-editor.org/rfc/rfc6265.txt"
+label: supports
+why: "Section 6.1 of the fetched text says general-use user agents SHOULD provide \"At least 50 cookies per domain\" and \"At least 3000 cookies total\". Both figures and the hedging are exactly as the claim states them, so this is the page stating the claim rather than something near it."
+page:
+  provenance: captured
+  capturedAt: "2026-07-27T09:43:07.721Z"
+  verdict: live
+  httpStatus: 200
+  truncated: false
+  completeHtml: false
+  textFile: rfc6265-cookies.txt
+  textSha256: "19618972e266e7620cf58b9fd4d28bd5ff12b8ab38dc2680d4353f5f1c4cce20"
+  textChars: 79216

@@ -1,0 +1,16 @@
+id: mdn-404-always-frustrates
+topic: "The MDN reference for HTTP 404"
+claim: "MDN says every 404 on a website drives visitors away, so broken links must be eliminated."
+url: "https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404"
+label: partially_supports
+why: "The page says 404 errors \"can lead to a poor user experience\" and that broken links \"should be minimized to prevent frustration\". Can lead is not every, and minimized is not eliminated; the claim is the page with both hedges removed."
+page:
+  provenance: captured
+  capturedAt: "2026-07-27T09:43:25.274Z"
+  verdict: live
+  httpStatus: 200
+  truncated: false
+  completeHtml: true
+  textFile: mdn-http-404.txt
+  textSha256: "dbb65fe7cdcb9fbd19904c9ef86260c2492fafef88bde0a171706becf505b091"
+  textChars: 33521

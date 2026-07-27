@@ -1,0 +1,16 @@
+id: mdn-410-gone
+topic: "The MDN reference for HTTP 404"
+claim: "The MDN reference says that when a resource is permanently removed a server should send 410 Gone rather than 404."
+url: "https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404"
+label: supports
+why: "The page reads \"If a resource is permanently removed, servers should send the 410 Gone status instead.\" The claim restates that with the antecedent of \"instead\" made explicit, which the surrounding sentence supplies."
+page:
+  provenance: captured
+  capturedAt: "2026-07-27T09:43:25.274Z"
+  verdict: live
+  httpStatus: 200
+  truncated: false
+  completeHtml: true
+  textFile: mdn-http-404.txt
+  textSha256: "dbb65fe7cdcb9fbd19904c9ef86260c2492fafef88bde0a171706becf505b091"
+  textChars: 33521

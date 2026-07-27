@@ -1,0 +1,10 @@
+id: registry-doi-single-dot-segment
+kind: doi
+identifier: "10.5555/./secrets"
+reportSnippet: "The source is cited as 10.5555/./secrets in the footnotes."
+label: invalid
+provenance: constructed
+observedAt: "2026-07-27"
+why: "A single dot segment normalises away rather than climbing, so it is the quieter half of the same guard and the half a check written against .. alone would miss. Present as its own case because two traversal shapes that share one test are one test."
+responses:
+  []
