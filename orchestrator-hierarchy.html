@@ -1,0 +1,79 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Dossier benchmark — fleet hierarchy</title>
+<style>
+  :root{--paper:#FBFBF9;--ink:#17181A;--ink2:#43464B;--muted:#6E7278;--rule:rgba(23,24,26,.12);
+        --queued:#C43A2B;--blocked:#A6A9AD;--running:#C9A83C;--merged:#1F7A4D;--card:#FFF}
+  @media (prefers-color-scheme:dark){:root{--paper:#141517;--ink:#F2F2F0;--ink2:#C7C9CC;--muted:#8A8D92;
+        --rule:rgba(255,255,255,.14);--card:#1C1E21}}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink2);font:15px/1.55 ui-sans-serif,system-ui,sans-serif;padding:40px 24px}
+  main{max-width:1080px;margin:0 auto}
+  h1{font-family:ui-serif,Georgia,serif;font-weight:400;font-size:2.1rem;color:var(--ink);margin:0 0 6px;letter-spacing:-.01em}
+  .sub{font:12px ui-monospace,Menlo,monospace;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0 0 32px}
+  .wave{margin:0 0 30px;border-top:1px solid var(--rule);padding-top:16px}
+  .wave h2{font:12px ui-monospace,Menlo,monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:0 0 4px;font-weight:400}
+  .wave .why{margin:0 0 16px;font-size:.9rem;color:var(--muted);max-width:70ch}
+  .row{display:flex;flex-wrap:wrap;gap:12px}
+  .item{flex:1 1 240px;min-width:230px;background:var(--card);border:1px solid var(--rule);border-radius:12px;
+        padding:14px 16px;border-left:3px solid var(--blocked)}
+  .item.queued{border-left-color:var(--queued)} .item.running{border-left-color:var(--running)}
+  .item.merged{border-left-color:var(--merged)}
+  .id{font:11px ui-monospace,Menlo,monospace;letter-spacing:.1em;color:var(--muted)}
+  .title{color:var(--ink);font-weight:600;margin:3px 0 6px;font-size:.96rem;line-height:1.3}
+  .meta{font:11px ui-monospace,Menlo,monospace;color:var(--muted)}
+  .note{margin:30px 0 0;padding:16px 18px;background:var(--card);border:1px solid var(--rule);border-radius:12px;font-size:.9rem;max-width:78ch}
+  .note b{color:var(--ink)}
+  .key{display:flex;gap:18px;flex-wrap:wrap;font:11px ui-monospace,Menlo,monospace;color:var(--muted);margin:26px 0 0}
+  .key i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px;vertical-align:middle;font-style:normal}
+</style>
+<main>
+  <h1>Dossier benchmark</h1>
+  <p class="sub">Fleet hierarchy · 10 items · 27 July 2026</p>
+
+  <section class="wave">
+    <h2>Wave 1 · blocks everything</h2>
+    <p class="why">The task schema is the contract every scorer reads and every task author writes against. Reshaping it after the corpus exists is a hundred files of hand work again.</p>
+    <div class="row">
+      <div class="item queued"><div class="id">BENCH-01</div><div class="title">Task format, gold-set schema and loader</div><div class="meta">deps: none</div></div>
+    </div>
+  </section>
+
+  <section class="wave">
+    <h2>Wave 2 · seven concurrent</h2>
+    <p class="why">All depend only on BENCH-01 and touch disjoint files. BENCH-09 is hand-authoring and the long pole; it may still be running when wave 3 starts, and nothing in wave 3 depends on it.</p>
+    <div class="row">
+      <div class="item"><div class="id">BENCH-02</div><div class="title">The run harness</div><div class="meta">deps: 01 · resumable matrix</div></div>
+      <div class="item"><div class="id">BENCH-03</div><div class="title">Citation integrity scorers</div><div class="meta">deps: 01 · highest value</div></div>
+      <div class="item"><div class="id">BENCH-04</div><div class="title">Accuracy and relevance</div><div class="meta">deps: 01</div></div>
+      <div class="item"><div class="id">BENCH-05</div><div class="title">Due weight, viewpoint coverage</div><div class="meta">deps: 01</div></div>
+      <div class="item"><div class="id">BENCH-06</div><div class="title">Calibration and refusal</div><div class="meta">deps: 01</div></div>
+      <div class="item"><div class="id">BENCH-07</div><div class="title">Source quality and syndication</div><div class="meta">deps: 01</div></div>
+      <div class="item"><div class="id">BENCH-09</div><div class="title">The seed task corpus</div><div class="meta">deps: 01 · long pole, hand work</div></div>
+    </div>
+  </section>
+
+  <section class="wave">
+    <h2>Wave 3</h2>
+    <p class="why">Reporting needs the harness and the scorers that exist. The self-eval needs the citation checks it is testing.</p>
+    <div class="row">
+      <div class="item"><div class="id">BENCH-08</div><div class="title">Reporting and comparison</div><div class="meta">deps: 02, scorers</div></div>
+      <div class="item"><div class="id">BENCH-10</div><div class="title">Self-eval of Dossier's own checking</div><div class="meta">deps: 01, 03 · only slice testing Dossier's own claim</div></div>
+    </div>
+  </section>
+
+  <div class="key">
+    <span><i style="background:var(--queued)"></i>queued</span>
+    <span><i style="background:var(--running)"></i>running</span>
+    <span><i style="background:var(--blocked)"></i>blocked</span>
+    <span><i style="background:var(--merged)"></i>merged</span>
+  </div>
+
+  <div class="note">
+    <b>No model in the scoring loop.</b> Every score is computed by code from a gold set fixed before the run.
+    A model judge is non-deterministic, costs money per task per backend per repetition, and is circular:
+    it uses the class of system under test to grade the system under test, so a failure mode shared by judge
+    and subject is invisible by construction. Any runner reaching for a model to score something has hit the
+    boundary of the design and must report that rather than route around it.
+  </div>
+</main>
