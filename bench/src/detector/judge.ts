@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { z } from 'zod';
 import { SUPPORT_LABELS, type JudgedVerdicts, type SupportLabel } from './schema.js';
 import type { LoadedSupportCase } from './corpus.js';
 
@@ -71,6 +72,19 @@ export interface JudgeOne {
 }
 
 /**
+ * What one judged answer has to be, before it is allowed to become a verdict.
+ *
+ * The caps are the same ones the corpus schema puts on a recorded verdict, so a
+ * model that answers with a page-long note cannot produce an evidence file the
+ * loader will then refuse.
+ */
+const JudgedAnswerSchema = z.object({
+  verdict: z.enum(SUPPORT_LABELS),
+  quote: z.string().max(1000).optional(),
+  note: z.string().max(600).optional(),
+});
+
+/**
  * Pull the verdict out of whatever the CLI printed.
  *
  * A CLI answers prose around its JSON as often as not, so the last balanced
@@ -104,17 +118,19 @@ export function parseJudgement(output: string): JudgeOne | { readonly error: str
       continue;
     }
     if (typeof raw !== 'object' || raw === null || !('verdict' in raw)) continue;
-    const verdict = (raw as { verdict: unknown }).verdict;
-    if (typeof verdict !== 'string') continue;
-    if (!(SUPPORT_LABELS as readonly string[]).includes(verdict)) {
-      return { error: `the model answered a verdict outside the five: ${verdict.slice(0, 60)}` };
+    // Model output is a trust boundary like any other, so it is Zod-parsed and
+    // never narrowed by hand (CP §1). The enum is what refuses a sixth verdict.
+    const parsed = JudgedAnswerSchema.safeParse(raw);
+    if (!parsed.success) {
+      const answered: unknown = raw.verdict;
+      const shown = typeof answered === 'string' ? answered.slice(0, 60) : 'something that is not a string';
+      return { error: `the model answered a verdict outside the five: ${shown}` };
     }
-    const quote = (raw as { quote?: unknown }).quote;
-    const note = (raw as { note?: unknown }).note;
+    const { verdict, quote, note } = parsed.data;
     return {
       verdict,
-      ...(typeof quote === 'string' && quote !== '' ? { quote: quote.slice(0, 1000) } : {}),
-      ...(typeof note === 'string' && note !== '' ? { note: note.slice(0, 600) } : {}),
+      ...(quote === undefined || quote === '' ? {} : { quote }),
+      ...(note === undefined || note === '' ? {} : { note }),
     };
   }
   return { error: 'the response carried no readable JSON object with a verdict' };
