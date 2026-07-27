@@ -166,6 +166,16 @@ The cause is structural rather than tunable, which is why it is reported rather 
 
 **The judged arm was run through a coding CLI, not the product's own utility model.** It spends a subscription already paid for rather than a metered balance, which is the routing rule the product itself follows and how BENCH-09 fail-checked 27 tasks for nothing. The number therefore measures a model of that class answering the product's own question, with the product's own prompt and page cap. The evidence file records which model answered and on what date.
 
+### Two defects the gate found in this slice's own code
+
+**A NUL byte, used as a map-key separator in `confusion.ts`.** It compiled, it passed eslint, and 117 tests passed over it. `npm run lint:source` caught it, which is the same class of defect as the v0.2.1 one that lint exists for. Replaced with a nested map, which removes the separator question rather than answering it.
+
+Worth flagging beyond this slice: **BENCH-08 hit the identical defect on the same day** (`0744b77`, "a NUL byte separated two grouping keys, caught by the source-hygiene lint"). Two independent runners producing a U+0000 separator in a composite map key, hours apart, is a pattern rather than a coincidence, and the source-hygiene lint is the only thing in the toolchain that sees it.
+
+**The judged answer was narrowed by hand rather than Zod-parsed.** Model output is a trust boundary and CP §1 is explicit about it. Now parsed through a Zod enum, which is also what refuses a sixth verdict.
+
 ### Verification
 
-`npm run gate` twice, plus the stdio smoke against `dist/index.js`. The wiring is proved by `cli.test.ts`, which spawns the real entry point over its real argv rather than importing a handler: a module with passing tests that nothing calls is a defect this repo has already shipped once.
+`npm run gate` twice on the rebased branch: 85 files, 1991 tests passing, 2 skipped. Plus the stdio smoke against `dist/index.js`: initialize, `tools/list` (37 tools), `research_plan`, `resources/list`, with stdout carrying only JSON-RPC.
+
+The wiring is proved by `cli.test.ts`, which spawns the real entry point over its real argv rather than importing a handler. A module with passing tests that nothing calls is a defect this repo has already shipped once, and an import-based test cannot tell the two apart.
