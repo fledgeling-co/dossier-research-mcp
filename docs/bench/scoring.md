@@ -2,7 +2,7 @@
 
 Five of the benchmark's scored dimensions, in `bench/src/score/`. Every function here is pure, synchronous, and takes a report's text plus a loaded task. Nothing reads a file, nothing calls a network, and nothing calls a model, because the rule governing the whole benchmark is that every score is computed by code from a gold set fixed before the run.
 
-The task format these read is [`task-format.md`](task-format.md). The design is [`docs/plan/benchmark.md`](../plan/benchmark.md).
+The task format these read is [`task-format.md`](task-format.md). The design is [`docs/plan/benchmark.md`](../plan/benchmark.md). The source-quality dimension, which grades the sources themselves rather than the report, is next door in [`source-quality.md`](source-quality.md).
 
 ## Accuracy
 

@@ -108,3 +108,43 @@ Reviewer: `gpt-5.6-sol` at `max` effort, read-only, grounded in the repository. 
 
 *If any of these dispositions are wrong, edit them inline here and re-run `/triage BENCH-07`.*
 
+## Plan — 2026-07-27
+
+Implementation plan: [`docs/plans/plan-BENCH-07.md`](../plans/plan-BENCH-07.md) (Plan size: Standard).
+
+## Progress — 2026-07-27
+
+**Implementation Complete (local branch, not merged, not pushed)**
+
+**Summary:** `bench/src/score/` gains the source-quality axis. It grades a report's cited sources with the product's own classifier, counts the independent registrable domains behind them with the product's own counter, and then detects the syndication that counting domains cannot see, by shingled hashing of fetched page text. Both counts are reported together and the collapsed one is never reported alone.
+
+**Branch:** `ai/bench-07` (local, based on `main` at `7fdd600`, **not rebased and not merged by instruction**; worktree `.worktrees/BENCH-07`).
+
+**Built by slice:**
+- `bench/src/score/syndication.ts`: the near-duplicate primitive. Tokenise, ten-word shingle, hash, compare by resemblance and by containment. Every threshold is an exported constant carrying its provenance, and the constant that will be objected to carries the objection and why it does not apply.
+- `bench/src/score/source-quality.ts`: the scorer. One filter for unusable citations, run before either count so both describe one population; `classifySource` and `profileEvidence` for the mix; `assessSupport` for the raw domain count; union-find over domains for the collapse; every page and domain it could not check named in the result.
+- `bench/src/score/wire-fixtures.ts`: the two fixture families, written as real news prose about one event because repeated filler has a degenerate shingle set and would pass a detector that does not work.
+- Tests: 60 across two files, traced to `SRCQ-01` through `SRCQ-23` in `docs/test-plan.md`.
+- Docs: `docs/bench/source-quality.md`, a pointer to it from `docs/bench/scoring.md`, the two `bench/` lines in `CLAUDE.md`, a CHANGELOG entry, and the correction to `docs/plan/benchmark.md` section 7.
+
+**Reachability:** BENCH-07 adds **no MCP surface and no user-facing capability**, so there is no UI hop to trace. Its exported surface is declared **producer-less by design**, and the reason is a finding rather than an omission: nothing in the repo currently persists fetched page text. The run harness stores the report path, the cost and the timing; `research_verify_claims` fetches page text and persists only whether the fetch succeeded. The durable citation snapshot this scorer wants belongs to the harness or to the citation-integrity item and is recorded in `docs/bench/source-quality.md` rather than half-built here. What is wired today: `syndication.ts` into `source-quality.ts` into the `bench/src/score/index.ts` barrel, each exercised by tests that run the real code, plus a real-Node run through the barrel outside the test transform.
+
+**Clause coverage:** every plan acceptance criterion is ticked and carries a named test, except the one that is a gate result rather than a code property. The threshold-provenance clause is satisfied by the comment and by the exported-constant test; the comment's own wording is prose and is not asserted by a test, which is stated rather than glossed.
+
+**Two defects found by exercising rather than reading**, both fixed here:
+- A page arriving past the page ceiling was reported as unchecked with the reason "no page text was supplied for this domain", which is false and sends whoever reads it to the harness instead of to this file's own bound. Each of the three reasons is now distinct.
+- Every clustering test had exactly one cluster, so a link filter that handed every link to every cluster would have passed all of them. A two-cluster fixture now distinguishes a correct attribution from a plausible wrong one. The implementation was correct; the check was not.
+
+**Implementation assumptions:**
+- The integration branch is **local `main`**, matching BENCH-01.
+- The spec, the plan, the AC rows and the design-of-record correction are committed **on the branch**, and the main working tree was restored to exactly the state the other live runners expect.
+- No task files are authored here beyond test fixtures.
+
+**Dropped or changed vs spec/plan:** nothing dropped. Two things added beyond the plan, both from the cross-family review: the containment rule's second threshold was already planned, but the two resource ceilings and the reporting of every case where they bite were not, and the rule mapping page clusters back to domain counts was implicit in the plan and is now stated in the code and tested.
+
+**Gates (actually run, on the final tree):**
+- `npm run gate` exit 0, **twice consecutively**: typecheck, lint, lint:source, lint:docs, test:all, build.
+- `npm pack --dry-run`: zero `bench/` and zero `dist/bench/` entries.
+- Real-Node out-of-transform run through the barrel: four printings of one wire story report 4 raw and 1 collapsed; four independent articles report 4 and 4.
+- stdio smoke against `dist/index.js`: initialize ok, `tools/list` returns 36 tools, `research_plan` answers with no credentials, zero non-JSON lines on stdout. A regression check, since this item adds no MCP surface.
+
