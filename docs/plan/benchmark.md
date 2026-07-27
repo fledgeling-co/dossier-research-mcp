@@ -39,7 +39,16 @@ Scoring: required-term coverage minus drift penalty. Crude, but it separates an 
 Four checks, all deterministic, in increasing strength:
 
 - **Resolvability.** The URL returns 2xx. Already implemented in `src/research/citations.ts`.
-- **Registry existence.** A DOI resolves in Crossref, an arXiv id in the arXiv API, a PMID in NCBI E-utilities, an ISBN in OpenLibrary, a CVE in the NVD. **This is programmatic hallucination detection**, and it is the sharpest instrument in the whole benchmark: a fabricated academic citation is the canonical failure of this product category, and it can be caught exactly, with no judgement at all.
+- **Registry existence.** A DOI, an arXiv id, a PMID, an ISBN, a CVE, each checked against the registry that owns it.
+
+  I wrote here that this was "programmatic hallucination detection ... caught exactly, with no judgement at all". **BENCH-03 probed all five registries live and that claim is wrong for three of them.** Corrected 27 July 2026 rather than quietly softened, because the overclaim is more instructive than the correction:
+
+  - **Crossref alone would call a genuine reference fabricated.** It is one DOI registration agency among several. The real DOI `10.5281/zenodo.3509134` is a Crossref 404 and a handle-directory 200. Absence now rests on the global handle directory, not on one agency.
+  - **OpenLibrary answers "found" for a fabricated ISBN**, since it really holds a record listing `9789999999991`. ISBN results are catalogue presence in both directions and prove nothing either way.
+  - **arXiv rate-limited every probe across seven minutes**, which makes `unchecked` its ordinary answer rather than its exceptional one.
+  - NCBI and NVD both return HTTP 200 for things that do not exist, so a status code is not an answer.
+
+  What survives is still worth having and is narrower than advertised: a citation whose identifier the owning registry positively denies is strong evidence of fabrication, and everything else is `unchecked`. The instrument is sharp in one direction only.
 - **Claim-token containment.** Extract the checkable tokens from the claim (numerals, percentages, proper nouns, years) and require them to appear in the fetched page text. This catches the common `not_addressed` failure, where a real page about the right topic simply does not contain the specific assertion, without asking a model whether it "supports" anything.
 - **Anchor honesty.** A cited URL with a fragment must contain that anchor.
 

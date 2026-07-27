@@ -134,7 +134,7 @@ export {
 } from './units.js';
 export type { CanonicalUnit, FoldedUnit, UnitMatch } from './units.js';
 export {
-  containment,
+  containment as shingleContainment,
   hashShingle,
   MAX_PAGE_CHARS,
   MIN_SHINGLES,
@@ -183,7 +183,15 @@ export {
 } from './identifiers.js';
 export type { ExtractedIdentifier, IdentifierKind } from './identifiers.js';
 
-export { TOKEN_CLASSES, anchorHonesty, checkableTokens, containment } from './containment.js';
+// Renamed at the barrel. `syndication.ts` also exports `containment`, over
+// shingle-hash sets rather than claim tokens, and two different measures
+// sharing one name in one barrel is how a caller silently gets the wrong one.
+export {
+  TOKEN_CLASSES,
+  anchorHonesty,
+  checkableTokens,
+  containment as tokenContainment,
+} from './containment.js';
 export type {
   AnchorResult,
   AnchorVerdict,
