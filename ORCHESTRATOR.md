@@ -49,7 +49,7 @@ BENCH-09 is hand-authoring work and is the long pole in wall-clock terms. It sta
 | ID | Title | Deps | Status | Branch | Outcome |
 |---|---|---|---|---|---|
 | BENCH-01 | Task format, gold-set schema and loader | none | **Merged** | `ai/bench-01` | 853 tests green; found 4 cross-brief defects |
-| BENCH-02 | The run harness | 01 | **Resumed** | | |
+| BENCH-02 | The run harness | 01 | **Merged** | `ai/bench-02` | 1072 tests; adoption split on evidence |
 | BENCH-03 | Citation integrity scorers | 01 | Paused | | |
 | BENCH-04 | Accuracy and relevance scorers | 01 | Paused | | |
 | BENCH-05 | Due weight, viewpoint coverage | 01 | **Resumed** | | |
@@ -126,3 +126,10 @@ Nothing was lost, but the cost was real: four worktrees held uncommitted source 
   It spent **$0**: every fail-check ran on free CLI backends, ~65 `claude -p` and 23 `codex exec`, and no paid backend was run against the corpus.
 
   Two categories are empty and were not padded: social-sentiment needs live X access to establish gold, and settled-with-fringe needs a documented fringe claim on a settled question, which means citing a source published to mislead.
+- **27 Jul, BENCH-02 merged** — 1072 tests green. It **tested promptfoo instead of adopting it on the report's word**, which is the whole reason to send a runner rather than act on research directly. Three of four claims held; `--resume` does not work: against a fully completed four-cell eval with nothing killed, it printed "skipping 4 previously completed cases" and then called the provider four more times, leaving eight rows on four coordinates. There is also no budget gate and no extension point where one could live, since a provider and an assertion are both called per cell after the batch has started.
+
+  So the adoption was split where the evidence splits it: promptfoo's scorer contract is adopted exactly, and the execution shell is built here, because the two missing pieces are the control loop. The dependency is not added.
+
+  The repetition-dedupe fix needed two further fixes to actually work, both found by an out-of-family Codex review rather than by the runner: the repeat index was appended to a space-joined canonical string, so `wideSpec: "foo"` with repeat 7 hashed identically to `wideSpec: "foo repeat:7"` with none, and `runner.ts` threaded it through a truthiness test where `NaN` is falsy. The review found eight defects in total, including one the runner's own fix had introduced, and **one of the runner's tests asserted the opposite of what it proved**.
+
+  Stale-task contradiction resolved: a stale task loads, is scored, and is counted stale. The rule now lives in one place with a dated amendment pointing at it rather than a silent edit.
