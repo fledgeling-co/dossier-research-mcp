@@ -90,3 +90,21 @@ An earlier attempt at near-duplicate merging in `src/research/corroborate.ts` wa
 - *Low, Operational.* The product already carries a crude same-story detector that compares the wording of short claims rather than pages. It stays exactly as it is. The two are different instruments answering different questions on different inputs, and the note beside the new one says so, because that is the confusion the brief predicts.
 - *Low, Operational.* The written explanation of what the measures mean is one file whose title lists the three measures already built. Rather than rewrite another item's title, this one gets its own written explanation beside it, which is also how the task format and the run harness are already documented.
 
+**Codex cross-family spec review — 2026-07-27**
+
+Reviewer: `gpt-5.6-sol` at `max` effort, read-only, grounded in the repository. Verdict as returned: **MATERIAL DEFECTS**, six findings. All six were accepted; none was rejected. Two of them changed what gets built rather than only what is written down.
+
+1. *Accepted, and it changed the design.* **The two counts had no defined common unit.** One is a count of publishers and the other is arrived at by comparing pages, and a publisher can contribute more than one page. Where a publisher ran both somebody else's story and its own, page-level and publisher-level answers differ, and both were consistent with the acceptance examples as written. The rule is now stated: two publishers merge when any page on one is the same story as any page on the other, publishers are what get counted, and the case where that understates independence is named in the result rather than left for a reader to discover. A worked example of exactly that case is now part of the acceptance.
+
+2. *Accepted, and it changed the scope statement.* **Nothing currently keeps the page text this needs.** The run harness records the report, what it cost and how long it took; the product's own claim-checking tool fetches page text and keeps only whether the fetch worked. So this measure cannot both refuse to fetch and be re-computable from a stored run, today. It is therefore declared **producer-less by design**: complete, tested and callable, with the missing durable record of a fetched page named as belonging to the harness or to the citation item. Recorded rather than half-built.
+
+3. *Accepted.* **The stated reason for the bar did not match the evidence in this repository.** The only recorded precedent for the number measures something different from what this measures, so the number transfers as a considered value and not as a calibration. The written reasoning now says exactly that, names all three anchors it rests on, labels the part that is this project's judgement, and the acceptance now checks the decision immediately below, exactly at, and immediately above every bar rather than only in the middle of the range.
+
+4. *Accepted.* **The governing design document still named the wrong existing function** as the one that counts publishers, which is the very error this item's brief was written to correct. Corrected in the design document itself, dated, with what the misnamed function actually does.
+
+5. *Accepted.* **The acceptance was two lines and the behaviour is twenty.** It now covers the mixed publisher, the unusable citation, the same page cited four ways, the chain of republication, the page nobody supplied, the page too short to judge, and the page nobody looked at, each with its own row.
+
+6. *Accepted.* **Caller-supplied text had no bound.** Comparison is pairwise, so an oversized input turns a cheap check into an expensive one. There are now stated ceilings on both the length of a page and the number of pages, and crossing either is **reported**: a page compared on part of itself, or never looked at, is never allowed to read as one that was fully examined.
+
+*If any of these dispositions are wrong, edit them inline here and re-run `/triage BENCH-07`.*
+
