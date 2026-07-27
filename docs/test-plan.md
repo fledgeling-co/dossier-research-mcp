@@ -603,8 +603,8 @@ The sharpest instrument in the benchmark, and the one whose wrong answer is most
 | **CITE-26** | A citation in the gap after a sentence terminator attaches to the preceding statement | unit: `matrix` | ✓ |
 | **CITE-27** | Citation accuracy is the elementwise product over the citation total, and is null when nothing is cited | unit: `matrix` | ✓ |
 | **CITE-28** | Citation thoroughness is that product over the support total across all pairs, and is null when the pair budget binds | unit: `matrix` | ✓ |
-| **CITE-29** | Source necessity is the source side of a minimum vertex cover, deterministic under the pinned ordering | unit: `matrix` | ✓ |
-| **CITE-30** | Source necessity reports that it is tie-dependent, and the canonical `uniquelyCitedSources` is reported beside it | unit: `matrix` | ✓ |
+| **CITE-29** | Source necessity is the size of a minimum vertex cover of the citation graph, which is canonical, and a report citing every source for every statement scores low on it | unit: `matrix` | ✓ |
+| **CITE-30** | `uniquelyCitedSources` is reported beside necessity and counts the sources a report relies on alone | unit: `matrix` | ✓ |
 | **CITE-31** | Uncited sources are the empty columns of the citation matrix | unit: `matrix` | ✓ |
 | **CITE-32** | Unsupported statements are counted over cited statements, and the divergence from the published definition is stated | unit: `matrix`, `citations` | ✓ |
 | **CITE-33** | The relevance-dependent dimensions are reported unavailable with a reason, never approximated | unit: `citations` | ✓ |

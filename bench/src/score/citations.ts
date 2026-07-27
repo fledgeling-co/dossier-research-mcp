@@ -377,7 +377,7 @@ export function scoreCitationIntegrity(
     'unsupported statements are counted over CITED statements. The published definition uses relevant statements, and deciding relevance needs a judgement this path deliberately does not have',
   );
   notes.push(
-    'source necessity depends on which of several equally small covers the construction lands on. It is deterministic and reproducible, and it is not canonical; uniquelyCitedSources cannot vary and is reported beside it',
+    'source necessity is the size of a minimum vertex cover of the citation graph over the number of sources listed, which is canonical. A low figure means the report attached far more sources than its statements needed, which is the over-citing this term exists to catch',
   );
 
   return {

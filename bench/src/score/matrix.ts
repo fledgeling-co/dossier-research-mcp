@@ -197,11 +197,20 @@ export interface MatrixMetrics {
   readonly citedStatements: number;
   readonly unsupportedStatements: number;
   readonly unsupportedStatementRate: number | null;
+  /**
+   * The size of a minimum vertex cover of the citation graph, which is the
+   * quantity the published necessity term is built on. Canonical: no tie-break
+   * can move it.
+   */
   readonly necessarySources: number;
   readonly sourceNecessity: number | null;
-  /** Always true, and stated on the result rather than buried in a doc. */
-  readonly sourceNecessityTieDependent: true;
-  /** Canonical, order-independent, and a lower bound on any necessary set. */
+  /**
+   * Sources that are the only citation on at least one statement.
+   *
+   * Reported beside necessity because it answers a plainer question with no
+   * appeal to a published formula: how many of these sources is the report
+   * relying on alone. Also canonical.
+   */
   readonly uniquelyCitedSources: number;
   readonly budget: PairBudget;
 }
@@ -244,48 +253,45 @@ function maximumMatching(
 }
 
 /**
- * The source side of a minimum vertex cover, by Konig's construction.
+ * The size of a minimum vertex cover of the bipartite citation graph.
  *
- * A "necessary" source is one you cannot drop without leaving some statement
- * with nothing attached to it. DeepTRACE computes that as a minimum vertex
- * cover of the bipartite citation graph, which by Konig's theorem has the size
- * of a maximum matching and can be read off one.
+ * This is DeepTRACE's necessity term, and getting to it took one wrong turn
+ * worth recording, because the wrong version is the version a careful reader
+ * would write first.
  *
- * **The number depends on which minimum cover you land on, and this says so.**
- * A minimum cover is not unique, and two covers of equal size can have
- * different source sides: over statements {s1, s2} and sources {A, B} with
- * edges s1-A, s2-A, s2-B, both {A, s2} and {A, B} are minimum covers and their
- * source sides are one and two. The construction here is deterministic given
- * the pinned ordering, so it reproduces; it is not canonical, so a comparison
- * between two backends must not rest on it alone. `uniquelyCitedSources` is
- * reported beside it for exactly that reason: it cannot vary.
+ * The published description is terse: necessary over listed sources, "via
+ * minimum vertex cover over the bipartite (statement, source) graph using
+ * Hopcroft-Karp". The obvious reading is to construct an actual cover by
+ * Konig's theorem and count its source-side vertices. That reading is wrong,
+ * and a two-statement example kills it: over statements {s1, s2} and sources
+ * {A, B} with edges s1-A, s2-A and s2-B, every statement is matched, so the
+ * alternating-path set is empty and Konig's cover is {s1, s2}, whose source
+ * side is **zero**. It would report that no source is necessary in a graph
+ * where dropping both plainly breaks both statements, and it would do it
+ * whenever there are at least as many sources as statements, which is most
+ * reports. The source side of a cover is also not unique, so the number would
+ * have depended on a tie-break.
+ *
+ * The quantity the paper actually names is the cover's **size**, which by
+ * Konig's theorem equals the size of a maximum matching, which is the only
+ * reason naming Hopcroft-Karp makes sense at all: Hopcroft-Karp computes a
+ * maximum matching and nothing else. That quantity is canonical, so no
+ * tie-break can move it, and it behaves the way the dimension is described.
+ * Ten statements each citing all hundred sources gives a matching of ten and a
+ * necessity of 0.10, which is the over-citing this term exists to catch; ten
+ * statements citing one source each gives ten over ten, which is 1.00.
+ *
+ * `maximumMatching` above is Kuhn's rather than Hopcroft-Karp. It finds a
+ * matching of the same maximum size and is merely slower, on a graph capped at
+ * a few hundred a side where the difference is unmeasurable, and the size is
+ * all that is read from it.
  */
-function necessarySourceCount(
+function minimumVertexCoverSize(
   adjacency: readonly (readonly number[])[],
   rightCount: number,
 ): number {
-  const { matchLeft, matchRight } = maximumMatching(adjacency, rightCount);
-  const leftSeen = new Array<boolean>(adjacency.length).fill(false);
-  const rightSeen = new Array<boolean>(rightCount).fill(false);
-
-  const walk = (left: number): void => {
-    if (leftSeen[left] === true) return;
-    leftSeen[left] = true;
-    for (const right of adjacency[left] ?? []) {
-      if (right === matchLeft[left]) continue;
-      if (rightSeen[right] === true) continue;
-      rightSeen[right] = true;
-      const held = matchRight[right] ?? -1;
-      if (held !== -1) walk(held);
-    }
-  };
-
-  for (let left = 0; left < adjacency.length; left += 1) {
-    if ((matchLeft[left] ?? -1) === -1) walk(left);
-  }
-  // The cover is (unreached left vertices) union (reached right vertices); the
-  // source side is the second half.
-  return rightSeen.filter(Boolean).length;
+  const { matchLeft } = maximumMatching(adjacency, rightCount);
+  return matchLeft.filter((right) => right !== -1).length;
 }
 
 /** Compute every matrix-derived dimension from the two matrices. */
@@ -337,7 +343,7 @@ export function matrixMetrics(input: MatrixInput): MatrixMetrics {
 
   const uniquelyCitedSources = soleCitation.filter(Boolean).length;
   const uncitedSources = columnCited.filter((c) => !c).length;
-  const necessarySources = necessarySourceCount(adjacency, sources.length);
+  const necessarySources = minimumVertexCoverSize(adjacency, sources.length);
 
   return {
     citationEdges,
@@ -356,7 +362,6 @@ export function matrixMetrics(input: MatrixInput): MatrixMetrics {
     unsupportedStatementRate: citedStatements === 0 ? null : unsupportedStatements / citedStatements,
     necessarySources,
     sourceNecessity: sources.length === 0 ? null : necessarySources / sources.length,
-    sourceNecessityTieDependent: true,
     uniquelyCitedSources,
     budget,
   };
