@@ -288,6 +288,53 @@ describe('SRCQ-13 a domain carrying both the wire and its own original piece', (
   });
 });
 
+describe('SRCQ-22 two separate stories make two separate clusters', () => {
+  /**
+   * The check that distinguishes a correct link attribution from a plausible
+   * wrong one. Every other clustering test here has exactly one cluster, so a
+   * filter that handed every link to every cluster would pass all of them.
+   */
+  const pages = [
+    WIRE_PRINTINGS[0]!,
+    WIRE_PRINTINGS[1]!,
+    { url: 'https://one.other-story.example/piece', text: INDEPENDENT_ARTICLES[0]!.text },
+    { url: 'https://two.second-story.example/piece', text: INDEPENDENT_ARTICLES[0]!.text },
+  ];
+  const result = scored(urlsOf(pages), pages);
+
+  it('collapses four domains to two, not to one', () => {
+    expect(result.rawIndependentDomains).toBe(4);
+    expect(result.collapsedIndependentDomains).toBe(2);
+    expect(result.syndicationClusters).toHaveLength(2);
+  });
+
+  it('gives each cluster only its own link, never the other cluster’s', () => {
+    for (const cluster of result.syndicationClusters) {
+      expect(cluster.domains).toHaveLength(2);
+      expect(cluster.links).toHaveLength(1);
+      const link = cluster.links[0]!;
+      expect(cluster.urls).toContain(link.a);
+      expect(cluster.urls).toContain(link.b);
+    }
+    const clusterA = result.syndicationClusters.find((c) => c.domains.includes('example.com'))!;
+    expect(clusterA.domains).toEqual(['example.com', 'example.org']);
+    expect(clusterA.links[0]!.a).toContain('example.com');
+  });
+});
+
+describe('SRCQ-23 a page whose own address is not a web address takes no part', () => {
+  it('ignores it rather than letting it merge two cited domains', () => {
+    const pages = [
+      WIRE_PRINTINGS[0]!,
+      { url: 'unknown', text: WIRE_PRINTINGS[1]!.text },
+    ];
+    const result = scored([WIRE_PRINTINGS[0]!.url, WIRE_PRINTINGS[1]!.url], pages);
+    expect(result.comparedPages).toBe(1);
+    expect(result.collapsedIndependentDomains).toBe(2);
+    expect(result.notes.join(' ')).toContain('1 supplied page(s) were on a domain the report did not cite');
+  });
+});
+
 describe('SRCQ-14 two pages on one domain never form a cluster', () => {
   it('does not report a single-domain cluster for two copies on the same site', () => {
     const pages = [

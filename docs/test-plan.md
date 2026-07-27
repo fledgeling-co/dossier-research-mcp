@@ -551,6 +551,8 @@ The two failure modes here are silent. A gold fact missed on number formatting r
 | **SRCQ-19** | Page text past the character cap is compared on a prefix and the truncation is reported, never silent | unit: `syndication`, `source-quality` | ✓ |
 | **SRCQ-20** | Pages past the page ceiling are reported unexamined, and their domains are named unchecked for that reason rather than for a missing page | unit: `source-quality` | ✓ |
 | **SRCQ-21** | Neither module reaches a filesystem or a network, and the same input scores identically twice | unit: `syndication`, `source-quality` | ✓ |
+| **SRCQ-22** | Two separate stories make two separate clusters, and each cluster carries only its own linking pair | unit: `source-quality` | ✓ |
+| **SRCQ-23** | A supplied page whose own address is not a web address takes no part and cannot merge two cited domains | unit: `source-quality` | ✓ |
 
 ### The paid project
 
