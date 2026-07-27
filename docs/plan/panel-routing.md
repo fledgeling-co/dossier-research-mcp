@@ -33,8 +33,14 @@ An API backend joins when a key exists **and** the question profile calls for wh
 |---|---|---|
 | **Gemini** | The question is broad, multi-part, or high stakes. Default yes for anything deep. | $1-7 a run, the dearest of the four. |
 | **Perplexity** | A date window, a domain allow-list, or an enumeration ("every", "all", "list the N"). Default yes when cheap and plausible. | Returns prose where a table was asked for. |
-| **xAI** | The question turns on what people are publicly saying, or names X. | Fast and broad rather than careful; wrong instrument for reading legislation. |
-| **OpenAI** | Primary literature, or a domain filter above twenty sites. | Dearest per correct answer on the one benchmark we have. |
+| **xAI** | Social, X, **or simply being cheap** (see below). | Fast and broad rather than careful; wrong instrument for reading legislation, and the legal guard still keeps it from being the only member there. |
+| **OpenAI** | Primary literature, a technical question, or a domain filter above twenty sites. | Dearest per correct answer on the one benchmark we have, so it still needs a reason. |
+
+### Retuned on one measurement, 27 July 2026
+
+A seven-backend panel returned **133 sources across 30 registrable domains at 4% overlap**. The backends were reading substantially different material rather than duplicating each other, which is the opposite of what the original tight rules assumed. On that evidence a cheap backend now joins on cost plus demonstrated coverage, without needing a profile signal.
+
+This rests on a single observation and says so. It was acted on because the effect was large and one-directional: at xAI's price, excluding it was the expensive choice, and the cost of being wrong is roughly a dollar. The benchmark in `benchmark.md` is what would turn this into something better than one good sample. Price still gates: OpenAI at $9 a run still needs a reason, or the cost band stops meaning anything and the panel becomes every configured backend wearing a justification.
 
 Gemini and Perplexity lean **towards** inclusion when a key exists, per the owner's judgement: Gemini because it is the most comprehensive backend available, Perplexity because at roughly $0.29 a measured run it is cheap enough that leaving it out rarely saves anything worth having.
 

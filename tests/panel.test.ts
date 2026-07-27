@@ -7,8 +7,8 @@ import type { CostBand } from '../src/gemini/cost.js';
 import type { CreateRunArgs, DeepResearchClient } from '../src/gemini/client.js';
 import type { InteractionSnapshot } from '../src/gemini/types.js';
 import { normaliseModelName } from '../src/local/cli.js';
-import type { ProbedModel } from '../src/local/model-cache.js';
-import { assemblePanelAmong, ProviderRegistry, sumBands } from '../src/providers/registry.js';
+import { writeModelCache, type ProbedModel } from '../src/local/model-cache.js';
+import { assemblePanelAmong, probedModelsFor, ProviderRegistry, sumBands } from '../src/providers/registry.js';
 import type {
   Capabilities,
   CredentialStatus,
@@ -200,16 +200,33 @@ describe('panel assembly', () => {
     expect(panel.rejected.find((r) => r.id === 'local-codex')?.why).toMatch(/sign/i);
   });
 
-  it('PANEL-03: a paid backend joins only when the question calls for it', () => {
-    // xAI is the cheapest configured backend and stays off a question with no
-    // social signal. Cost is not what gets a backend onto a panel.
+  it('PANEL-03: a paid backend joins on its profile, or on measured coverage when cheap', () => {
+    // This used to assert that cost alone never puts a backend on a panel. One
+    // real seven-backend run then returned 133 sources across 30 registrable
+    // domains at 4% overlap, which says the backends read different material
+    // rather than repeating each other. At xAI's price, excluding it was the
+    // expensive choice, and the owner retuned on that observation.
+    //
+    // The profile still supplies the *reason*, and the reason is still printed.
+    // What changed is that "cheap and demonstrably additive" is now one of the
+    // reasons a backend can carry.
     const quiet = panelFor('Who leads this market?');
-    expect(ids(quiet.paid)).not.toContain('xai');
-    expect(quiet.rejected.find((r) => r.id === 'xai')?.why).toMatch(/nothing in this question calls for it/);
+    expect(ids(quiet.paid)).toContain('xai');
+    expect(quiet.paid.find((m) => m.provider.id === 'xai')?.reason).toMatch(/4%|different material/);
 
     const social = panelFor('What are people saying on Reddit about this launch?');
     expect(ids(social.paid)).toContain('xai');
+    // A question with the signal still gets the sharper reason, not the fallback.
     expect(social.paid.find((m) => m.provider.id === 'xai')?.reason).toMatch(/publicly saying/);
+  });
+
+  it('PANEL-03b: price still decides, so the panel is not simply everything', () => {
+    // The widening applies to cheap backends. If cost stopped mattering the
+    // cost band would stop meaning anything and the panel would be a list of
+    // every configured backend wearing a justification.
+    const quiet = panelFor('Who leads this market?');
+    expect(ids(quiet.paid)).not.toContain('openai');
+    expect(quiet.rejected.find((r) => r.id === 'openai')?.why).toMatch(/nothing in this question calls for it/);
   });
 
   it('PANEL-04: additive signals bring in the backend each one implies', () => {
@@ -406,6 +423,23 @@ describe('panel assembly', () => {
 
   it('PANEL-26: a single-CLI lane is not warned about, because it cannot duplicate anything', () => {
     expect(panelFor('Who leads this market?', {}, [cli]).notes.join(' ')).not.toMatch(/may hold the same model/);
+  });
+
+  it('PANEL-25: the cache on disk reaches the panel keyed by provider id', async () => {
+    // The join between a cache keyed by CLI id and a panel keyed by provider
+    // id. An assembled panel cannot check this: a wrong prefix and a wrong
+    // directory both look exactly like a machine nobody has probed.
+    const dir = await mkdtemp(join(tmpdir(), 'drmcp-models-'));
+    try {
+      await writeModelCache(dir, new Map([['cursor', 'Grok 4.5']]), 1_700_000_000_000);
+      const models = probedModelsFor(dir);
+      expect([...models.keys()]).toEqual(['local-cursor']);
+      expect(models.get('local-cursor')?.model).toBe('Grok 4.5');
+      // And a store directory with no cache in it is "never probed", not a throw.
+      expect(probedModelsFor(join(dir, 'empty')).size).toBe(0);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   it('PANEL-27: a capability is never inherited from a probed model', () => {

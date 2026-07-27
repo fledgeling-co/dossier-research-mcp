@@ -8,6 +8,13 @@ This project follows [semantic versioning](https://semver.org/). Until 1.0 the m
 
 ## [Unreleased]
 
+### Changed
+
+- **A cheap backend now joins a panel on measured coverage, not only on the question profile.** A real seven-backend run returned 133 sources across 30 registrable domains at 4% overlap, so the backends were reading substantially different material rather than repeating each other. The original rules assumed the opposite and kept backends out unless the question specifically called for them. At xAI's price, exclusion was the expensive choice.
+
+  This rests on one observation and is recorded as resting on one. It was acted on because the effect was large, one-directional, and cheap to be wrong about. Price still gates the lane: a $9 backend still needs a reason, or the cost band stops meaning anything and the panel becomes every configured backend wearing a justification. OpenAI additionally joins technical questions, where its reading of issue trackers and changelogs differs from the others.
+
+
 ### Fixed
 
 - **The cross-backend merge reported zero agreement whatever the backends actually agreed on.** Claims were matched by wording: lowercased, punctuation stripped, first 120 characters compared. Five backends never phrase a conclusion identically, so the count was structurally always zero, and the zero was then rendered as "No claim was made by more than one backend. That is itself a finding: these reports do not overlap." That is a confident negative produced by a test with no power to find a positive, which is the failure this whole product argues against, in its own output. Found by an owner reading a real panel result where four of five backends had plainly reached the same four conclusions.
@@ -16,8 +23,6 @@ This project follows [semantic versioning](https://semver.org/). Until 1.0 the m
 
   It is reported as a candidate list, never a verdict, and always with the overlap score and the shared terms visible so a reader can reject a pairing. Raising it to an assertion would trade a false negative for a false positive, and an overstated convergence is the worse of the two: it is the corroboration trap reached by arithmetic instead of by credulity. The wording-match count survives alongside it, renamed to say what it measures.
 
-
-### Fixed
 
 - **The panel's free lane could seat two CLIs serving the same model and report them as two independent backends.** The lane's whole justification is that different models drive different searches and therefore read different parts of the web; that is why running four subscriptions beats running one. Two CLIs on one model are one perspective, so the panel bought one and reported two, and the automatic merge then flagged an overlap the panel had created itself. The corroboration trap, living inside the lane built to prevent it.
 

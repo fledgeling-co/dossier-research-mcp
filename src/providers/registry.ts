@@ -80,18 +80,6 @@ export class ProviderRegistry {
     this.storeDir = config.storeDir;
   }
 
-  /**
-   * The probed model behind each CLI backend, keyed by provider id.
-   *
-   * Empty on a machine that has never opted into the probe, which is the point:
-   * the free lane keeps every member when nothing is known, and only dedupes on
-   * an answer a CLI actually gave.
-   */
-  private probedModels(): ReadonlyMap<ProviderId, ProbedModel> {
-    const byProvider = new Map<ProviderId, ProbedModel>();
-    for (const [cli, entry] of readModelCache(this.storeDir)) byProvider.set(`local-${cli}`, entry);
-    return byProvider;
-  }
 
   list(): readonly ResearchProvider[] {
     return this.all;
@@ -169,9 +157,27 @@ export class ProviderRegistry {
     return assemblePanelAmong(configured, {
       ...need,
       allowList: this.allowListInForce,
-      cliModels: this.probedModels(),
+      cliModels: probedModelsFor(this.storeDir),
     });
   }
+}
+
+/**
+ * The probed model behind each CLI backend, keyed by **provider** id.
+ *
+ * The cache is keyed by CLI id and the panel is keyed by provider id, and this
+ * one line is the whole join between them. Exported so a test can pin it: an
+ * assembled panel cannot verify the mapping, because a wrong prefix or a wrong
+ * directory both look identical from there, like a machine nobody has probed.
+ *
+ * Empty on a machine that has never opted into the probe, which is the point.
+ * The free lane keeps every member when nothing is known, and only ever dedupes
+ * on an answer a CLI actually gave.
+ */
+export function probedModelsFor(storeDir: string): ReadonlyMap<ProviderId, ProbedModel> {
+  const byProvider = new Map<ProviderId, ProbedModel>();
+  for (const [cli, entry] of readModelCache(storeDir)) byProvider.set(`local-${cli}`, entry);
+  return byProvider;
 }
 
 /**
@@ -706,11 +712,27 @@ function paidJoinReason(p: ResearchProvider, need: PanelNeed, cost: CostBand): s
       if (has('social')) {
         return `${p.label}: the question turns on what people are publicly saying, and nothing else reaches X.`;
       }
+      // Measured, not assumed. A seven-backend panel returned 133 sources
+      // across 30 registrable domains at 4% overlap, so the backends were
+      // reading substantially different material rather than duplicating each
+      // other. At this price that makes exclusion the expensive choice.
+      if (cost.highUsd <= PANEL_CHEAP_ENOUGH_USD) {
+        return (
+          `${p.label}: at a worst case of $${cost.highUsd.toFixed(2)}, and measured panel overlap of about 4%, ` +
+          'it reads different material rather than repeating the others.'
+        );
+      }
       return null;
     }
     case 'openai': {
       if (has('primary-literature')) {
         return `${p.label}: the question asks for primary literature.`;
+      }
+      // `technical` is an archetype rather than a lane-2 signal, so it is read
+      // from the classifier directly rather than adding a second name for the
+      // same thing.
+      if (need.profile.archetype === 'technical') {
+        return `${p.label}: a technical question, where its reading of issue trackers and changelogs differs from the others.`;
       }
       if (domains > LARGE_DOMAIN_FILTER) {
         return `${p.label}: a domain filter of ${String(domains)} sites, above what the others accept.`;
