@@ -4,7 +4,7 @@ One YAML file per task under `bench/tasks/`. This page is the reference every ta
 
 The rule that shapes everything here: **no model in the scoring loop.** Every score is computed by code from a gold set fixed before the run. A task is admissible only if its correct answer can be checked by a string, a number, a set membership or an HTTP request. So a field exists here when some measure cannot be decided without it, and the reason is written down next to it.
 
-The design this implements is [`docs/plan/benchmark.md`](../plan/benchmark.md).
+The design this implements is [`docs/plan/benchmark.md`](../plan/benchmark.md). What the scorers do with what you write is [`scoring.md`](scoring.md), which is worth reading before your first file: it explains why an answer wants a `label`, and what a task cannot measure without one.
 
 ## How loading behaves
 

@@ -96,6 +96,7 @@ docs/                   the documentation set; README is the approachable entry 
   development.md        toolchain and the two test suites
   test-plan.md          the AC-traceability matrix
   bench/task-format.md  the benchmark task format, for whoever hand-writes a gold set
+  bench/scoring.md      what the scorers measure, and what each number cannot mean
   releasing.md          the tag-triggered publish flow
   deep-research-api-vs-agent.md   which Gemini surface fits which job
   providers/            per-provider guides (Gemini, Perplexity, OpenAI, xAI,
@@ -120,6 +121,10 @@ bench/                  the benchmark. NOT compiled into dist/ and NOT published
   src/tasks/corpus.ts   the pure synchronous loader. Imports no filesystem, on
                         purpose, so a scorer is testable without one
   src/tasks/files.ts    the only part that reads a disk
+  src/score/confidence.ts  the confidence markers a report states, and what each governs
+  src/score/calibration.ts pairs a stated confidence with the outcome; Brier + reliability
+  src/score/refusal.ts     the two families where the right answer is not an answer
+  src/score/recency.ts     the durability axis the design assumed existed and did not
 ```
 
 **Boundary rule:** `gemini/client.ts` and `gemini/agents.ts` are the only files that touch the Gemini SDK. Everything downstream takes a `DeepResearchClient` by injection, which is what makes the whole runner/tool layer testable without a network or a key.
