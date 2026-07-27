@@ -59,13 +59,30 @@ describe('SELF-16: the counts aggregate accuracy hides', () => {
     expect(support.headline.liveButUnsoundShare ?? 0).toBeGreaterThan(0.5);
   });
 
-  it('pulls `not_addressed` scored as `supports` out of the judged matrix by name', () => {
-    // The number itself depends on whether a judged pass has been run; the
-    // contract is that it is a count of that one cell and never a rate.
-    expect(Number.isInteger(support.headline.notAddressedScoredSupports)).toBe(true);
-    expect(support.headline.notAddressedScoredSupports).toBeGreaterThanOrEqual(0);
-    expect(support.headline.contradictsScoredSupports).toBeGreaterThanOrEqual(0);
-    expect(support.headline.unreadableScoredSupports).toBeGreaterThanOrEqual(0);
+  it('pulls the bad-citation-waved-through cells out by name, for every arm', () => {
+    const arms = support.headline.falseReassurance.map((f) => f.arm);
+    expect(arms).toEqual(support.arms.map((a) => a.arm));
+    for (const f of support.headline.falseReassurance) {
+      // Counts of matrix cells, never rates: a share would need a denominator
+      // that means something, and the number a reader wants here is how many.
+      expect(Number.isInteger(f.total), f.arm).toBe(true);
+      expect(f.total, f.arm).toBe(
+        f.notAddressedScoredSupports +
+          f.contradictsScoredSupports +
+          f.partiallyScoredSupports +
+          f.unreadableScoredSupports,
+      );
+    }
+  });
+
+  it('the degenerate arm waves through every bad citation, which is the yardstick', () => {
+    const degenerate = support.headline.falseReassurance.find((f) => f.arm === 'always-supports');
+    const badCitations = corpus.support.filter((c) => c.label !== 'supports').length;
+    expect(degenerate?.total).toBe(badCitations);
+  });
+
+  it('the link check waves nothing through, because it never says `supports` at all', () => {
+    expect(support.headline.falseReassurance.find((f) => f.arm === 'link-check')?.total).toBe(0);
   });
 });
 

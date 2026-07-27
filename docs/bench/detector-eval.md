@@ -129,6 +129,69 @@ The judged pass defaults to a coding CLI, which spends a subscription already pa
 
 **The caveat that rides on that number:** the CLI is not the utility model the product would call. The result measures a model of that class answering the product's own question, with the product's own prompt and the product's own page cap, and the evidence file records which model answered and on what date. A re-run against a different model is a new evidence file, never an edit to the old one.
 
+## What it found, 27 July 2026
+
+Over 30 support cases and 18 registry cases. The judged arm was run through the Claude Code CLI on the date shown; re-running it against a different model produces a new evidence file, not an edit to this one.
+
+### Five-class
+
+| Arm | Coverage | Accuracy (answered) | Accuracy (all) | Macro-F1 (vocabulary) | Macro-F1 (expressible) |
+|---|---|---|---|---|---|
+| containment | 86.7% | 30.8% | 26.7% | 0.167 | 0.440 |
+| judged | 100% | **80.0%** | 80.0% | 0.804 | 0.804 |
+| link-check | 3.3% | 100% | 3.3% | 0.080 | 1.000 |
+| always-supports | 100% | 23.3% | 23.3% | 0.076 | 0.378 |
+
+### False reassurance: a bad citation waved through as `supports`
+
+| Arm | `not_addressed` | `contradicts` | `partially_supports` | `unreadable` | total |
+|---|---|---|---|---|---|
+| containment | 1 | 4 | 6 | 0 | **11** |
+| judged | 0 | 0 | 0 | 0 | **0** |
+| link-check | 0 | 0 | 0 | 0 | 0 |
+| always-supports | 6 | 7 | 6 | 4 | 23 |
+
+**This is the result the slice exists to produce.** Containment waved through 11 of the 23 citations a reader would call bad, including every case where the claim was stronger than the page supported and four of the seven the page contradicts outright.
+
+The cause is structural rather than tunable, which is why it is reported rather than fixed. A contradiction and an overstatement both use the page's own numbers and names: `semver-prerelease-higher-precedence` asserts the exact opposite of a sentence on the page and every token it carries is on that page, so a check asking whether the tokens appear has nothing to look at. Turning the knobs would not close that; it is what containment is.
+
+### Containment against the judged mode, paired
+
+| | count |
+|---|---|
+| both right | 5 |
+| only containment right | 3 |
+| only the judged mode right | **19** |
+| both wrong | 3 |
+| containment declined where the judged mode answered | 4 |
+| the reverse | 0 |
+
+### Soundness, the fair comparison
+
+| Arm | Coverage | Accuracy (all) | Macro-F1 |
+|---|---|---|---|
+| containment | 88.5% | 38.5% | 0.404 |
+| judged | 100% | **96.2%** | 0.949 |
+| link-check-as-read | 100% | 26.9% | 0.212 |
+| always-supports | 100% | 26.9% | 0.212 |
+
+Containment does better here, as expected, since the binary question is inside what it is for. It still recovers only 31.6% of the unsound citations against the judged mode's 100%.
+
+Note that link-checking-as-read scores **identically to answering `supports` to everything**. On this corpus, treating a resolving link as a sound citation is exactly as informative as not checking at all, and that is arithmetic rather than rhetoric.
+
+### What link checking cannot see
+
+- **22 of 30** cited pages resolve with HTTP 200 and do not support the claim attached to them, which is 75.9% of the resolving ones.
+- Three of the four walls in the corpus are served with **HTTP 200**: a login wall, a script wall and a cookie-consent interstitial. No status code can see any of them. The fourth is a publisher 403, which the link check reads correctly as `unreadable`, and that one case is its whole coverage.
+
+### The registry family
+
+100% on all four verdicts, 18 of 18. Including all six cases whose correct answer is `unchecked`: a 429, a 500, a thrown timeout, an unparseable 200, a handle 404 whose body is not the directory's own not-found code, and an arXiv feed naming a different paper. **Zero were scored `absent`.**
+
+### What this does not establish
+
+The judged mode beating containment by this much on 30 cases is a shape, not a significant difference. The corpus is two orders of magnitude below where the published power analysis puts a discriminating eval, and one author wrote every label. What it does establish is a **blindness**, which needs far less evidence than a ranking: a detector that answers `supports` to a page contradicting the claim in as many words is not failing at the margin.
+
 ## What none of these numbers can mean
 
 - A containment `supports` does not mean the page supports the claim. It means the page contains the numbers, years, identifiers and names the claim asserts. **Containment is not entailment.**

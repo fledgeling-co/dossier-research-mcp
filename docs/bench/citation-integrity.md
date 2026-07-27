@@ -100,6 +100,8 @@ Matching goes through the primitives `bench/src/verify/match.ts` already ships, 
 
 Proper-noun strictness is the main source of `unsupported` and is a known weakness rather than a tuned parameter: a page can support a claim about a company while calling it "the company" throughout. Measuring that weakness rather than hand-tuning it away is BENCH-10's job.
 
+**It has now been measured, and the weakness is larger than this section implies.** Against the labelled corpus in [`detector-eval.md`](detector-eval.md), containment answered `supports` for 11 of the 23 citations that a reader would call bad, including every one of the six whose claim was stronger than its page and four of the seven the page contradicts outright. The reason is structural rather than tunable: a contradiction and a stronger claim both use the page's own numbers and names, so a check that asks whether those tokens appear has nothing to see. Free, exact and repeatable is still the right default for a regression suite, and the number is what a reader needs beside it.
+
 ## Anchor honesty
 
 Scoped hard: decoded HTML `id` and `name` anchors, on a complete readable HTML response. A text fragment, a PDF page number, a body that is not HTML, a body that was cut short and a page that did not resolve are `not-applicable` or `unchecked`. Treating every non-match as dishonest would manufacture accusations at scale out of fragment forms this check was never able to read.

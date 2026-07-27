@@ -54,8 +54,17 @@ const REGISTRY_CAPABILITY: ArmCapability<RegistryLabel> = {
   why: 'the lookup loop reaches all four, and `unchecked` is one of them rather than an abstention: a registry that could not be reached has given a real answer about what is known, which is nothing.',
 };
 
-/** The numbers a reader is actually after, named rather than left in the matrix. */
-export interface HeadlineCounts {
+/**
+ * How often one arm called a bad citation a good one.
+ *
+ * Per arm rather than for whichever one looked most interesting. The failure the
+ * brief names is a property of a detector, not of the corpus, and reporting it
+ * for one arm would let another commit it invisibly: on this corpus the judged
+ * mode makes it zero times and containment makes it repeatedly, which is the
+ * comparison and would be lost if only one number were pulled out.
+ */
+export interface FalseReassurance {
+  readonly arm: string;
   /**
    * The failure the brief names. A page about the right topic that does not
    * contain the claim, scored as though it did.
@@ -63,8 +72,17 @@ export interface HeadlineCounts {
   readonly notAddressedScoredSupports: number;
   /** A contradiction scored as support, which is the same failure pointing the other way. */
   readonly contradictsScoredSupports: number;
+  /** A claim stronger than the page supports, waved through. */
+  readonly partiallyScoredSupports: number;
   /** An unusable page scored as though it said something. */
   readonly unreadableScoredSupports: number;
+  /** Every one of the above, which is the number a reader should be alarmed by. */
+  readonly total: number;
+}
+
+/** The numbers a reader is actually after, named rather than left in the matrix. */
+export interface HeadlineCounts {
+  readonly falseReassurance: readonly FalseReassurance[];
   /**
    * Citations whose URL resolves perfectly and whose page does not support the
    * claim attached to it. What link checking cannot see, as a count.
@@ -156,16 +174,29 @@ export function scoreSupport(corpus: DetectorCorpus): SupportReport {
     }),
   ];
 
-  const containmentArm = arms[0];
-  const judgedArm = arms[1];
-  if (containmentArm === undefined || judgedArm === undefined) {
-    throw new Error('the support arms were not assembled');
-  }
-
   const liveButUnsound = cases.filter(
     (c) => c.page.verdict === 'live' && c.label !== 'supports',
   ).length;
   const liveCases = cases.filter((c) => c.page.verdict === 'live').length;
+
+  const falseReassurance: FalseReassurance[] = arms.map((arm) => {
+    const notAddressedScoredSupports = cell(arm.matrix, 'not_addressed', 'supports');
+    const contradictsScoredSupports = cell(arm.matrix, 'contradicts', 'supports');
+    const partiallyScoredSupports = cell(arm.matrix, 'partially_supports', 'supports');
+    const unreadableScoredSupports = cell(arm.matrix, 'unreadable', 'supports');
+    return {
+      arm: arm.arm,
+      notAddressedScoredSupports,
+      contradictsScoredSupports,
+      partiallyScoredSupports,
+      unreadableScoredSupports,
+      total:
+        notAddressedScoredSupports +
+        contradictsScoredSupports +
+        partiallyScoredSupports +
+        unreadableScoredSupports,
+    };
+  });
 
   return {
     cases: cases.length,
@@ -177,9 +208,7 @@ export function scoreSupport(corpus: DetectorCorpus): SupportReport {
       { arm: 'judged', judgements: judged },
     ),
     headline: {
-      notAddressedScoredSupports: cell(judgedArm.matrix, 'not_addressed', 'supports'),
-      contradictsScoredSupports: cell(judgedArm.matrix, 'contradicts', 'supports'),
-      unreadableScoredSupports: cell(judgedArm.matrix, 'unreadable', 'supports'),
+      falseReassurance,
       liveButUnsound,
       liveButUnsoundShare: liveCases === 0 ? null : liveButUnsound / liveCases,
     },
@@ -312,9 +341,22 @@ export function renderReport(report: DetectorReport): string {
   lines.push('# The counts aggregate accuracy hides');
   lines.push('');
   const h = report.support.headline;
-  lines.push(`  not_addressed scored as supports (judged arm): ${String(h.notAddressedScoredSupports)}`);
-  lines.push(`  contradicts scored as supports (judged arm):    ${String(h.contradictsScoredSupports)}`);
-  lines.push(`  unreadable scored as supports (judged arm):     ${String(h.unreadableScoredSupports)}`);
+  lines.push('  False reassurance: a bad citation waved through as `supports`.');
+  lines.push('');
+  lines.push(
+    `  ${pad('arm', 20)} ${['not_addressed', 'contradicts', 'partial', 'unreadable', 'total'].map((c) => pad(c, 14)).join(' ')}`,
+  );
+  for (const f of h.falseReassurance) {
+    const row = [
+      f.notAddressedScoredSupports,
+      f.contradictsScoredSupports,
+      f.partiallyScoredSupports,
+      f.unreadableScoredSupports,
+      f.total,
+    ].map((n) => pad(String(n), 14));
+    lines.push(`  ${pad(f.arm, 20)} ${row.join(' ')}`);
+  }
+  lines.push('');
   lines.push(
     `  citations whose URL resolves and whose page does not support the claim: ${String(h.liveButUnsound)} of ${String(report.support.cases)} (${pct(h.liveButUnsoundShare)} of the resolving ones)`,
   );

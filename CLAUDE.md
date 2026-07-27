@@ -111,6 +111,9 @@ docs/                   the documentation set; README is the approachable entry 
   bench/reporting.md    stored cells to a report; both refusal rules, the two
                         floors and where each came from, and the numbers that
                         go above every score
+  bench/detector-eval.md  whether this product's own checking works. A labelled
+                        corpus, a confusion matrix per arm, and every projection
+                        between one detector's vocabulary and another's
   releasing.md          the tag-triggered publish flow
   deep-research-api-vs-agent.md   which Gemini surface fits which job
   providers/            per-provider guides (Gemini, Perplexity, OpenAI, xAI,
@@ -189,6 +192,14 @@ bench/                  the benchmark. NOT compiled into dist/ and NOT published
   src/score/due-weight/ the viewpoint-coverage scorers. Pure functions over one
                         task and one report; the aggregate is what makes the
                         false-balance guard bite. docs/bench/due-weight.md
+  src/detector/         the self-eval: does this product's own checking work.
+                        Inverts the usual shape, because the scorer is the thing
+                        under test, so the answers exist first and the score is a
+                        confusion matrix. capture.ts and judge.ts touch the
+                        outside and are manual; everything else is pure and runs
+                        in the gate. docs/bench/detector-eval.md
+  detector/             the labelled corpus: claims paired with frozen page text,
+                        each carrying why it was labelled as it was
 ```
 
 **Boundary rule:** `gemini/client.ts` and `gemini/agents.ts` are the only files that touch the Gemini SDK. Everything downstream takes a `DeepResearchClient` by injection, which is what makes the whole runner/tool layer testable without a network or a key.

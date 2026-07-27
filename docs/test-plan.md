@@ -707,8 +707,8 @@ The only slice that tests Dossier's own claim rather than a provider's, and the 
 
 | AC | Criterion (from the contract) | Test | Status |
 |---|---|---|---|
-| **SELF-01** | The corpus loads offline and carries all five support verdicts plus all four registry verdicts | unit: `corpus`, `files` | ✓ |
-| **SELF-02** | Every case carries reasoning for its label, enforced by the schema rather than by review | unit: `schema` | ✓ |
+| **SELF-01** | The corpus loads offline and carries all five support verdicts plus all four registry verdicts | unit: `corpus` | ✓ |
+| **SELF-02** | Every case carries reasoning for its label, enforced by the schema rather than by review | unit: `corpus`, `balance` | ✓ |
 | **SELF-03** | A page fixture edited after capture fails the load, rather than silently changing a score | unit: `corpus` | ✓ |
 | **SELF-04** | The loader is pure: it reads no file and reaches no network, proven by walking its import graph | unit: `corpus` | ✓ |
 | **SELF-05** | The corpus is balanced: every label has at least three cases and none exceeds 35% of its family | unit: `balance` | ✓ |
