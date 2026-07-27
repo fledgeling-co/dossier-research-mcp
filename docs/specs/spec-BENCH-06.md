@@ -93,4 +93,31 @@ Implementation plan: [`docs/plans/plan-BENCH-06.md`](../plans/plan-BENCH-06.md) 
 
 ## Progress — 2026-07-27
 
-Recorded at the end of the run; see the section appended below.
+**Implementation Complete (local branch, not rebased, not merged, not pushed)**
+
+**Summary:** `bench/src/score/` now exists, the benchmark's first scoring tree. Three pure synchronous scorers over a report's text and a loaded task, plus the marker parser both calibration and refusal read. No model, no network, no filesystem. **Zero lines of `src/` changed**, verified by `git diff --name-only main...HEAD -- src/`.
+
+**Branch:** `ai/bench-06` (local, based on local `main`, worktree `.worktrees/BENCH-06`). Four commits: `fee2ed7` the scorers, `0536225` the tests, `114b2da` the docs, `b8f2bd7` the review fixes.
+
+**Built:**
+- `bench/src/score/confidence.ts`: the four marker forms this product's own prompt asks for, the span rule, and boundary-respecting subject matching.
+- `bench/src/score/calibration.ts`: pairing, Brier, the reliability table and the Murphy decomposition, three unmeasurable reasons and a not-applicable.
+- `bench/src/score/refusal.ts`: the two families, three outcomes, per-paragraph assertion counting and the overconfidence flag.
+- `bench/src/score/recency.ts`: the durability classifier, the horizon table and the report-level figure.
+- `bench/src/score/index.ts`: the barrel BENCH-08 and BENCH-11 import.
+- 90 tests across four files, traced to `CALIB-01` through `CALIB-19`, `REFUSE-01` through `REFUSE-13` and `RECENCY-01` through `RECENCY-13` in `docs/test-plan.md`.
+- `docs/bench/scoring.md`, linked from `task-format.md` and `CLAUDE.md`.
+
+**Recency: taken, not handed back.** The orphan is closed. The durability axis the design assumed existed is built here, benchmark-side. `assessStaleness` in `src/research/evidence.ts` is untouched, because changing it changes what `research_evidence` prints for every user of the product. A parity test drives both side by side across every horizon boundary and all six source types, so the restated table cannot drift. **Named follow-up, not done here:** adopting the durability axis into the product, and the negative-zero rounding hole in `assessStaleness` that lets a source stamped hours after the as-of date count as current. The benchmark does not have that hole; the product still does.
+
+**The seam with BENCH-04.** Calibration takes whether an answer was recovered as an input, a plain `Readonly<Record<string, boolean>>` keyed by the stable gold-fact id. Deciding recovery is the accuracy scorer's job and involves number formatting, units and Unicode normalisation, none of which belongs in two places. An id missing from the record is counted `unresolved` and excluded, never scored as wrong.
+
+**Acceptance review.** No Codex lane was available to this runner, so the out-of-family critic is a **logged downgrade**: an independent Opus reviewer with fresh context, given the code, the brief, the plan and the contract, and told to prove defects by execution rather than assert them. It returned 18 findings and reproduced every one. Four changed behaviour and are described in `b8f2bd7`; the sharpest was that a report asserting the fabrication outright scored a clean refusal at full marks whenever acknowledgement wording appeared anywhere else, and the test written for it locked the defect in. Eleven more were fixed, three were accepted with a stated reason (a mismatched confidence tag is read as the level it opened with rather than rejected, since a strict backreference would leave two phantom markers; `nist.gov` is deliberately not a durable host; overconfidence on the no-public-footprint arm cannot be scoped to the subject because the task format records no subject wording there). The reviewer separately verified by execution that the Murphy decomposition is exact to 1.67e-16 over 400 randomised fixtures, that no regex backtracks pathologically, that no module-level regex leaks `lastIndex`, and that recency parity with the product holds across all six types and twelve boundary ages.
+
+**Gates (actually run, on the final tree):**
+- `npm run gate` exit 0 **twice consecutively**: typecheck, lint, lint:source, lint:docs, test:all, build. 36 test files, 943 passed, 2 skipped, identical both runs.
+- Real-Node out-of-transform run through `bench/src/score/index.js` via `tsx`: scores a confidently-wrong claim through its label, returns unmeasurable with no `brier` key at all for a marker-free report, reads one marker from a `<CONFIDENCE:LOW>` tag rather than two, refuses correctly at 1.0, flags an overconfident assertion at 0.0, and grades a 2019 standard fresh beside a 2019 benchmark stale.
+- stdio smoke against `dist/index.js`: initialize ok, `tools/list` returns 36 tools, `research_plan` returns a contract fingerprint, zero non-JSON lines on stdout. A regression check, since this item adds no MCP surface.
+- `npm pack --dry-run`: zero `bench/` and zero `dist/bench/` entries.
+
+**Not done, by instruction:** no rebase, no merge, no push. `main` may have advanced under this branch; the orchestrator serialises merges and the reconciliation is its call.
