@@ -404,3 +404,76 @@ describe('a value that could not be measured never becomes a zero on the page', 
     for (const r of refusal) expect(r.withheld).toBe('metric-not-measured');
   });
 });
+
+describe('REPORT-01 a spread the runs cannot support is marked, not printed plain', () => {
+  /**
+   * The defect this guards was found in this slice's own output, which is the
+   * strongest available evidence the rule is worth enforcing. Six tasks run
+   * ONCE each produce a genuine six-task spread. Ranking is withheld, but the
+   * matrix cell still read `74.5% [68.3%-80.8%] (n=6)`, which to anybody
+   * skimming is a confident figure with run-to-run variance attached. It has
+   * neither.
+   */
+  const singleRun = () => {
+    const cells = SIX.map((t, i) =>
+      scoredCell(t.id, 'gemini', 1, 'technical', { accuracy: 0.5 + i * 0.05 }),
+    ).concat(SIX.map((t, i) => scoredCell(t.id, 'openai', 1, 'technical', { accuracy: 0.2 + i * 0.05 })));
+    return aggregate({ cells, corpus: corpus(SIX) });
+  };
+
+  it('marks the matrix value when the tasks behind it were run once', () => {
+    const markdown = renderMarkdown(singleRun());
+    const matrix = markdown.slice(markdown.indexOf('### Accuracy\n'), markdown.indexOf('### Relevance'));
+    expect(matrix).toMatch(/\(n=6\) †/);
+  });
+
+  it('explains the mark, in the same section as the tables that carry it', () => {
+    const markdown = renderMarkdown(singleRun());
+    const section = markdown.slice(markdown.indexOf('## By category'), markdown.indexOf('## Rankings'));
+    expect(section).toMatch(/† comes from tasks that were not repeated enough/);
+    expect(section).toMatch(/The number is real; it is never ranked/);
+  });
+
+  it('states no ranking for the same figures, so the mark and the refusal agree', () => {
+    expect(renderMarkdown(singleRun())).toMatch(/\*\*No ranking is stated\.\*\*/);
+  });
+
+  it('leaves the mark off once the repetitions clear the floor', () => {
+    const cells = SIX.flatMap((t, i) =>
+      [1, 2, 3].map((r) => scoredCell(t.id, 'gemini', r, 'technical', { accuracy: 0.5 + i * 0.05 })),
+    );
+    const markdown = renderMarkdown(aggregate({ cells, corpus: corpus(SIX) }));
+    const matrix = markdown.slice(markdown.indexOf('### Accuracy\n'), markdown.indexOf('### Relevance'));
+    expect(matrix).toContain('(n=6)');
+    expect(matrix).not.toContain('†');
+  });
+
+  it('does not mark a cell that has no value to mark', () => {
+    const markdown = renderMarkdown(singleRun());
+    expect(markdown).not.toMatch(/not measured †/);
+  });
+});
+
+describe('the citation headings nest under their section', () => {
+  it('renders both citation tables at heading level three, under Citations', () => {
+    const markdown = renderMarkdown(realistic());
+    // Built from a passed heading level rather than rewritten afterwards: a
+    // `.replace('## x', '### x')` works until somebody edits the title, then
+    // stops silently and the section nests wrongly with nothing failing.
+    expect(markdown).toContain('## Citations');
+    expect(markdown).toContain('### Citation accuracy');
+    expect(markdown).toContain('### Citation volume');
+    // Matched at the start of a line: `### X` contains `## X` as a substring,
+    // so a bare `toContain` would pass against the very nesting bug this
+    // guards.
+    const headings = markdown.split('\n').filter((l) => l.startsWith('#'));
+    expect(headings).toContain('### Citation accuracy');
+    expect(headings).toContain('### Citation volume');
+    expect(headings).not.toContain('## Citation accuracy');
+    expect(headings).not.toContain('## Citation volume');
+  });
+
+  it('keeps the top-level scorecard at heading level two', () => {
+    expect(renderMarkdown(realistic())).toContain('## Per-backend scorecard');
+  });
+});

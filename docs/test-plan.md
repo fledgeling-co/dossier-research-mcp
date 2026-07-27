@@ -679,6 +679,9 @@ The read side of the benchmark, and the one surface where the product's own argu
 | **REPORT-28** | A cell whose report file is missing is reported as a pipeline gap, distinct from a backend failure | unit: `harvest`, `report-cli` | ✓ |
 | **REPORT-29** | Failure kinds are counted and named per backend, so a rate-limited backend is distinguishable from a broken one | unit: `aggregate`, `render` | ✓ |
 | **REPORT-30** | The JSON format carries every number the markdown does, so a later metric needs no re-run | unit: `render` | ✓ |
+| **REPORT-31** | A category value whose tasks were each run too few times is marked and explained, never printed as a plain spread | unit: `render` | ✓ |
+| **REPORT-32** | The citation tables nest under the citation section, from a passed heading level rather than a rewritten string | unit: `render` | ✓ |
+| **REPORT-33** | A backend's total spend is the sum of its recorded reservations, not a median times a count, and counts a failed cell | unit: `aggregate` | ✓ |
 
 ### The paid project
 
