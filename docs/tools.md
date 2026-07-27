@@ -9,7 +9,7 @@ Every tool description is also visible to an agent at runtime via `tools/list`, 
 ## Tools
 
 <details open>
-<summary><b>Research</b> (24 tools)</summary>
+<summary><b>Research</b> (27 tools)</summary>
 
 <br>
 

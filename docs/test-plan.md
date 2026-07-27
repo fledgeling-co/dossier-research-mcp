@@ -640,6 +640,8 @@ The sharpest instrument in the benchmark, and the one whose wrong answer is most
 | **GROUND-14** | A grounded run declares its grounding in the header `research_read` returns and in the front matter and body `research_export` writes, naming the prior run ids | `grounding` acceptance | ✓ |
 | **GROUND-15** | `groundedInRunIds` puts the prior-research rule in the prompt before the final `<core_directive>`, and nothing follows that anchor | unit: `prompt` | ✓ |
 | **GROUND-16** | The prior-research prompt block carries no text from the prior reports | unit: `prompt` | ✓ |
+| **GROUND-17** | `research_plan` and `research_start` normalise the grounding identically, so a repeated run id does not fork the contract fingerprint | `grounding` acceptance | ✓ |
+| **GROUND-18** | A malformed run id comes back as a handled tool error and the server keeps answering | `grounding` acceptance | ✓ |
 
 ### The paid project
 

@@ -107,6 +107,13 @@ export function assertGroundableRunId(runId: string): string {
  * URI when a run cites it directly, and by the file name when the reader found
  * it through `corpus_local_search` or a File Search store, where the display
  * name is what comes back.
+ *
+ * The file-name form matches wherever it appears, including as the last segment
+ * of an http URL. That is a deliberate false-positive risk taken in the safe
+ * direction: a page on the open web genuinely named `dossier-run-<id>.md` would
+ * be discounted as corroboration, which costs one source. The opposite error
+ * would let a prior report count as independent evidence, which is the failure
+ * this whole module exists to prevent.
  */
 export function isPriorDossierReport(reference: string): boolean {
   const ref = reference.trim();

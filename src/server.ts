@@ -532,12 +532,18 @@ export function createServer(deps: ServerDeps): FastMCP {
         .describe('Multimodal inputs the run will read. Part of the contract: a document added after planning changes the purchase.'),
     }),
     execute: async (args) => {
+      // Resolved here as well as in `research_start`, and through the same
+      // function. The grounding count reaches the prompt, the prompt is hashed
+      // into the fingerprint, and `resolveGrounding` de-duplicates: planning on
+      // the raw argument would price a two-run grounding and start a one-run
+      // one, and the handshake would then refuse a request nobody had changed.
+      const grounded = await resolveGrounding(deps, args.groundedInRunIds);
       const resolved = resolvePrompt({
         question: args.question,
         ...(args.archetype ? { archetype: args.archetype } : {}),
         ...(args.scope ? { scope: args.scope } : {}),
         ...(args.corpusStores ? { corpusStores: args.corpusStores } : {}),
-        ...(args.groundedInRunIds ? { groundedInRunIds: args.groundedInRunIds } : {}),
+        ...(grounded.length > 0 ? { groundedInRunIds: grounded } : {}),
       });
       const tools = buildTools(args.corpusStores);
       const routingForPlan = deps.providers.route({
@@ -615,9 +621,9 @@ export function createServer(deps: ServerDeps): FastMCP {
         `- **What drives that estimate**: ${duration.factors.join('; ')}`,
         `- **Tools**: ${tools.map((t) => t.type).join(', ')}`,
         `- **Plan review**: ${args.collaborativePlanning ? 'ON, you will approve a plan before the run executes' : 'OFF, the run executes autonomously'}`,
-        ...((args.groundedInRunIds?.length ?? 0) > 0
+        ...(grounded.length > 0
           ? [
-              `- **Grounded in prior Dossier output**: ${(args.groundedInRunIds ?? []).map((id) => `\`${id}\``).join(', ')}. The report will declare it, and those reports never count as independent corroboration.`,
+              `- **Grounded in prior Dossier output**: ${grounded.map((id) => `\`${id}\``).join(', ')}. The report will declare it, and those reports never count as independent corroboration.`,
             ]
           : []),
         `- **Budget**: $${budget.committedUsd.toFixed(2)} committed of $${budget.budgetUsd.toFixed(2)} in the last ${budget.windowHours}h; $${budget.remainingUsd.toFixed(2)} remaining.`,
@@ -3290,7 +3296,16 @@ function registerGroundingTools(server: FastMCP, deps: ServerDeps): void {
   const local = new LocalCorpus(deps.config.localCorpusDirs);
 
   async function documentFor(runId: string): Promise<{ run: RunRecord; document: string }> {
-    const run = await requireRun(deps, assertGroundableRunId(runId));
+    // Shape-checked before the id can reach a path, and re-raised as a handled
+    // error: a plain throw out of a tool body is a protocol fault rather than
+    // an answer, and "you passed a bad id" is an answer.
+    let safeId: string;
+    try {
+      safeId = assertGroundableRunId(runId);
+    } catch (e: unknown) {
+      throw new UserError(e instanceof Error ? e.message : `Invalid run id "${runId.slice(0, 40)}".`);
+    }
+    const run = await requireRun(deps, safeId);
     const markdown = await deps.store.readReport(run.id);
     if (!markdown) {
       throw new UserError(
@@ -3331,7 +3346,7 @@ function registerGroundingTools(server: FastMCP, deps: ServerDeps): void {
         ),
     }),
     execute: async (args, { log }) => {
-      const prepared = [];
+      const prepared: { run: RunRecord; document: string }[] = [];
       for (const id of args.runIds) prepared.push(await documentFor(id));
 
       if (args.destination === 'upload') {
@@ -3394,7 +3409,8 @@ function registerGroundingTools(server: FastMCP, deps: ServerDeps): void {
       // unavoidable; letting the caller choose is the thing being prevented.
       // Announcing which one keeps the decision with the operator, who can
       // reorder the variable if they want a different directory.
-      const root = deps.config.localCorpusDirs[0]!;
+      const root = deps.config.localCorpusDirs[0];
+      if (!root) throw new UserError('No local corpus root is configured.');
       const dir = join(root, GROUNDING_SUBDIR);
       await mkdir(dir, { recursive: true, mode: 0o700 });
       await chmod(dir, 0o700);

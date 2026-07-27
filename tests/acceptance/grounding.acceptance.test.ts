@@ -233,6 +233,34 @@ describe('the plan and start handshake carries grounding', () => {
     );
   });
 
+  it('normalises the grounding the same way in plan and start, so a repeated id still matches', async () => {
+    // Found by the self-review, not by a failure: `resolveGrounding`
+    // de-duplicates, the count reaches the prompt and the prompt is hashed into
+    // the fingerprint. Planning on the raw argument priced a two-run grounding
+    // and started a one-run one, and the handshake then refused a request
+    // nobody had changed.
+    const once = await granted.callTool('research_plan', {
+      question: 'Has the p99 picture changed since?',
+      groundedInRunIds: [RUN],
+    });
+    const twice = await granted.callTool('research_plan', {
+      question: 'Has the p99 picture changed since?',
+      groundedInRunIds: [RUN, RUN],
+    });
+    const fingerprint = (t: string): string | undefined =>
+      /Contract fingerprint\*\*: `([^`]+)`/.exec(t)?.[1];
+    expect(fingerprint(once.text)).toBeTruthy();
+    expect(fingerprint(twice.text)).toBe(fingerprint(once.text));
+  });
+
+  it('refuses a run id that could never be a path, as an answer rather than a fault', async () => {
+    const result = await granted.callTool('research_ground', { runIds: ['../../etc/passwd'] });
+    expect(result.isError).toBe(true);
+    expect(result.text).toMatch(/Invalid run id/);
+    // The decisive part: the server is still answering.
+    expect((await granted.listTools()).length).toBe(37);
+  });
+
   it('refuses to record a grounding claim naming a run that never completed', async () => {
     const result = await granted.callTool('research_start', {
       question: 'Anything at all',
