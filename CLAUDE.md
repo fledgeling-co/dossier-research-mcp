@@ -116,7 +116,15 @@ tests/                  hermetic vitest; no network, no keys
 bench/                  the benchmark. NOT compiled into dist/ and NOT published;
                         typechecked, linted and unit-tested by the gate like any
                         other source. Its design is docs/plan/benchmark.md
-  tasks/*.yaml          one hand-authored gold set per task
+  tasks/*.yaml          one hand-authored gold set per task, grouped by category
+  quarantine/*.yaml     tasks whose gold is verified and whose question a free
+                        CLI backend already answers. Kept, not deleted; its
+                        README carries the per-backend evidence and the finding
+  evidence/*.json       what the two network scripts established, and when
+  src/verify/           proves each gold fact is really in the source it cites.
+                        Pure matching rules plus one thin fetch adapter
+  src/failcheck/        proves a task is not already passed, closed-book and
+                        search-enabled. Spends subscription quota; never in the gate
   src/tasks/schema.ts   the task format, in Zod. The contract every scorer reads
   src/tasks/corpus.ts   the pure synchronous loader. Imports no filesystem, on
                         purpose, so a scorer is testable without one

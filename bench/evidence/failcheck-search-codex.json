@@ -1,0 +1,340 @@
+{
+  "mode": "search",
+  "backend": "codex",
+  "checkedAt": "2026-07-27",
+  "probes": [
+    {
+      "taskId": "deeptrace-gemini-citation-accuracy",
+      "category": "contested",
+      "factsTotal": 2,
+      "factsPresent": 0,
+      "presentFactIds": [],
+      "responseLength": 509,
+      "responseExcerpt": "DeepTRACE’s main results table reports **50.3% citation accuracy** for Gemini Deep Research.\n\nHowever, the accompanying prose reports **40.3%** and labels it “problematic.” The table labels 50.3% “borderline,” consistent with the paper’s threshold where scores below 50% are problematic. This strongly suggests **40.3% is a textual typo and 50.3% is the intended figure**, but the paper is not internally consistent. See [Table 1 and the accompanying results discussion](https://arxiv.org/html/2509.04499#S4).",
+      "verdict": "fails"
+    },
+    {
+      "taskId": "cvss-scores-july-2026",
+      "category": "enumeration",
+      "factsTotal": 6,
+      "factsPresent": 6,
+      "presentFactIds": [
+        "c53488-v31",
+        "c53488-v40",
+        "c41579-v31",
+        "c54500-v31",
+        "c54502-v40",
+        "c54592-v31"
+      ],
+      "responseLength": 742,
+      "responseExcerpt": "Scores currently carried by the NVD:\n\n| CVE | CVSS v3.1 base score | CVSS v4.0 base score |\n|---|---:|---:|\n| [CVE-2026-53488](https://nvd.nist.gov/vuln/detail/CVE-2026-53488) | 8.8 | 9.4 |\n| [CVE-2026-41579](https://nvd.nist.gov/vuln/detail/CVE-2026-41579) | 3.3 | No v4.0 score published |\n| [CVE-2026-54500](https://nvd.nist.gov/vuln/detail/CVE-2026-54500) | 5.3 | No v4.0 score published |\n| [CVE-2026-54502](https://nvd.nist.gov/vuln/detail/CVE-2026-54502) | No v3.1 score published | 6.3 |\n| [CVE-2026-54592](https://nvd.nist.gov/vuln/detail/CVE-2026-54592) | 7.5 | No v4.0 score published |\n\nChecked against the NVD on 27 July 2026. This includes CNA-contributed metrics displayed by the NVD, not only scores calculated by NIST itself.",
+      "verdict": "already-passed"
+    },
+    {
+      "taskId": "federal-register-july-2026-grid",
+      "category": "enumeration",
+      "factsTotal": 6,
+      "factsPresent": 6,
+      "presentFactIds": [
+        "d14043-citation",
+        "d14043-effective",
+        "d14109-citation",
+        "d14109-effective",
+        "d14072-citation",
+        "d14315-citation"
+      ],
+      "responseLength": 1008,
+      "responseExcerpt": "| Document | Federal Register citation | Record-level effective date |\n|---|---|---|\n| [2026-14043](https://www.federalregister.gov/documents/2026/07/13/2026-14043/administrative-false-claims-and-procedures) | **91 FR 42845** | **July 13, 2026** |\n| [2026-14109](https://www.federalregister.gov/documents/2026/07/14/2026-14109/airworthiness-directives-textron-aviation-inc-airplanes) | **91 FR 43033** | **August 18, 2026** |\n| [2026-14072](https://www.federalregister.gov/documents/2026/07/13/2026-14072/safety-zone-chicago-sanitary-and-ship-canal-chicago-il) | **91 FR 42870** | **No effective date recorded** |\n| [2026-14315](https://www.federalregister.gov/documents/2026/07/16/2026-14315/special-local-regulations-marine-events-within-the-southwest-district) | **91 FR 43543** | **No effective date recorded** |\n\nThe latter two records carry enforcement periods in their dates text, but their record-level effective-date fields are empty; I have not treated those enforcement periods as effective dates.",
+      "verdict": "already-passed"
+    },
+    {
+      "taskId": "node-26-5-1-security-release",
+      "category": "false-premise",
+      "factsTotal": 1,
+      "factsPresent": 1,
+      "presentFactIds": [
+        "latest-26x"
+      ],
+      "refusalAcknowledged": true,
+      "fabricatedTermsMentioned": true,
+      "responseLength": 982,
+      "responseExcerpt": "That release did not occur. As of 27 July 2026:\n\n- Node.js 26.5.0, released 8 July, remains the latest published 26.x version in the [official release index](https://nodejs.org/download/release/latest/).\n- There is no official 26.5.1 download, release page, or Git tag.\n- Node.js scheduled its next 26.x security release for **27 July 2026**, not 20 July, and has not yet disclosed the vulnerabilities beyond saying the highest severity is **High**. See the [official security announcement](https://nodejs.org/en/blog/vulnerability/july-2026-security-releases).\n\nConsequently, Node.js 26.5.1 has not fixed or addressed any published CVEs yet.\n\nYou may be thinking of **Node.js 20.5.1**, released 9 August 2023. It fixed seven Node.js vulnerabilities: CVE-2023-32002, CVE-2023-32558, CVE-2023-32004, CVE-2023-32006, CVE-2023-32559, CVE-2023-32005, and CVE-2023-32003, plus bundled OpenSSL security updates. [Official 20.5.1 release notes](https://nodejs.org/en/blog/release/v20.5.1).",
+      "verdict": "already-passed"
+    },
+    {
+      "taskId": "class-e-airspace-conneaut",
+      "category": "legal-regulatory",
+      "factsTotal": 4,
+      "factsPresent": 4,
+      "presentFactIds": [
+        "document-number",
+        "citation",
+        "publication-date",
+        "effective-date"
+      ],
+      "responseLength": 419,
+      "responseExcerpt": "The FAA final rule is:\n\n- Federal Register document number: **2026-13980**\n- Federal Register citation: **91 FR 42656** (pages 42656–42657)\n- Publication date: **July 10, 2026**\n- Effective date: **October 29, 2026, at 0901 UTC**\n\nSource: [Federal Register — Establishment of Class E Airspace; Conneaut, OH](https://www.federalregister.gov/documents/2026/07/10/2026-13980/establishment-of-class-e-airspace-conneaut-oh).",
+      "verdict": "already-passed"
+    },
+    {
+      "taskId": "fcc-ng911-rule-2026",
+      "category": "legal-regulatory",
+      "factsTotal": 4,
+      "factsPresent": 4,
+      "presentFactIds": [
+        "document-number",
+        "citation",
+        "publication-date",
+        "effective-date"
+      ],
+      "responseLength": 356,
+      "responseExcerpt": "According to the [Federal Register record](https://www.federalregister.gov/documents/2026/07/10/2026-13998/facilitating-implementation-of-next-generation-911-services-ng911-improving-911-reliability):\n\n- Federal Register document number: **2026-13998**\n- Citation: **91 FR 42794**\n- Publication date: **July 10, 2026**\n- Effective date: **August 10, 2026**",
+      "verdict": "already-passed"
+    },
+    {
+      "taskId": "natural-resource-damages-rule",
+      "category": "legal-regulatory",
+      "factsTotal": 4,
+      "factsPresent": 4,
+      "presentFactIds": [
+        "document-number",
+        "citation",
+        "publication-date",
+        "effective-date"
+      ],
+      "responseLength": 398,
+      "responseExcerpt": "The final rule’s details are:\n\n- Federal Register document number: **2026-14052**\n- Federal Register citation: **91 FR 42870**\n- Publication date: **July 13, 2026**\n- Effective date: **August 12, 2026**\n\nSource: [Federal Register — Natural Resource Damages for Hazardous Substances](https://www.federalregister.gov/documents/2026/07/13/2026-14052/natural-resource-damages-for-hazardous-substances).",
+      "verdict": "already-passed"
+    },
+    {
+      "taskId": "va-emergency-treatment-notice",
+      "category": "legal-regulatory",
+      "factsTotal": 4,
+      "factsPresent": 4,
+      "presentFactIds": [
+        "document-number",
+        "citation",
+        "publication-date",
+        "effective-date"
+      ],
+      "responseLength": 349,
+      "responseExcerpt": "According to the [Federal Register](https://www.federalregister.gov/documents/2026/07/10/2026-13971/expansion-of-va-process-for-72-hour-notification-of-emergency-treatment):\n\n- **Document number:** 2026-13971\n- **Federal Register citation:** 91 FR 42670 (pages 42670–42672)\n- **Publication date:** July 10, 2026\n- **Effective date:** August 10, 2026",
+      "verdict": "already-passed"
+    },
+    {
+      "taskId": "cve-2026-14191-no-cvss-v40",
+      "category": "obscure-entity",
+      "factsTotal": 0,
+      "factsPresent": 0,
+      "presentFactIds": [],
+      "refusalAcknowledged": false,
+      "responseLength": 181,
+      "responseExcerpt": "The NVD publishes **no CVSS v4.0 base score** for CVE-2026-14191. It lists **“N/A — NVD assessment not yet provided.”** [NVD record](https://nvd.nist.gov/vuln/detail/CVE-2026-14191)",
+      "verdict": "fails"
+    },
+    {
+      "taskId": "fr-2026-14072-no-effective-date",
+      "category": "obscure-entity",
+      "factsTotal": 0,
+      "factsPresent": 0,
+      "presentFactIds": [],
+      "refusalAcknowledged": true,
+      "responseLength": 312,
+      "responseExcerpt": "The Federal Register document record carries **no effective date**: its `effective_on` field is `null`.\n\nSource: [Federal Register record for document 2026-14072](https://www.federalregister.gov/api/v1/documents/2026-14072.json). The enforcement dates stated in the document text are not an effective-date field.",
+      "verdict": "already-passed"
+    },
+    {
+      "taskId": "nature-phospholipid-flipping",
+      "category": "primary-literature",
+      "factsTotal": 4,
+      "factsPresent": 4,
+      "presentFactIds": [
+        "doi",
+        "published",
+        "volume",
+        "pages"
+      ],
+      "responseLength": 255,
+      "responseExcerpt": "According to the [Nature article record](https://www.nature.com/articles/s41586-026-10726-x):\n\n- **DOI:** [10.1038/s41586-026-10726-x](https://doi.org/10.1038/s41586-026-10726-x)\n- **Publication date:** 1 July 2026\n- **Volume:** 655\n- **Pages:** 1060–1069",
+      "verdict": "already-passed"
+    },
+    {
+      "taskId": "ncomms-schlafen-crispr",
+      "category": "primary-literature",
+      "factsTotal": 2,
+      "factsPresent": 2,
+      "presentFactIds": [
+        "doi",
+        "published"
+      ],
+      "responseLength": 270,
+      "responseExcerpt": "- **DOI:** [10.1038/s41467-026-74880-6](https://doi.org/10.1038/s41467-026-74880-6)\n- **Publication date:** **2 July 2026**\n\nConfirmed by [Nature Communications](https://www.nature.com/articles/s41467-026-74880-6) and [PubMed](https://pubmed.ncbi.nlm.nih.gov/42393087/).",
+      "verdict": "already-passed"
+    },
+    {
+      "taskId": "pnas-phycosphere-raman",
+      "category": "primary-literature",
+      "factsTotal": 2,
+      "factsPresent": 2,
+      "presentFactIds": [
+        "doi",
+        "published"
+      ],
+      "responseLength": 266,
+      "responseExcerpt": "The paper’s DOI is **[10.1073/pnas.2535317123](https://doi.org/10.1073/pnas.2535317123)**.\n\nIt was **published online on 13 July 2026**. The issue date was **21 July 2026** (PNAS 123(29)). ([Crossref metadata](https://api.crossref.org/works/10.1073/pnas.2535317123))",
+      "verdict": "already-passed"
+    },
+    {
+      "taskId": "pnas-synuclein-pmo-chimeras",
+      "category": "primary-literature",
+      "factsTotal": 4,
+      "factsPresent": 4,
+      "presentFactIds": [
+        "doi",
+        "published",
+        "volume",
+        "issue"
+      ],
+      "responseLength": 249,
+      "responseExcerpt": "- **DOI:** [10.1073/pnas.2526461123](https://doi.org/10.1073/pnas.2526461123)\n- **Published online:** July 14, 2026\n- **Issue date:** July 21, 2026\n- **PNAS:** Volume **123**, Issue **29** ([PubMed record](https://pubmed.ncbi.nlm.nih.gov/42446976/))",
+      "verdict": "already-passed"
+    },
+    {
+      "taskId": "containerd-label-propagation-cve",
+      "category": "technical",
+      "factsTotal": 3,
+      "factsPresent": 2,
+      "presentFactIds": [
+        "cve-id",
+        "cvss-v31-base"
+      ],
+      "responseLength": 355,
+      "responseExcerpt": "- **CVE:** CVE-2026-53488  \n- **NVD publication date:** June 30, 2026  \n- **NVD CVSS v3.1 base score:** **8.8 (High)**  \n\nThe NVD vector is `CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H`. [NVD record](https://nvd.nist.gov/vuln/detail/CVE-2026-53488), [containerd advisory](https://github.com/containerd/containerd/security/advisories/GHSA-xhf5-7wjv-pqxp).",
+      "verdict": "partial"
+    },
+    {
+      "taskId": "node-26-5-0-toolchain",
+      "category": "technical",
+      "factsTotal": 4,
+      "factsPresent": 4,
+      "presentFactIds": [
+        "version",
+        "release-date",
+        "v8-version",
+        "npm-version"
+      ],
+      "responseLength": 254,
+      "responseExcerpt": "Node.js **v26.5.0**, released **8 July 2026**.\n\n- **V8:** 14.6.202.34\n- **npm:** 11.17.0\n\nSources: [official release announcement](https://nodejs.org/en/blog/release/v26.5.0) and [Node.js download archive](https://nodejs.org/en/download/archive/v26.5.0).",
+      "verdict": "already-passed"
+    },
+    {
+      "taskId": "runc-setupptmx-cve",
+      "category": "technical",
+      "factsTotal": 2,
+      "factsPresent": 2,
+      "presentFactIds": [
+        "cve-id",
+        "cvss-v31-base"
+      ],
+      "responseLength": 157,
+      "responseExcerpt": "The flaw is **CVE-2026-41579**. Its CVSS v3.1 base score published in the NVD is **3.3 (Low)**. [NVD record](https://nvd.nist.gov/vuln/detail/CVE-2026-41579)",
+      "verdict": "already-passed"
+    },
+    {
+      "taskId": "undici-three-line-releases",
+      "category": "technical",
+      "factsTotal": 3,
+      "factsPresent": 3,
+      "presentFactIds": [
+        "line-8",
+        "line-7",
+        "line-6"
+      ],
+      "responseLength": 298,
+      "responseExcerpt": "The three releases were:\n\n- **8.9.0** — published at 12:32:49 UTC\n- **7.29.0** — published at 12:52:58 UTC\n- **6.28.0** — published at 12:55:27 UTC\n\nSource: [npm publication history](https://registry.npmjs.org/undici) and [npm version list](https://www.npmjs.com/package/undici?activeTab=versions).",
+      "verdict": "already-passed"
+    },
+    {
+      "taskId": "unrar-recvol5-cve",
+      "category": "technical",
+      "factsTotal": 2,
+      "factsPresent": 2,
+      "presentFactIds": [
+        "cve-id",
+        "cvss-v31-base"
+      ],
+      "responseLength": 230,
+      "responseExcerpt": "The vulnerability is **CVE-2026-14191**, with a **CVSS v3.1 base score of 7.8 (High)**. The NVD displays the CNA-provided score; its own NVD assessment is currently N/A. [NVD entry](https://nvd.nist.gov/vuln/detail/CVE-2026-14191)",
+      "verdict": "already-passed"
+    },
+    {
+      "taskId": "vitest-4-1-10-publish",
+      "category": "technical",
+      "factsTotal": 3,
+      "factsPresent": 3,
+      "presentFactIds": [
+        "line-3",
+        "line-4",
+        "line-5"
+      ],
+      "responseLength": 209,
+      "responseExcerpt": "According to [npm’s publish metadata](https://registry.npmjs.org/vitest):\n\n- **3.2.7** — 06:36 UTC\n- **4.1.10** — 06:44 UTC\n- **5.0.0-beta.6** — 06:54 UTC\n\nAll were published on 6 July 2026, within 18 minutes.",
+      "verdict": "already-passed"
+    },
+    {
+      "taskId": "hono-july-2026-releases",
+      "category": "time-bound",
+      "factsTotal": 5,
+      "factsPresent": 5,
+      "presentFactIds": [
+        "h-4-12-28",
+        "h-4-12-29",
+        "h-4-12-30",
+        "h-4-12-31",
+        "h-4-12-32"
+      ],
+      "responseLength": 133,
+      "responseExcerpt": "According to [npm’s registry metadata](https://registry.npmjs.org/hono):\n\n- `4.12.28`\n- `4.12.29`\n- `4.12.30`\n- `4.12.31`\n- `4.12.32`",
+      "verdict": "already-passed"
+    },
+    {
+      "taskId": "node-releases-summer-2026",
+      "category": "time-bound",
+      "factsTotal": 8,
+      "factsPresent": 8,
+      "presentFactIds": [
+        "v26-5-0",
+        "v26-4-0",
+        "v26-3-1",
+        "v26-3-0",
+        "v24-18-0",
+        "v24-17-0",
+        "v22-23-1",
+        "v22-23-0"
+      ],
+      "responseLength": 740,
+      "responseExcerpt": "Node.js published **8 releases** from 1 June through 15 July 2026, inclusive:\n\n- **1 June:** [v26.3.0](https://nodejs.org/en/blog/release/v26.3.0)\n- **18 June:** [v22.23.0](https://nodejs.org/en/blog/release/v22.23.0), [v24.17.0](https://nodejs.org/en/blog/release/v24.17.0), [v26.3.1](https://nodejs.org/en/blog/release/v26.3.1)\n- **23 June:** [v22.23.1](https://nodejs.org/en/blog/release/v22.23.1), [v24.18.0](https://nodejs.org/en/blog/release/v24.18.0)\n- **24 June:** [v26.4.0](https://nodejs.org/en/blog/release/v26.4.0)\n- **8 July:** [v26.5.0](https://nodejs.org/en/blog/release/v26.5.0)\n\nSources: Node.js’s official [release archive](https://nodejs.org/en/blog/release/) and [distribution index](https://nodejs.org/dist/index.json).",
+      "verdict": "already-passed"
+    },
+    {
+      "taskId": "promptfoo-june-2026-releases",
+      "category": "time-bound",
+      "factsTotal": 4,
+      "factsPresent": 4,
+      "presentFactIds": [
+        "p-0-121-14",
+        "p-0-121-15",
+        "p-0-121-16",
+        "p-0-121-17"
+      ],
+      "responseLength": 229,
+      "responseExcerpt": "According to [npm’s publication metadata](https://registry.npmjs.org/promptfoo), the `promptfoo` versions published during June 2026 were:\n\n- `0.121.14` — June 2\n- `0.121.15` — June 5\n- `0.121.16` — June 16\n- `0.121.17` — June 16",
+      "verdict": "already-passed"
+    }
+  ],
+  "alreadyPassed": 20,
+  "partial": 1,
+  "fails": 2,
+  "noResponse": 0,
+  "notApplicable": 0
+}

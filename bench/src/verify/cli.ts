@@ -24,8 +24,8 @@ import { verifyCorpus, type FetchedSource, type VerificationReport } from './ver
  * different findings and only one of them is about the corpus.
  */
 
-const CORPUS_DIR = 'bench/tasks';
-const EVIDENCE_FILE = 'bench/evidence/gold-verification.json';
+const DEFAULT_CORPUS_DIR = 'bench/tasks';
+const DEFAULT_EVIDENCE_FILE = 'bench/evidence/gold-verification.json';
 
 /**
  * Far bigger than `safeFetch`'s 512 KB default, and the reason is measured
@@ -84,11 +84,20 @@ function summarise(report: VerificationReport): string {
 
 export async function main(argv: readonly string[] = []): Promise<number> {
   const quiet = argv.includes('--quiet');
+  const flag = (name: string): string | undefined => {
+    const i = argv.indexOf(name);
+    return i >= 0 ? argv[i + 1] : undefined;
+  };
+  // The directory is selectable so a quarantined gold set stays checkable. A
+  // task is quarantined for being too easy, never for being wrong, and letting
+  // its facts rot unchecked would throw away the expensive half of the work.
+  const corpusDir = flag('--dir') ?? DEFAULT_CORPUS_DIR;
+  const evidenceFile = flag('--out') ?? DEFAULT_EVIDENCE_FILE;
   const now = new Date();
-  const corpus = loadCorpusFromDirectory(resolve(CORPUS_DIR), { now });
+  const corpus = loadCorpusFromDirectory(resolve(corpusDir), { now });
 
   process.stderr.write(
-    `Verifying ${String(corpus.tasks.length)} task(s) from ${CORPUS_DIR} against their cited sources.\n`,
+    `Verifying ${String(corpus.tasks.length)} task(s) from ${corpusDir} against their cited sources.\n`,
   );
 
   const report = await verifyCorpus(corpus.tasks, {
@@ -101,12 +110,12 @@ export async function main(argv: readonly string[] = []): Promise<number> {
     },
   });
 
-  const out = resolve(EVIDENCE_FILE);
+  const out = resolve(evidenceFile);
   mkdirSync(dirname(out), { recursive: true });
   writeFileSync(out, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
 
   process.stderr.write(
-    `\n${String(report.proven)}/${String(report.checks.length)} source checks proven; ${String(report.unreachable)} unreachable.\nEvidence written to ${EVIDENCE_FILE}\n`,
+    `\n${String(report.proven)}/${String(report.checks.length)} source checks proven; ${String(report.unreachable)} unreachable.\nEvidence written to ${evidenceFile}\n`,
   );
   if (report.unproven > 0) {
     process.stderr.write(`\nUnproven:\n${summarise(report)}\n`);

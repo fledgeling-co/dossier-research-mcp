@@ -77,11 +77,26 @@ function parseArgs(argv: readonly string[]): Options {
  * the question is author-written text and passing it through a shell would make
  * a quoting mistake into command execution.
  */
+function argvFor(question: string, options: Options): readonly string[] {
+  // Mirrors `src/local/cli.ts`: a CLI's headless form is a property of that
+  // binary, and `codex` in particular takes a bare positional after `exec`
+  // rather than `-p`. Guessing here would produce a run that dies at argument
+  // parsing and reports an empty response as a task that failed, which is the
+  // exact bug class the repo already fixed once on this adapter.
+  const isCodex = /codex/.test(options.bin);
+  if (options.mode === 'closed-book') {
+    if (isCodex) {
+      // No documented way to disable its web access per invocation, so the
+      // mode is refused rather than run without the thing that defines it.
+      throw new Error('closed-book mode is only implemented for the claude CLI');
+    }
+    return ['-p', '--disallowedTools', ...CLOSED_BOOK_TOOLS, '--', `${question}${CLOSED_BOOK_SUFFIX}`];
+  }
+  return isCodex ? ['exec', question] : ['-p', '--', question];
+}
+
 async function ask(question: string, options: Options): Promise<string> {
-  const args =
-    options.mode === 'closed-book'
-      ? ['-p', '--disallowedTools', ...CLOSED_BOOK_TOOLS, '--', `${question}${CLOSED_BOOK_SUFFIX}`]
-      : ['-p', '--', question];
+  const args = argvFor(question, options);
 
   return new Promise<string>((resolvePromise) => {
     const child = spawn(options.bin, args, {

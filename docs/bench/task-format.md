@@ -232,3 +232,75 @@ import { loadCorpus } from '../../bench/src/tasks/index.js';
 
 const corpus = loadCorpus([{ file: 'a.yaml', text: '...' }], { now: new Date('2026-07-27') });
 ```
+
+## Authoring a task, and the two scripts that keep it honest
+
+The format is the contract; this section is the loop. Both scripts make network
+calls and neither runs inside `npm run gate`, which is hermetic by construction.
+What the gate covers is their pure halves, which is where every decision they
+make actually lives, plus `bench/src/corpus.load.test.ts`, which holds the
+corpus to the invariants a hand edit can break.
+
+### 1. Anchor the fact so it cannot rot and cannot be recalled
+
+Prefer an **immutable dated event** over a current state. "Which version was
+published on 8 July 2026" is true forever; "the latest version" is true until
+Tuesday. The corpus authored under BENCH-09 anchors every fact on a June or July
+2026 event for a second reason as well: a fact later than a model's training
+cutoff cannot be answered from its weights, which is the exclusion rule.
+
+### 2. Cite a source a script can check
+
+Where a publisher's human-facing page is JavaScript-rendered, cite the
+publisher's **own API endpoint** instead. It is the same publisher and the same
+authority, and it is the version a second person, or a script, can actually
+open. Copy the `quote` out of the response body rather than typing it from
+memory, and put the field path in `locator`.
+
+### 3. Prove the fact against its source
+
+```bash
+npm run bench:verify
+```
+
+Fetches every cited source through the repo's SSRF-safe `safeFetch`, checks that
+the recorded quote and the recorded value are both present, and writes
+`bench/evidence/gold-verification.json`. It exits non-zero if any fact is
+unproven.
+
+Three of its verdicts are worth knowing, because they are deliberately not the
+same answer:
+
+| Verdict | What it means |
+|---|---|
+| `quote-absent` / `value-absent` | The source loaded and the string is not in it. Fix the task. |
+| `unreachable` | The publisher would not answer. Says nothing about the fact. |
+| `source-truncated` | The read stopped at the byte cap before the string could be found. Also says nothing about the fact. |
+
+The last one exists because `safeFetch` truncates silently, and npm's registry
+document for `typescript` is 15.5 MB. Under the first byte cap this script used,
+a true gold fact sitting past the cap read exactly like a fabricated one.
+
+### 4. Prove the task is not already passed
+
+```bash
+npm run bench:failcheck -- --mode closed-book
+npm run bench:failcheck -- --mode search --ids one-task,another-task
+```
+
+Runs each question through a local coding CLI and reports whether the gold
+answers are already in the response. The two modes prove different things and
+both are needed: `closed-book` disables every tool, so an answer can only come
+from the weights, and `search` leaves web search on, which is a real free
+research backend.
+
+One verdict is a statement about the *check* rather than the task.
+`not-applicable` is reported for a refusal task carrying no gold facts when it
+is probed closed-book, because a model with no tools cannot know that a
+publisher records nothing, and its honest "I do not know" is written in the same
+words as a correct refusal. Measured, not assumed: one run reasoned aloud that
+`"the record carries no effective date"` was a plausible-sounding answer it was
+declining to assert, and a literal term match scored that as a correct refusal.
+That is the same weakness this page already declares for `rejectionCues`, and
+the honest response is to say what the run established rather than to weaken the
+task until the check agrees with it.

@@ -1,0 +1,246 @@
+{
+  "mode": "search",
+  "backend": "claude",
+  "checkedAt": "2026-07-27",
+  "probes": [
+    {
+      "taskId": "federal-register-july-2026-grid",
+      "category": "enumeration",
+      "factsTotal": 6,
+      "factsPresent": 6,
+      "presentFactIds": [
+        "d14043-citation",
+        "d14043-effective",
+        "d14109-citation",
+        "d14109-effective",
+        "d14072-citation",
+        "d14315-citation"
+      ],
+      "responseLength": 883,
+      "responseExcerpt": "From the Federal Register's own API records (`effective_on` field):\n\n| Document | Citation | Effective date on the record |\n|---|---|---|\n| 2026-14043 — Administrative False Claims and Procedures | 91 FR 42845 | 2026-07-13 |\n| 2026-14109 — Airworthiness Directives; Textron Aviation Inc. Airplanes | 91 FR 43033 | 2026-08-18 |\n| 2026-14072 — Safety Zone; Chicago Sanitary and Ship Canal, Chicago, IL | 91 FR 42870 | **none** — `effective_on` is null |\n| 2026-14315 — Special Local Regulations; Marine Events Within the Southwest District | 91 FR 43543 | **none** — `effective_on` is null |\n\nThe two Coast Guard documents (14072, 14315) carry no effective date in the FR record. Both are the kind of rule whose text typically states enforcement periods rather than a single effective date, but per your instruction I'm not inferring one from the rule text — the record field is empty.",
+      "verdict": "already-passed"
+    },
+    {
+      "taskId": "cve-2026-0001-containerd",
+      "category": "false-premise",
+      "factsTotal": 1,
+      "factsPresent": 1,
+      "presentFactIds": [
+        "real-cve"
+      ],
+      "refusalAcknowledged": false,
+      "fabricatedTermsMentioned": true,
+      "responseLength": 1824,
+      "responseExcerpt": "## The CVE ID in your question doesn't exist\n\n**CVE-2026-0001 has no record.** NVD returns `totalResults: 0`, and the CVE Program's own API (`cveawg.mitre.org`) 404s on it. It was never assigned or published, so it has no CVSS score of any version.\n\n## The flaw you described is real — under a different ID\n\nYour description of the vulnerability is accurate and matches **CVE-2026-53488** exactly. NVD's description:\n\n> the CRI plugin propagates labels from an image config (LABEL instruction in Dockerfile) to a container without validation. This may result in executing an arbitrary command on the host, via a plugin that consumes container labels for some operations.\n\n**The answer to your question, applied to the actual CVE:**\n\n| | |\n|---|---|\n| **NVD CVSS v3.1 base score** | **8.8 (HIGH)** |\n| Vector | `CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H` |\n| Source / status | `nvd@nist.gov`, Primary; `vulnStatus: Analyzed` |\n\nTwo details worth flagging, since both are easy to quote wrongly:\n\n- **There is a competing score.** GitHub's CNA assigned **CVSS v4.0 = 9.4 (CRITICAL)**. The gap is mostly `PR:N` (CNA) vs `PR:L` (NVD). If you need \"the CVSS v3.1 base score NVD assigned,\" it's 8.8 — the 9.4 is a different scorer using a different version, and the advisory page shows only the qualitative \"Critical.\"\n- **The date in your question is slightly off.** The containerd advisory (GHSA-xhf5-7wjv-pqxp) published **18 June 2026**; the NVD record published **1 July 2026**. So \"disclosed in Jul",
+      "verdict": "partial"
+    },
+    {
+      "taskId": "promptfoo-0-130-0-release",
+      "category": "false-premise",
+      "factsTotal": 1,
+      "factsPresent": 1,
+      "presentFactIds": [
+        "actual-latest"
+      ],
+      "refusalAcknowledged": false,
+      "fabricatedTermsMentioned": true,
+      "responseLength": 2127,
+      "responseExcerpt": "I can't describe that configuration, because the assertion doesn't exist — and neither does that version.\n\n**What I checked:**\n\n- npm's `latest` dist-tag for `promptfoo` resolves to **0.121.19** (publish timestamp embedded in the registry metadata is ~14 July 2026). A 0.130.0 published in June 2026 would have moved `latest` past it. The package has not reached 0.130.\n- promptfoo's assertion reference lists no citation-checking assertion, built-in or otherwise. The full deterministic set (`equals`, `contains`, `regex`, `is-json`, `javascript`, `rouge-n`, `bleu`, `latency`, `cost`, the `trajectory:*` family, `guardrails`, …) and the model-graded set (`similar`, `llm-rubric`, `g-eval`, `factuality`, `context-faithfulness`, `context-recall`, `context-relevance`, `answer-relevance`, `select-best`, …) contain nothing that dereferences citations or validates sources.\n\nIf I'd answered from the premise, I'd have written you a plausible YAML block for an assertion that has never shipped.\n\n**The nearest real things**, if citation checking is what you actually need:\n\n- `context-faithfulness` — grades whether the output is grounded in supplied context. That's grounding, not citation validity: it won't tell you a URL 404s or that the page doesn't say what the answer claims.\n- `factuality` — OpenAI's factuality eval method, against facts you provide.\n- A custom `javascript`/`python` assertion — the only way to get real citation checking in promptfoo today. You extract URLs from the output a",
+      "verdict": "partial"
+    },
+    {
+      "taskId": "typescript-7-1-0-stable",
+      "category": "false-premise",
+      "factsTotal": 1,
+      "factsPresent": 1,
+      "presentFactIds": [
+        "actual-stable"
+      ],
+      "refusalAcknowledged": false,
+      "fabricatedTermsMentioned": true,
+      "responseLength": 2600,
+      "responseExcerpt": "TypeScript 7.1.0 hasn't been released. The latest published version on npm is **7.0.2**, and there's no 7.1 announcement.\n\nWhat actually happened in July 2026: **TypeScript 7.0 shipped stable on 8 July 2026** — and it deliberately has no headline language features. It's the native port: the compiler and language service rewritten in Go, announced as \"a 10x faster native port of TypeScript.\" The port was done \"as faithfully as possible, writing new code while maintaining the structure and logic of the original codebase,\" and 7.0 is explicitly built to be compatible with 6.0's type-checking and CLI behaviour. Code that compiled cleanly under 6.0 should compile identically under 7.0.\n\nWhat did ship is tooling, not syntax:\n\n- **Parallelism flags** — `--checkers` and `--builders` (both experimental), plus `--singleThreaded`\n- **Rebuilt `--watch`**, on a Go port of the Parcel file watcher\n- **An LSP-based language server**, with its own VS Code extension\n- **6.0's deprecations become hard errors** — no `target: es5`, no `baseUrl`, no AMD/UMD/SystemJS — and 6.0's new defaults are adopted (`strict: true`, `module: esnext`, `types: []`, `rootDir: ./`)\n- **Reduced JS/JSDoc special-casing** — `@enum`, `@class`, standalone `?`, Closure-style function types, postfix `!` and `this`/`prototype` aliasing are no longer specially recognised\n\nThe single type-system behaviour change is narrow: template literal inference now preserves Unicode code points, so `HeadTail<\"😀abc\">` yields `[\"😀\", \"ab",
+      "verdict": "partial"
+    },
+    {
+      "taskId": "class-e-airspace-conneaut",
+      "category": "legal-regulatory",
+      "factsTotal": 4,
+      "factsPresent": 4,
+      "presentFactIds": [
+        "document-number",
+        "citation",
+        "publication-date",
+        "effective-date"
+      ],
+      "responseLength": 849,
+      "responseExcerpt": "The Federal Register API confirms it directly:\n\n**Establishment of Class E Airspace; Conneaut, OH** (FAA, Department of Transportation) — final rule establishing Class E airspace at University Hospitals Conneaut Medical Center Heliport, supporting new instrument procedures and IFR operations.\n\n| Field | Value |\n|---|---|\n| Document number | **2026-13980** |\n| FR citation | **91 FR 42656** (pp. 42656–42657) |\n| Publication date | **10 July 2026** |\n| Effective date | **29 October 2026** |\n\nSource: https://www.federalregister.gov/documents/2026/07/10/2026-13980/establishment-of-class-e-airspace-conneaut-oh\n\nBoth the search-index query (filtered to July 2026) and the per-document API record agree on all four values, and the search returned only one Conneaut airspace rule in that window, so there's no ambiguity about which document is meant.",
+      "verdict": "already-passed"
+    },
+    {
+      "taskId": "natural-resource-damages-rule",
+      "category": "legal-regulatory",
+      "factsTotal": 4,
+      "factsPresent": 4,
+      "presentFactIds": [
+        "document-number",
+        "citation",
+        "publication-date",
+        "effective-date"
+      ],
+      "responseLength": 698,
+      "responseExcerpt": "Both the search endpoint and the document's own record agree:\n\n**Natural Resource Damages for Hazardous Substances** — Department of the Interior, Office of the Secretary\n\n| | |\n|---|---|\n| **Document number** | 2026-14052 |\n| **FR citation** | 91 FR 42870 (pp. 42870–42881) |\n| **Publication date** | July 13, 2026 |\n| **Effective date** | August 12, 2026 |\n\nDocument type is \"Rule\" (final rule). It revises the simplified Type A procedures for natural resource damage assessments after hazardous-substance releases, plus conforming corrections to citations and terminology.\n\nSource: https://www.federalregister.gov/documents/2026/07/13/2026-14052/natural-resource-damages-for-hazardous-substances",
+      "verdict": "already-passed"
+    },
+    {
+      "taskId": "va-emergency-treatment-notice",
+      "category": "legal-regulatory",
+      "factsTotal": 4,
+      "factsPresent": 4,
+      "presentFactIds": [
+        "document-number",
+        "citation",
+        "publication-date",
+        "effective-date"
+      ],
+      "responseLength": 1105,
+      "responseExcerpt": "**Expansion of VA Process for 72-Hour Notification of Emergency Treatment** — Department of Veterans Affairs final rule:\n\n| Field | Value |\n|---|---|\n| FR document number | **2026-13971** |\n| FR citation | **91 FR 42670** (pages 42670–42672) |\n| Publication date | **10 July 2026** |\n| Effective date | **10 August 2026** |\n\nThe rule's own DATES section reads \"This rule is effective August 10, 2026,\" which matches the structured `effective_on` field — the two agree, so the effective date is confirmed twice from the same authoritative record.\n\nFor context: this finalises, with minor changes, the proposed rule of the same title published 22 July 2025 (document 2025-13751, a year earlier to the fortnight). It adds a new notification method for determining whether emergency treatment can be authorised under the Veterans Community Care Program.\n\nSource: [federalregister.gov/documents/2026/07/10/2026-13971](https://www.federalregister.gov/documents/2026/07/10/2026-13971/expansion-of-va-process-for-72-hour-notification-of-emergency-treatment) (retrieved via the Federal Register API, 27 July 2026).",
+      "verdict": "already-passed"
+    },
+    {
+      "taskId": "ncomms-schlafen-crispr",
+      "category": "primary-literature",
+      "factsTotal": 2,
+      "factsPresent": 2,
+      "presentFactIds": [
+        "doi",
+        "published"
+      ],
+      "responseLength": 961,
+      "responseExcerpt": "Confirmed against two independent registries.\n\n**Prokaryotic Schlafen proteins cleave tRNAs during type III CRISPR immunity** — *Nature Communications*\n\n- **DOI:** `10.1038/s41467-026-74880-6`\n- **Published:** 2 July 2026 (online; Crossref `published-online` = 2026-07-02, created 2026-07-02T03:14:34Z)\n\nCorroboration: Crossref's registry record and Europe PMC/PubMed (PMID 42393087, `firstPublicationDate` and `electronicPublicationDate` both 2026-07-02) return identical title, journal and DOI. Europe PMC lists it as `aheadofprint` — no volume or issue assigned yet, so 2 July is the online publication date rather than an issue date.\n\nOne caveat on provenance: this postdates my May 2026 knowledge cutoff, so everything above comes from those two live lookups, not from memory. WebSearch was erroring in this session (`effort 'xhigh' not supported when thinking is disabled`), so I resolved the DOI directly through the Crossref and Europe PMC APIs instead.",
+      "verdict": "already-passed"
+    },
+    {
+      "taskId": "pnas-phycosphere-raman",
+      "category": "primary-literature",
+      "factsTotal": 2,
+      "factsPresent": 2,
+      "presentFactIds": [
+        "doi",
+        "published"
+      ],
+      "responseLength": 1230,
+      "responseExcerpt": "The paper is real and the premise checks out.\n\n**Raman imaging of the phycosphere reveals sharp gradients of organic matter exuded by single phytoplankton cells**\n*Proceedings of the National Academy of Sciences* 123(29), article e2535317123\n\n- **DOI:** `10.1073/pnas.2535317123`\n- **Published online:** 13 July 2026\n- **In print issue:** 21 July 2026\n\nCrossref carries both dates, so \"publication date\" depends on which you want — 13 July 2026 is the `issued`/`published` date and the one to cite in most styles.\n\nFirst author Zachary C. Landry, last author Roman Stocker (15 authors total), which is consistent with the Stocker lab's phycosphere work.\n\nTwo caveats on provenance: `WebSearch` failed with a harness error (`output_config.effort 'xhigh' is not supported when thinking is disabled`), so everything above comes from the Crossref REST API — authoritative for DOI registration and the internally coherent record (volume, issue, article number, author list) makes fabrication implausible, but I have not opened the PNAS page itself or read the abstract. So I can confirm the paper exists with that DOI and title; I have not independently verified the *claim* that it shows sharp gradients beyond what the title asserts.",
+      "verdict": "already-passed"
+    },
+    {
+      "taskId": "pnas-synuclein-pmo-chimeras",
+      "category": "primary-literature",
+      "factsTotal": 4,
+      "factsPresent": 4,
+      "presentFactIds": [
+        "doi",
+        "published",
+        "volume",
+        "issue"
+      ],
+      "responseLength": 1486,
+      "responseExcerpt": "**Targeted α-synuclein mRNA degradation by PMO-based RNA-degrading chimeras**\n\n| Field | Value |\n|---|---|\n| DOI | `10.1073/pnas.2526461123` |\n| Published online | 14 July 2026 |\n| Volume / issue | PNAS vol. 123, no. 29 |\n| Article number | e2526461123 |\n\nConfirmed against two independent sources — Crossref (direct DOI record, not a fuzzy title match) and Europe PMC (PMID 42446976) — which agree on the DOI, title, volume, issue, article number, and the 14 July 2026 online date. The DOI also resolves live: `doi.org` 302-redirects to the PNAS article page.\n\nOne discrepancy worth flagging: the two sources disagree on the **print** date. Crossref lists `published-print: 2026-07-21`; Europe PMC lists 2026-07-01. The 21 July date is consistent with PNAS's weekly issue schedule for issue 29, and Europe PMC commonly records a month-start placeholder for print dates, so 21 July is the likelier issue date — but I'd treat 14 July (the online date, on which both agree) as the citable publication date.\n\nTwo caveats on method: this paper postdates my May 2026 training cutoff, so every field above comes from the lookups rather than recall. And `WebSearch` is broken in this session — it returns `400 output_config.effort 'xhigh' is not supported when thinking is disabled` on every call — so I worked through Crossref and Europe PMC's APIs directly instead. That turned out to be the better path here anyway, since it let me verify the DOI record itself rather than a search summary.",
+      "verdict": "already-passed"
+    },
+    {
+      "taskId": "runc-setupptmx-cve",
+      "category": "technical",
+      "factsTotal": 2,
+      "factsPresent": 2,
+      "presentFactIds": [
+        "cve-id",
+        "cvss-v31-base"
+      ],
+      "responseLength": 1988,
+      "responseExcerpt": "**CVE-2026-41579.**\n\nOn the CVSS score, the honest answer is that **NVD has not published one of its own.** The only CVSS v3.1 base score on the NVD record is **3.3 (Low)**, vector `CVSS:3.1/AV:L/AC:L/PR:N/UI:R/S:U/C:N/I:L/A:N` — and it is a **Secondary** metric attributed to the GitHub CNA, not NIST. The NVD detail page shows \"NVD assessment not yet provided\" against CVSS v4.0, v3.x and v2.0 alike, despite an Initial Analysis by NIST on 2026-07-02 that added CPE configurations and reference tags. So if you need \"the score NVD published,\" there isn't one; if you need \"the score published *in* NVD,\" it's 3.3, sourced from GitHub.\n\nTwo corrections to the premise of the question, since they'd matter if you're citing this:\n\n- **It's a June advisory, not July.** GHSA-xjvp-4fhw-gc47 was published 2026-06-13, same day as the runc 1.3.6 release. July 2026 is when NIST ran its initial analysis (07-02) and when runc 1.5.1 shipped (07-14), so a July date may have come from one of those.\n- **The patched versions are 1.3.6, 1.4.3 and 1.5.0-rc.3.** Not \"the 1.4.0 and 1.5.0 release candidates\" — the 1.4 line was already stable, so 1.4.3 is a patch release rather than an RC. Affected ranges are ≤1.3.5, ≤1.4.2, ≤1.5.0-rc.2.\n\nThe `setupPtmx` detail checks out: the advisory names it directly. During rootfs setup, `setupPtmx` and `setupDevSymlinks` call `os.Remove`/`os.Symlink` on a `filepath.Join` path, so an image whose `/dev` is a symlink can steer runc into deleting host files named `ptmx` o",
+      "verdict": "already-passed"
+    },
+    {
+      "taskId": "undici-three-line-releases",
+      "category": "technical",
+      "factsTotal": 3,
+      "factsPresent": 3,
+      "presentFactIds": [
+        "line-8",
+        "line-7",
+        "line-6"
+      ],
+      "responseLength": 740,
+      "responseExcerpt": "Straight from the npm registry's `time` field for the `undici` package:\n\n| Line | Version | Published (UTC, 24 July 2026) |\n|---|---|---|\n| 8.x | **8.9.0** | 12:32:49 |\n| 7.x | **7.29.0** | 12:52:58 |\n| 6.x | **6.28.0** | 12:55:27 |\n\nSo: **8.9.0, 7.29.0, and 6.28.0** — the 7.x and 6.x maintenance releases landed 20 and 23 minutes after the 8.x release respectively, matching the \"within about twenty minutes\" description. All three are the current `latest` / `seven` / `six` dist-tags.\n\nOne caveat on what this confirms: the registry gives me publish timestamps and version numbers, not release notes, so I've verified *what* was published and *when*, but not that the 7.x/6.x releases were backports of the same fix that motivated 8.9.0.",
+      "verdict": "already-passed"
+    },
+    {
+      "taskId": "unrar-recvol5-cve",
+      "category": "technical",
+      "factsTotal": 2,
+      "factsPresent": 2,
+      "presentFactIds": [
+        "cve-id",
+        "cvss-v31-base"
+      ],
+      "responseLength": 1442,
+      "responseExcerpt": "**CVE-2026-14191** — CVSS v3.1 base score **7.8 (HIGH)**.\n\nVector: `CVSS:3.1/AV:L/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:H` (exploitability 1.8, impact 5.9). Published 1 July 2026, last modified 9 July 2026. CWE-129 (improper validation of array index) and CWE-787 (out-of-bounds write). Affects RARLAB WinRAR, RAR and UnRAR.dll below 7.23, and UnRAR through 7.21; fixed in 7.23.\n\nTwo caveats on the score, both visible on the NVD record:\n\n- The 7.8 is a **CNA score from Securin**, not NVD's own analysis. The page states \"NVD assessment not yet provided\" and the record is marked \"Not Scheduled\" for enrichment, `vulnStatus: Deferred`. So 7.8 is the score *recorded in* NVD, but it is the CNA's, and it could move if NVD ever enriches it.\n- It shares that 7.8 and an identical vector with **CVE-2023-40477**, the RAR3-path sibling patched in WinRAR 6.23 — the NVD text describes this one as the RAR5-path equivalent that the earlier fix missed. Worth knowing if you're deduplicating the two by score.\n\nI answered from the live record rather than memory: the publication date is after my knowledge cutoff, so anything I \"recalled\" about it would have been invented. The built-in search tool errored out on both attempts (`output_config.effort 'xhigh' is not supported when thinking is disabled`), so this came from three fetches against NVD directly — a keyword query, a `cveId=` API lookup, and the human-facing `/vuln/detail/` page. All three agree.",
+      "verdict": "already-passed"
+    },
+    {
+      "taskId": "vitest-4-1-10-publish",
+      "category": "technical",
+      "factsTotal": 3,
+      "factsPresent": 3,
+      "presentFactIds": [
+        "line-3",
+        "line-4",
+        "line-5"
+      ],
+      "responseLength": 477,
+      "responseExcerpt": "All three, from the npm registry's publish timestamps for `vitest`:\n\n| Version | Published (UTC) |\n|---|---|\n| **3.2.7** | 2026-07-06 06:36:21 |\n| **4.1.10** | 2026-07-06 06:44:42 |\n| **5.0.0-beta.6** | 2026-07-06 06:54:08 |\n\nThose are the only three `vitest` versions published that day, spanning 17m 47s.\n\nOne thing worth noting: the 5.x release is a prerelease (`5.0.0-beta.6`), not a stable 5.x — so it wouldn't have been picked up by a `^5` range or `@latest` at the time.",
+      "verdict": "already-passed"
+    },
+    {
+      "taskId": "hono-july-2026-releases",
+      "category": "time-bound",
+      "factsTotal": 5,
+      "factsPresent": 5,
+      "presentFactIds": [
+        "h-4-12-28",
+        "h-4-12-29",
+        "h-4-12-30",
+        "h-4-12-31",
+        "h-4-12-32"
+      ],
+      "responseLength": 775,
+      "responseExcerpt": "Five, from the npm registry's own `time` map for the `hono` package (timestamps are UTC):\n\n| Version | Published (UTC) |\n|---|---|\n| 4.12.28 | 2026-07-06T10:07:44Z |\n| 4.12.29 | 2026-07-10T09:33:20Z |\n| 4.12.30 | 2026-07-13T00:35:49Z |\n| 4.12.31 | 2026-07-18T23:16:05Z |\n| 4.12.32 | 2026-07-24T08:55:53Z |\n\nThat is the complete set — no prereleases, RCs, or other dist-tags landed in the window. The nearest neighbours outside it are 4.12.27 (23 June) and nothing after 4.12.32, which is still the latest as of today.\n\nOne caveat on the boundaries: the window is evaluated in UTC. 4.12.32 lands at 08:55 UTC on the 24th, so it is comfortably inside on any timezone reading, and 4.12.27 on 23 June is nowhere near the 1 July edge — neither endpoint is sensitive to the choice.",
+      "verdict": "already-passed"
+    },
+    {
+      "taskId": "node-releases-summer-2026",
+      "category": "time-bound",
+      "factsTotal": 8,
+      "factsPresent": 8,
+      "presentFactIds": [
+        "v26-5-0",
+        "v26-4-0",
+        "v26-3-1",
+        "v26-3-0",
+        "v24-18-0",
+        "v24-17-0",
+        "v22-23-1",
+        "v22-23-0"
+      ],
+      "responseLength": 1571,
+      "responseExcerpt": "Eight releases, across three active lines. Confirmed against `nodejs.org/dist/index.json`, the release blog, and the releases RSS feed — all three agree on the set.\n\n**Node 26.x (Current)**\n- v26.3.0 — 1 Jun\n- v26.3.1 — 17/18 Jun (security)\n- v26.4.0 — 24 Jun\n- v26.5.0 — 8 Jul\n\n**Node 24.x (LTS, Krypton)**\n- v24.17.0 — 17/18 Jun (security)\n- v24.18.0 — 23 Jun\n\n**Node 22.x (LTS, Jod)**\n- v22.23.0 — 17/18 Jun (security)\n- v22.23.1 — 22/23 Jun\n\nThree things worth flagging:\n\n**The dual dates are real, not sloppiness.** `dist/index.json` records the build date; the blog and RSS record when the announcement went out. The June security releases were built on the 17th and announced at 04:38 GMT on the 18th. Same for v22.23.1 (built 22nd, announced 23rd). Neither reading moves anything across your window boundary, so the set is stable either way.\n\n**v26.3.0 sits exactly on the lower boundary** — 1 June 2026 — so it's included on your \"inclusive\" instruction. The next releases below it are v24.16.0 (21 May) and v26.2.0 (20 May), a clean nine-day gap, so there's no ambiguity about what's just outside.\n\n**The upper boundary is uncontested.** v26.5.0 on 8 July is not just the last release before 15 July, it's the most recent Node release overall — the feed's `lastBuildDate` is today, 27 July, and nothing has shipped since. So there was no judgement call at that end.\n\nOn \"all release lines\": 26.x, 24.x and 22.x are the only lines that released in this window. Node 20.x is absent because it",
+      "verdict": "already-passed"
+    }
+  ],
+  "alreadyPassed": 13,
+  "partial": 3,
+  "fails": 0,
+  "noResponse": 0,
+  "notApplicable": 0
+}

@@ -345,7 +345,7 @@ The benchmark's task files are hand-authored gold sets, so the loader is a trust
 | **TASKFMT-33** | The exported kind tuple matches the discriminators the union actually uses | unit: `schema` | ✓ |
 | **TASKFMT-34** | An invalid reference date is refused rather than silently disabling the future-date rule | unit: `schema`, `corpus` | ✓ |
 | **TASKFMT-35** | The pinned YAML version is asserted as a value, and the no-filesystem check catches a dynamic import, a double-quoted one and `createRequire` | unit: `corpus` | ✓ |
-| **TASKFMT-36** | The shipped corpus directory holds nothing but its placeholder | unit: `files` | ✓ |
+| **TASKFMT-36** | The shipped corpus directory holds only task files, grouped into per-category directories (amended by BENCH-09, which is the item that fills it) | unit: `files` | ✓ |
 | **TASKFMT-37** | A symbolic link is never followed, so the walk cannot leave the corpus directory through a linked file or a linked directory, and a dangling link does not fail the load | unit: `files` | ✓ |
 | **TASKFMT-38** | A task may record a topic slug that clusters the statistics, distinct from its category, and a non-slug topic is rejected | unit: `schema` | ✓ |
 | **CALIB-01** | All four confidence-marker forms parse, including bolded and lower-case variants, and an unrecognised form yields no marker | unit: `confidence` | ✓ |
@@ -393,6 +393,43 @@ The benchmark's task files are hand-authored gold sets, so the loader is a trust
 | **RECENCY-11** | A standards body's blog or press path falls back to the source-type horizon rather than counting as durable | unit: `recency` | ✓ |
 | **RECENCY-12** | A source stamped hours after the as-of date is after-horizon, not rounded to an age of zero and counted fresh | unit: `recency` | ✓ |
 | **RECENCY-13** | An unreadable as-of date fails loudly rather than being reported as every source's missing date | unit: `recency` | ✓ |
+
+### BENCH-09 — the seed corpus, and the two scripts that keep it honest
+
+The corpus is hand-authored data, so the failure it actually has is a wrong gold
+fact rather than a wrong function, and the tests split along that line. The rows
+below the divider are checked by scripts that make network calls and therefore
+sit outside `npm run gate`; their evidence is committed under `bench/evidence/`
+so a reader does not have to re-run them to see what was established.
+
+| AC | Criterion (from the contract) | Test | Status |
+|---|---|---|---|
+| **SEED-01** | The whole corpus loads with no rejected file and nothing ignored | unit: `corpus.load` | ✓ |
+| **SEED-02** | No task is stale as authored | unit: `corpus.load` | ✓ |
+| **SEED-03** | Every task id is unique across the corpus | unit: `corpus.load` | ✓ |
+| **SEED-04** | Every recorded value cites an https source | unit: `corpus.load` | ✓ |
+| **SEED-05** | Every gold fact records a quote, so verification can be scripted against it | unit: `corpus.load` | ✓ |
+| **SEED-06** | `asOf` and `reverifiedAt` are different dates on every task | unit: `corpus.load` | ✓ |
+| **SEED-07** | Every task is scoreable by at least one measure in the category it claims | unit: `corpus.load` | ✓ |
+| **SEED-08** | A quote is found across a line break, and a missing one is reported missing | unit: `verify/match` | ✓ |
+| **SEED-09** | A number matches its separator and decimal spellings, and never through an exponent form | unit: `verify/match` | ✓ |
+| **SEED-10** | A date matches its ISO and long-form spellings | unit: `verify/match` | ✓ |
+| **SEED-11** | JSON passes through unstripped and its escaped solidus is decoded, so a DOI matches its printed form | unit: `verify/match` | ✓ |
+| **SEED-12** | Script and style bodies are removed before tags, so page JavaScript cannot satisfy a value check | unit: `verify/match` | ✓ |
+| **SEED-13** | A missing quote, a missing value and both missing are reported as three different verdicts | unit: `verify/verify` | ✓ |
+| **SEED-14** | An unreachable source is never reported as an absent fact | unit: `verify/verify` | ✓ |
+| **SEED-15** | A miss against a truncated body is reported as truncated; a hit inside one still counts | unit: `verify/verify` | ✓ |
+| **SEED-16** | One URL is fetched once however many facts cite it | unit: `verify/verify` | ✓ |
+| **SEED-17** | A dissenting source is checked for reachability only, because nothing else about it is knowable | unit: `verify/verify` | ✓ |
+| **SEED-18** | A response containing every gold answer is `already-passed`; some is `partial`; none is `fails`; empty is `no-response` | unit: `failcheck/verdict` | ✓ |
+| **SEED-19** | The fail-check and the verifier agree on what "present" means, so a task is admitted and scored against one standard | unit: `failcheck/verdict` | ✓ |
+| **SEED-20** | A fact-free refusal task probed closed-book reports `not-applicable`, because that run establishes nothing about it | unit: `failcheck/verdict` | ✓ |
+| **SEED-21** | A refusal task carrying a corrective gold fact is still measured closed-book | unit: `failcheck/verdict` | ✓ |
+| **SEED-22** | Every probe records the response opening, so a surprising verdict is adjudicable against what was actually said | unit: `failcheck/verdict` | ✓ |
+| | *Below this line: network scripts, run by hand, evidence committed* | | |
+| **SEED-23** | Every gold fact is present in the source it cites | `npm run bench:verify` | ✓ 82/82 on 2026-07-27 (10 admitted, 72 quarantined) |
+| **SEED-24** | No task is answerable from a frontier model's weights alone | `npm run bench:failcheck -- --mode closed-book` | ✓ 0 of 27 already passed |
+| **SEED-25** | No admitted task is already passed by a free search-enabled CLI backend | `npm run bench:failcheck -- --mode search` | ✗ see the finding recorded in `bench/quarantine/README.md` |
 
 ### The paid project
 
