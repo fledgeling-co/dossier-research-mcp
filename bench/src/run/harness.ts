@@ -179,6 +179,12 @@ export async function runBatch(options: RunBatchOptions): Promise<BatchOutcome> 
 
       // Persisted before the slot is released. A cell that finished and was not
       // written is a cell the resume will buy again.
+      //
+      // A failure to *execute* is caught above and recorded; a failure to
+      // *record* is deliberately not caught, and ends the batch. They are
+      // opposite situations: one backend having a bad afternoon must not lose
+      // the cells already bought, whereas a store that cannot be written to
+      // means every further cell is money spent that no resume can find.
       await record(cell);
       records.push(cell);
       if (cell.outcome === 'ok') ok += 1;

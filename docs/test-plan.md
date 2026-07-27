@@ -431,6 +431,33 @@ so a reader does not have to re-run them to see what was established.
 | **SEED-24** | No task is answerable from a frontier model's weights alone | `npm run bench:failcheck -- --mode closed-book` | ✓ 0 of 27 already passed |
 | **SEED-25** | No admitted task is already passed by a free search-enabled CLI backend | `npm run bench:failcheck -- --mode search` | ✗ see the finding recorded in `bench/quarantine/README.md` |
 
+### BENCH-02 — the run harness
+
+The matrix is task times backend times repetition, and the money is spent one cell at a time, so the rows below split into two groups. `REPEAT-*` cover the dedupe fingerprint in `src/research/contract.ts`, where a missing repetition index silently collapsed `n` repeats onto one paid run. `BATCH-*` cover the harness itself under `bench/src/run/`. The suffix names the file: `contract` and `runner` under `tests/`, `plan` / `harness` / `cell-store` under `bench/src/run/`.
+
+| AC | Criterion (from the contract) | Test | Status |
+|---|---|---|---|
+| **REPEAT-01** | Two otherwise identical requests differing only in repetition index produce different fingerprints, so `n` repeats are `n` paid runs | unit: `contract` | ✓ |
+| **REPEAT-02** | A request with no repetition index, and one with `0`, hash to the value they hashed to before the field existed | unit: `contract` | ✓ |
+| **REPEAT-03** | A fractional, negative or `NaN` repetition index is refused rather than hashed, because every `NaN` hashes alike and would recreate the collapse | unit: `contract` | ✓ |
+| **REPEAT-04** | Every other field still changes the fingerprint with a repetition index present, so the new field cannot mask an existing one | unit: `contract` | ✓ |
+| **REPEAT-05** | Two runs differing only in repetition index both start and neither dedupes; two identical runs still dedupe onto one | unit: `runner` | ✓ |
+| **REPEAT-06** | The repetition index is stored on the run record, so a cell is attributable to its repetition later | unit: `runner` | ✓ |
+| **BATCH-01** | The matrix is task times backend times repetition, and every cell has a distinct key | unit: `plan` | ✓ |
+| **BATCH-02** | Cells with a recorded outcome are subtracted, so a re-plan queues exactly the remainder | unit: `plan` | ✓ |
+| **BATCH-03** | A projection over the ceiling refuses before anything starts and names the total it needed | unit: `plan` | ✓ |
+| **BATCH-04** | The projection totals the remaining cells only, at worst case per cell, never the whole matrix | unit: `plan` | ✓ |
+| **BATCH-05** | A failed cell stays subtracted by default and is re-queued only when asked for explicitly | unit: `plan` | ✓ |
+| **BATCH-06** | `n = 1` plans and runs, and a spread is refused below three completed repetitions with a stated reason | unit: `plan`, `cell-store` | ✓ |
+| **BATCH-07** | Concurrency never exceeds the bound, and the bound is clamped below the server's own cap | unit: `harness` | ✓ |
+| **BATCH-08** | An executor that throws is recorded as a failed cell carrying the upstream reason, and the batch continues | unit: `harness` | ✓ |
+| **BATCH-09** | Every cell records wall clock, estimated cost and the run id that produced it | unit: `harness` | ✓ |
+| **BATCH-10** | A cell is persisted before its slot is released, so a process killed mid-batch has every finished cell on disk | unit: `harness` | ✓ |
+| **BATCH-11** | The cell store round-trips, appends rather than rewrites, and a missing file reads as empty | unit: `cell-store` | ✓ |
+| **BATCH-12** | A torn or malformed line is reported and skipped rather than making the other cells unreadable | unit: `cell-store` | ✓ |
+| **BATCH-13** | A record the reader would reject is refused at write time, so no cell can be written invisible to resume | unit: `cell-store` | ✓ |
+| **BATCH-14** | Killing a batch mid-run and re-planning from the store queues exactly the cells that never finished | unit: `harness` | ✓ |
+
 ### The paid project
 
 `tests/paid/` spends real money against the live API, so it is a **separate vitest project that is deliberately excluded from `test:all` and therefore from the gate**. It cannot block a deploy. It needs both `DOSSIER_PAID_TESTS=1` and a real `GEMINI_API_KEY`, and skips itself entirely without them.

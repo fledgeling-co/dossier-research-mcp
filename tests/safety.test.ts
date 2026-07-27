@@ -163,6 +163,61 @@ describe('contract fingerprint', () => {
     expect(a).toBe(b);
   });
 
+  // REPEAT-01. The defect this fixes: with no repetition index in the
+  // fingerprint, `n = 5` of one task on one backend inside the dedupe window
+  // collapsed onto ONE paid run, and every spread, every `pass^k` and every
+  // non-determinism figure would have been one sample reported as five. The
+  // measurement most sensitive to it is the one it makes look cleanest, because
+  // five copies of one report have zero variance.
+  it('REPEAT-01: a repetition index makes n repeats n distinct purchases', () => {
+    const hashes = [1, 2, 3, 4, 5].map((repeat) => fingerprint({ ...base, repeat }));
+    expect(new Set(hashes).size).toBe(5);
+    for (const h of hashes) expect(h).not.toBe(fingerprint(base));
+  });
+
+  // REPEAT-02. Pinned against a literal computed from the code as it stood
+  // BEFORE the field existed, not against the current implementation. That is
+  // the whole point: an upgrade must not invalidate a stored fingerprint or
+  // reopen a live dedupe window, and a self-referential assertion would pass
+  // while the canonical string drifted.
+  it('REPEAT-02: no repeat, and repeat 0, hash exactly as they did before the field existed', () => {
+    const before = '7802461d51a2dc3edc1d9567e53ec8ce';
+    expect(fingerprint(base)).toBe(before);
+    expect(fingerprint({ ...base, repeat: 0 })).toBe(before);
+    // An explicitly-`undefined` repeat is not tested here because it is a
+    // compile error under `exactOptionalPropertyTypes`, which is a stronger
+    // guarantee than an assertion: the field is absent or it is a number.
+  });
+
+  // REPEAT-03. Every NaN stringifies to the same thing, so a NaN index would
+  // silently collapse the very cells the field exists to separate. Fail closed,
+  // per the rule in CLAUDE.md for anything that gates spend.
+  it('REPEAT-03: a fractional, negative or NaN repetition index is refused, never hashed', () => {
+    for (const bad of [1.5, -1, Number.NaN, Infinity, -0.5]) {
+      expect(() => fingerprint({ ...base, repeat: bad }), String(bad)).toThrow(
+        /repeat must be a non-negative integer/,
+      );
+    }
+  });
+
+  // REPEAT-04. A new trailing field could mask an existing one if it were
+  // appended without a separator or absorbed a neighbour's value. Every other
+  // axis must still move the hash with a repeat present.
+  it('REPEAT-04: every other field still changes the fingerprint with a repeat present', () => {
+    const withRepeat = { ...base, repeat: 2 };
+    const ref = fingerprint(withRepeat);
+    expect(fingerprint({ ...withRepeat, tier: 'max' })).not.toBe(ref);
+    expect(fingerprint({ ...withRepeat, provider: 'perplexity' })).not.toBe(ref);
+    expect(fingerprint({ ...withRepeat, shape: 'wide' })).not.toBe(ref);
+    expect(fingerprint({ ...withRepeat, window: '30d' })).not.toBe(ref);
+    expect(fingerprint({ ...withRepeat, collaborativePlanning: true })).not.toBe(ref);
+    expect(fingerprint({ ...withRepeat, attachments: ['document:https://x.test/a.pdf'] })).not.toBe(ref);
+    // And a repeat cannot be forged by writing the token into the prompt: the
+    // prompt is lower-cased and space-collapsed, then joined with a space, so
+    // this must not collide with repeat 2.
+    expect(fingerprint({ ...base, prompt: `${base.prompt} repeat:2` })).not.toBe(ref);
+  });
+
   it('ignores MCP auth headers so a rotated token does not fork the dedupe key', () => {
     const withToken = (token: string) =>
       fingerprint({

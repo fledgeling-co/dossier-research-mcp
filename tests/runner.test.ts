@@ -122,6 +122,48 @@ describe('start', () => {
     expect(client.created).toHaveLength(2);
   });
 
+  // REPEAT-05. The end-to-end form of the defect BENCH-01 found: five repeats
+  // of one task on one backend must be five paid interactions, and the
+  // protection dedupe exists for must survive intact beside it.
+  it('REPEAT-05: n repeats are n paid runs, while an identical request still dedupes', async () => {
+    const client = scriptedClient([snapshot({})]);
+    const runner = new Runner(store, { ...config, budgetUsd: 1000 }, () => client);
+
+    for (const repeat of [1, 2, 3, 4, 5]) {
+      const result = await runner.start({ ...START, repeat });
+      expect(result.deduped, `repeat ${String(repeat)}`).toBe(false);
+    }
+    expect(client.created).toHaveLength(5);
+
+    // An agent stuck in a retry loop passes the same arguments every time,
+    // including this one, and must still collapse onto the run it already
+    // bought. This is why the fix is an expressible index and not a nonce.
+    const again = await runner.start({ ...START, repeat: 3 });
+    expect(again.deduped).toBe(true);
+    expect(client.created).toHaveLength(5);
+
+    // And a bench cell never collides with an ordinary ad-hoc run of the same
+    // question, because the bench counts from 1 and an ordinary run sends none.
+    const adhoc = await runner.start(START);
+    expect(adhoc.deduped).toBe(false);
+    expect(client.created).toHaveLength(6);
+  });
+
+  // REPEAT-06. Hashing it is not enough: a resumed batch has to be able to tell
+  // which of five repetitions a stored run was, an hour later.
+  it('REPEAT-06: the repetition index is stored on the run record', async () => {
+    const runner = new Runner(store, config, () => scriptedClient([snapshot({})]));
+    const { run } = await runner.start({ ...START, repeat: 4 });
+    expect(run.repeat).toBe(4);
+
+    const reread = await store.getRun(run.id);
+    expect(reread?.repeat).toBe(4);
+
+    // Absent on an ordinary run, so nothing already stored gains a field.
+    const plain = await runner.start({ ...START, tier: 'max' });
+    expect(plain.run.repeat).toBeUndefined();
+  });
+
   it('refuses a run that would cross the budget ceiling', async () => {
     const tight = { ...config, budgetUsd: 3 };
     const runner = new Runner(store, tight, () => scriptedClient([snapshot({})]));
