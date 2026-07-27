@@ -67,7 +67,9 @@
     "test:acceptance": "vitest run --project acceptance",
     "test:all": "vitest run --project unit --project acceptance",
     "test:paid": "vitest run --project paid",
-    "lint:source": "node scripts/check-source-hygiene.mjs"
+    "lint:source": "node scripts/check-source-hygiene.mjs",
+    "bench:verify": "tsx bench/src/verify/cli.ts",
+    "bench:failcheck": "tsx bench/src/failcheck/cli.ts"
   },
   "dependencies": {
     "@ai-sdk/google": "^4.0.24",
