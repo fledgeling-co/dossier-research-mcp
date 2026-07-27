@@ -245,7 +245,15 @@ export function perplexityProvider(config: Config): ResearchProvider {
         });
       }
       return await res.json();
-    }, { provider: 'Perplexity' });
+    }, {
+      provider: 'Perplexity',
+      rateLimit: {
+        onRetry: ({ attempt, delayMs }) =>
+          process.stderr.write(
+            `[dossier] perplexity rate-limited on create (attempt ${String(attempt)}); waiting ${String(delayMs)}ms. Nothing was created, so this retry cannot buy a second report.\n`,
+          ),
+      },
+    });
 
   const client: DeepResearchClient = {
     async createRun(args: CreateRunArgs): Promise<InteractionSnapshot> {

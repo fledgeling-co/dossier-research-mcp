@@ -145,7 +145,18 @@ export function openAiProvider(config: Config): ResearchProvider {
         });
       }
       return (await res.json()) as Record<string, unknown>;
-    }, { provider: 'OpenAI' });
+    }, {
+      provider: 'OpenAI',
+      // The 429 that cost the owner $18 twice. OpenAI usually sends no
+      // `Retry-After` and puts the wait in the message ("try again in 1.236s"),
+      // which `nextRetryDelayMs` reads.
+      rateLimit: {
+        onRetry: ({ attempt, delayMs }) =>
+          process.stderr.write(
+            `[dossier] openai rate-limited on create (attempt ${String(attempt)}); waiting ${String(delayMs)}ms. Nothing was created, so this retry cannot buy a second report.\n`,
+          ),
+      },
+    });
 
   const kinds = new Map<string, 'response'>();
 

@@ -6,7 +6,14 @@ import { backendLimitations, describeAuth, loadConfig, type Config } from './con
 import { assertStoreName, resolveCorpusClient, type CorpusClient } from './corpus/files.js';
 import { LocalCorpus } from './corpus/local.js';
 import { probeAllBrowserTools, renderBrowserTools } from './local/browser.js';
-import { CLI_ADAPTERS, probeAllClis, probeCliModel, type CliId } from './local/cli.js';
+import {
+  CLI_ADAPTERS,
+  checkAllHeadlessArgv,
+  probeAllClis,
+  probeCliModel,
+  type CliArgvCheck,
+  type CliId,
+} from './local/cli.js';
 import { describeProbeAge, readModelCache, writeModelCache } from './local/model-cache.js';
 import {
   DEFAULT_BASE_AGENT,
@@ -78,6 +85,7 @@ import {
   renderProfile,
   renderTrace,
 } from './research/evidence.js';
+import { failureTag } from './research/failure.js';
 import { describeRun, Runner, stateHint } from './research/runner.js';
 import {
   buildWidePrompt,
@@ -851,12 +859,14 @@ export function createServer(deps: ServerDeps): FastMCP {
           : await requireRun(deps, args.runId);
         const idleMinutes = Math.round((Date.now() - Date.parse(run.lastProgressAt)) / 60_000);
         const lines = [
-          `### \`${run.id}\`, ${run.state}`,
+          `### \`${run.id}\`, ${run.state}${run.failureKind ? ` · **${failureTag(run.failureKind)}**` : ''}`,
           '',
-          `- ${stateHint(run.state)}`,
+          `- ${stateHint(run.state, run.failureKind, run.failureStatus)}`,
           `- Tier ${run.tier} · archetype ${run.archetype} · started ${run.createdAt}`,
           `- Last forward progress: ${idleMinutes} minute(s) ago`,
-          `- Committed cost: ~$${run.estimatedCostUsd.toFixed(2)}`,
+          run.budgetReleased
+            ? `- Committed cost: **$0.00**, the $${run.estimatedCostUsd.toFixed(2)} reservation was released because the provider refused the request and created nothing.`
+            : `- Committed cost: ~$${run.estimatedCostUsd.toFixed(2)}`,
         ];
         const live: string[] = [];
         if (run.reasoningSteps > 0) live.push(`${run.reasoningSteps} reasoning steps`);
@@ -884,7 +894,20 @@ export function createServer(deps: ServerDeps): FastMCP {
             'Read it with `research_read { runId }`, outline first; it is far too large to return inline.',
           );
         }
-        if (run.error) lines.push('', `**Error:** ${run.error}`);
+        // The provider's own words, in full, where a person looking at a failed
+        // run will see them. The text was always on the record and never shown
+        // here, so a quota problem, an entitlement problem and a malformed
+        // request all read as the same unexplained failure.
+        if (run.error) {
+          lines.push(
+            '',
+            `**Upstream error${run.failureStatus === undefined ? '' : ` (HTTP ${String(run.failureStatus)})`}:**`,
+            '',
+            '```',
+            run.error.slice(0, 2000),
+            '```',
+          );
+        }
         return lines.join('\n');
       }
 
@@ -1301,15 +1324,30 @@ export function createServer(deps: ServerDeps): FastMCP {
       if (args.tag) runs = runs.filter((r) => r.tags.includes(args.tag as string));
       const page = runs.slice(0, args.limit);
       if (page.length === 0) return 'No runs match.';
+      // A broken adapter has to be obvious from the listing alone. Every
+      // failure used to render as the bare word `failed`, so an adapter that
+      // could never have worked sat beside a genuinely hard question looking
+      // identical, and the upstream reason was not shown at all.
+      const broken = page.filter((r) => r.failureKind === 'adapter-rejected');
       return [
         `${page.length} of ${runs.length} run(s):`,
         '',
         ...page.map((r) =>
           [
-            `- \`${r.id}\` **${r.state}** · ${r.tier}/${r.archetype} · ~$${r.estimatedCostUsd.toFixed(2)}`,
+            `- \`${r.id}\` **${r.state}${r.failureKind ? `: ${failureTag(r.failureKind)}` : ''}** · ${r.tier}/${r.archetype} · ` +
+              (r.budgetReleased ? `~$0.00 ($${r.estimatedCostUsd.toFixed(2)} released)` : `~$${r.estimatedCostUsd.toFixed(2)}`),
             r.title ? `\n    ${r.title}` : r.label ? `\n    ${r.label}` : `\n    ${r.question.slice(0, 120)}`,
+            r.error ? `\n    ↳ ${(r.error.split('\n')[0] ?? '').slice(0, 200)}` : '',
           ].join(''),
         ),
+        ...(broken.length > 0
+          ? [
+              '',
+              `> [!WARNING]\n> ${String(broken.length)} run(s) failed because the backend REFUSED the invocation Dossier built, not because the research was hard. ` +
+                'That is a defect in Dossier, and every run on that backend will fail the same way until it is fixed. ' +
+                'Run `research_doctor` to see the argv self-test.',
+            ]
+          : []),
       ].join('\n');
     },
   });
@@ -1346,13 +1384,24 @@ export function createServer(deps: ServerDeps): FastMCP {
       const snapshot = await runner.budget();
       const since = new Date(Date.now() - snapshot.windowHours * 3_600_000).toISOString();
       const entries = await store.readLedger(since);
-      const top = [...entries].sort((a, b) => b.estimatedCostUsd - a.estimatedCostUsd).slice(0, 5);
+      // Reservations only in the "largest" list. A release is a correction to a
+      // reservation already listed, and rendering it identically would show a
+      // refunded $9 as a $9 commitment.
+      const released = entries.filter((e) => e.kind === 'release');
+      const top = entries
+        .filter((e) => e.kind !== 'release')
+        .sort((a, b) => b.estimatedCostUsd - a.estimatedCostUsd)
+        .slice(0, 5);
+      const releasedUsd = released.reduce((sum, e) => sum + e.estimatedCostUsd, 0);
       return [
         `### Spend, last ${snapshot.windowHours}h`,
         '',
         `- Committed: **$${snapshot.committedUsd.toFixed(2)}** of $${snapshot.budgetUsd.toFixed(2)}`,
         `- Remaining: **$${snapshot.remainingUsd.toFixed(2)}**`,
         `- Runs in window: ${snapshot.runsInWindow} · in flight now: ${snapshot.activeRuns}/${snapshot.maxConcurrent}`,
+        released.length > 0
+          ? `- Released: **$${releasedUsd.toFixed(2)}** across ${String(released.length)} request(s) the provider refused outright, so nothing was created and nothing was charged. The reservations stay on the ledger, compensated rather than deleted.`
+          : '',
         snapshot.budgetUsd === 0 ? '- ⚠ The budget gate is DISABLED (DOSSIER_BUDGET_USD=0).' : '',
         '',
         top.length > 0 ? '**Largest commitments:**' : '',
@@ -3305,6 +3354,62 @@ function registerAgentTools(server: FastMCP, deps: ServerDeps): void {
 }
 
 /**
+ * Does each adapter's real invocation parse against the binary it will run?
+ *
+ * The check `research_doctor` did not have, and the reason a broken adapter
+ * could sit in the tree reporting 🟡 CONFIGURED, UNVERIFIED. A `--version`
+ * probe and a sign-in file prove a binary exists and someone logged into it;
+ * neither touches the argv that actually carries the brief, and Codex's
+ * `--search` lived in that gap: valid on `codex`, invalid on `codex exec`, and
+ * fatal on every single run.
+ *
+ * **On the default path, under the existing `probeLocal` flag rather than
+ * behind a new one.** It does spawn a process per identified CLI, which is the
+ * argument for a flag, and the argument loses. `probeLocal` already spawns
+ * `--version` on every one of them, so this is one more short-lived local
+ * process each, offline, free, and finished in milliseconds. Against that: this
+ * is the only check in the whole audit that would have caught a defect which
+ * broke every run on a backend for months. Putting the one check that finds the
+ * bug behind an option nobody sets is how the bug survived the first time.
+ */
+export function renderArgvSelfTest(checks: readonly CliArgvCheck[]): string[] {
+  const lines: string[] = ['## Does each adapter’s invocation actually parse?', ''];
+  lines.push(
+    '_A binary answering `--version` proves nothing about the argv that carries your brief. This runs the REAL headless ' +
+      'invocation with an inert prompt and `--help` appended, so the flags are parsed and the process exits without ' +
+      'reaching a model. Offline, free, and it exercises argument parsing only: a value the binary accepts as an argument ' +
+      'and rejects later while loading config would still pass this._',
+    '',
+  );
+
+  const shown = checks.filter((c) => c.state !== 'skipped');
+  if (shown.length === 0) {
+    lines.push('- No installed, identified CLI to test.');
+    return lines;
+  }
+
+  for (const check of shown) {
+    const icon = { accepted: '✅ ACCEPTED', rejected: '❌ REJECTED', inconclusive: '❓ INCONCLUSIVE', skipped: '' }[
+      check.state
+    ];
+    lines.push(`- ${icon} **${check.label}**: \`${check.argv.join(' ')}\``);
+    lines.push(`  - ${check.detail}`);
+  }
+
+  const rejected = shown.filter((c) => c.state === 'rejected');
+  lines.push(
+    '',
+    rejected.length > 0
+      ? `> [!CAUTION]\n> ${String(rejected.length)} adapter(s) build an invocation the binary REFUSES. Every run on ${rejected.length === 1 ? 'that backend' : 'those backends'} ` +
+          'will die at argument parsing before any research happens, and because a CLI run is ledgered at $0 it costs nothing visible while consuming a panel seat. ' +
+          'This is a defect in Dossier, not in your setup. Set `DOSSIER_PROVIDERS` to exclude ' +
+          `${rejected.map((r) => `\`local-${r.id}\``).join(', ')} until it is fixed, and please report it._`
+      : '_Every installed adapter’s invocation parses. That is not a promise the research will succeed, only that it will start._',
+  );
+  return lines;
+}
+
+/**
  * Which model is behind each CLI, and how old that answer is.
  *
  * Split out of the doctor tool because it is the one section that can spend
@@ -3473,6 +3578,8 @@ function registerResources(server: FastMCP, deps: ServerDeps): void {
             `_${String(ambiguous.length)} binary(ies) could not be identified. Several vendors ship executables called \`agent\` and \`grok\`; an unidentified one is never run, because handing your brief to a different vendor's tool is a different bill._`,
           );
         }
+
+        lines.push('', ...renderArgvSelfTest(await checkAllHeadlessArgv(10_000, clis)));
 
         lines.push(
           '',

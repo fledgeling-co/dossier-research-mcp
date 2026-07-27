@@ -17,7 +17,7 @@ Most people reading this already pay for at least one AI subscription. This page
 | What you pay for | Gets you research | How |
 |---|---|---|
 | **Claude Pro / Max / Team** | ✅ yes | Bundled **`/deep-research`**, plus web search driving Dossier's local loop |
-| **ChatGPT Plus / Pro** | ✅ yes | Codex CLI signs in with ChatGPT; web search on by default |
+| **ChatGPT Plus / Pro** | ✅ yes | Codex CLI signs in with ChatGPT; `codex exec` searches the live web by default (measured on 0.145.0) |
 | **Google AI Pro / Ultra** | ✅ yes | Deep Research in the web app via share link; **`agy` CLI** on a 5-hourly quota |
 | **Google account (free)** | ✅ yes | **`agy` CLI** on a weekly quota, including Claude Sonnet and Opus 4.6 at $0 |
 | **Cursor** | ✅ yes | Cursor CLI (`agent`) runs on your plan pools |
@@ -70,10 +70,15 @@ Check what you have left with `/usage`. Long research runs are context-heavy, so
 curl -fsSL https://chatgpt.com/codex/install.sh | sh
 cd your-project
 codex                 # choose "Sign in with ChatGPT"
-codex --search        # switch a run to live web search
+codex exec "…"        # headless, which is how Dossier drives it
 ```
 
-Codex has web search (`codex --search`) and can connect MCP servers (`codex mcp`), so it can run Dossier's local loop the same way Claude Code does. It scored 93.9% at the lowest cost of any tool on the April 2026 bench, so this is a genuinely good path.
+Codex has web search and can connect MCP servers (`codex mcp`), so it can run Dossier's local loop the same way Claude Code does. It scored 93.9% at the lowest cost of any tool on the April 2026 bench, so this is a genuinely good path.
+
+> [!IMPORTANT]
+> **`--search` is a flag on `codex`, not on `codex exec`.** It is documented on `codex --help` and absent from `codex exec --help`, and `codex exec --search` answers `error: unexpected argument '--search' found` and exits before doing anything. Measured against codex-cli 0.145.0 on 27 July 2026. Dossier used to send it and every `local-codex` run died there; it now sends the bare positional and asks the binary which form it takes.
+>
+> On 0.145.0 you do not need a flag at all: `codex exec` searches the live web by default. Measured rather than assumed, by asking for the current top three Hacker News titles with shell forbidden, a fact that turns over hourly and no local command can reach. Plain `codex exec` returned all three in order.
 
 > [!NOTE]
 > **Unconfirmed:** which subscription tiers qualify for Codex CLI, and what the usage limits are on ChatGPT auth versus an API key. OpenAI's CLI docs point at separate auth and pricing pages for both and don't state it inline. Check before relying on it for volume.

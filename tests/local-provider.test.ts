@@ -44,10 +44,12 @@ async function fakeCli(body: string): Promise<void> {
  * gets a genuine failure dismissed later.
  */
 async function settled(
-  client: { getRun: (id: string) => Promise<{ status: string; markdown: string; error?: string }> },
+  client: {
+    getRun: (id: string) => Promise<{ status: string; markdown: string; error?: string; failureKind?: string }>;
+  },
   id: string,
   timeoutMs = 8_000,
-): Promise<{ status: string; markdown: string; error?: string }> {
+): Promise<{ status: string; markdown: string; error?: string; failureKind?: string }> {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
     const snapshot = await client.getRun(id);
@@ -187,6 +189,45 @@ describe('the local CLI backend', () => {
     // The partial output is still there: a failed run that produced something
     // is more useful than an empty one.
     expect(done.markdown).toContain('partial output');
+  });
+
+  it('CLI-32: reports an argument-parse refusal as a broken adapter, not as failed research', async () => {
+    // The shipped `local-codex` failure, exactly: the binary refused the argv
+    // and exited before doing anything. Rendering that identically to a hard
+    // research question is how it survived for months, invisible in spend
+    // because a CLI run is ledgered at $0.
+    await fakeCli('echo "error: unexpected argument \'--search\' found" >&2; exit 2');
+    const client = localProvider(config, CLAUDE).client();
+    const started = await client.createRun({
+      prompt: 'q',
+      tier: 'fast',
+      collaborativePlanning: false,
+      thinkingSummaries: false,
+      visualization: false,
+      tools: [],
+    });
+    const done = await settled(client, started.interactionId);
+    expect(done.status).toBe('failed');
+    expect(done.failureKind).toBe('adapter-rejected');
+    // The parser's own words, so the defect is diagnosable from the run alone.
+    expect(done.error).toMatch(/unexpected argument '--search'/);
+    expect(done.error).toContain('refused the invocation');
+  });
+
+  it('CLI-32: an ordinary non-zero exit is still failed research, not a broken adapter', async () => {
+    await fakeCli('echo "could not reach the web"; exit 1');
+    const client = localProvider(config, CLAUDE).client();
+    const started = await client.createRun({
+      prompt: 'q',
+      tier: 'fast',
+      collaborativePlanning: false,
+      thinkingSummaries: false,
+      visualization: false,
+      tools: [],
+    });
+    const done = await settled(client, started.interactionId);
+    expect(done.status).toBe('failed');
+    expect(done.failureKind).toBe('research');
   });
 
   it('survives the observing process being a different one', async () => {

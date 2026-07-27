@@ -288,6 +288,33 @@ export class Store {
     return events;
   }
 
+  /**
+   * Committed dollars, netting releases against the reservations they compensate.
+   *
+   * The bound is the whole safety argument. A `release` line can only ever give
+   * back what its own `runId` reserved, so a duplicated, replayed or forged
+   * release cannot push committed spend below what was really committed. That
+   * is the same invariant `estimatedCostUsd: nonnegative` protects on the
+   * reservation side, and it is why releases are a separate kind rather than a
+   * negative amount: a negative amount has no natural ceiling.
+   *
+   * A release whose reservation falls outside the window nets to nothing, which
+   * is correct, because the reservation is not being counted either.
+   */
+  static netCommittedUsd(entries: readonly LedgerEntry[]): number {
+    const reserved = new Map<string, number>();
+    const released = new Map<string, number>();
+    for (const e of entries) {
+      const bucket = e.kind === 'release' ? released : reserved;
+      bucket.set(e.runId, (bucket.get(e.runId) ?? 0) + e.estimatedCostUsd);
+    }
+    let total = 0;
+    for (const [runId, amount] of reserved) {
+      total += amount - Math.min(released.get(runId) ?? 0, amount);
+    }
+    return total;
+  }
+
   async appendLedger(entry: LedgerEntry): Promise<void> {
     const validated = LedgerEntrySchema.parse(entry);
     await appendFile(this.ledgerPath, `${JSON.stringify(validated)}\n`, { encoding: 'utf8', mode: 0o600 });

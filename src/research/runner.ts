@@ -9,6 +9,15 @@ import { TERMINAL_STATES, type RunRecord, type RunState } from '../store/types.j
 import type { Archetype } from './archetypes.js';
 import type { ProviderId } from '../providers/types.js';
 import { fingerprint } from './contract.js';
+import {
+  boughtNothing,
+  classifyCreateFailure,
+  describeFailureKind,
+  failureTag,
+  isArgvRejection,
+  statusOfFailure,
+  type RunFailureKind,
+} from './failure.js';
 import { extractPlan } from './plan.js';
 import { KeyedMutex, Mutex } from './spend.js';
 import { StreamSupervisor } from './stream.js';
@@ -256,16 +265,17 @@ export class Runner {
     // A line we cannot parse is spend we cannot see. Charging the worst case
     // per damaged line keeps corruption from raising the ceiling; the
     // alternative is that editing the ledger grants free runs.
-    const committed =
-      entries.reduce((sum, e) => sum + e.estimatedCostUsd, 0) +
-      unreadableLines * estimateCost('max').highUsd;
+    const committed = Store.netCommittedUsd(entries) + unreadableLines * estimateCost('max').highUsd;
     const active = (await this.store.activeRuns()).filter(occupiesSlot);
     return {
       budgetUsd: this.config.budgetUsd,
       windowHours: this.config.budgetWindowHours,
       committedUsd: Number(committed.toFixed(2)),
       remainingUsd: Number(Math.max(0, this.config.budgetUsd - committed).toFixed(2)),
-      runsInWindow: entries.length,
+      // Reservations only. A release is a correction to a line already counted
+      // here, not a second thing that ran, and counting it would report two
+      // runs for one refused request.
+      runsInWindow: entries.filter((e) => e.kind !== 'release').length,
       activeRuns: active.length,
       maxConcurrent: this.config.maxConcurrent,
     };
@@ -459,14 +469,30 @@ export class Runner {
         ...(args.attachments ? { attachments: args.attachments } : {}),
       });
     } catch (e: unknown) {
+      // Say WHICH kind of failure this is. "failed" alone made a broken adapter
+      // and a hard question look identical in the run list, and they need
+      // opposite responses: one is a bug report, the other is a re-scope.
+      const kind = classifyCreateFailure(e);
+      const status = statusOfFailure(e);
+      const upstream = e instanceof Error ? e.message : String(e);
       const failed: RunRecord = {
         ...record,
         state: 'failed',
-        error: e instanceof Error ? e.message : String(e),
+        failureKind: kind,
+        ...(status !== undefined ? { failureStatus: status } : {}),
+        // The upstream message FIRST, then what it means. The owner could read
+        // the raw text off the stored record and diagnose a quota problem in
+        // minutes; nothing surfaced it where a person looking at a failed run
+        // would see it, so it read as an unexplained failure.
+        error: `${upstream}\n\n${describeFailureKind(kind, status)}`.slice(0, 4000),
         updatedAt: new Date().toISOString(),
       };
       await this.store.saveRun(failed);
       await this.store.appendJournal(id, 'failed', failed.error ?? 'unknown error');
+      // Give the money back only when the provider proved it created nothing.
+      if (boughtNothing(kind)) {
+        await this.releaseReservation(failed, `the ${record.provider} request was refused (${failureTag(kind)}), so nothing was created.`);
+      }
       throw e;
     }
 
@@ -903,10 +929,17 @@ export class Runner {
 
     switch (snapshot.status) {
       case 'failed': {
+        const upstream = snapshot.error ?? 'The research run failed with no reported reason.';
+        // The adapter's own verdict wins where it has one; otherwise the text
+        // is checked for an argument parser's refusal, which is the signature
+        // of broken software rather than of hard research.
+        const kind: RunFailureKind =
+          snapshot.failureKind ?? (isArgvRejection(upstream) ? 'adapter-rejected' : 'research');
         next = {
           ...next,
           state: 'failed',
-          error: snapshot.error ?? 'The research run failed with no reported reason.',
+          failureKind: kind,
+          error: `${upstream}\n\n${describeFailureKind(kind)}`.slice(0, 4000),
         };
         await this.store.appendJournal(run.id, 'failed', next.error ?? 'failed');
         break;
@@ -1057,9 +1090,40 @@ export class Runner {
     if (existing.some((e) => e.kind === 'note' && e.message.startsWith(PANEL_MERGE_PREFIX))) return;
 
     const lines: string[] = [];
+    // Who actually contributed, always, before anything is said about breadth.
+    //
+    // A silently failing member inflates the apparent breadth of a panel: four
+    // members returning one report looked exactly like four-way coverage,
+    // because the only thing reported was the merge, and the merge only ever
+    // described the members that finished. The whole argument for paying five
+    // times is that five backends read different parts of the web, so how many
+    // of them actually did is the first fact a reader needs.
+    const contributed = members.filter((m) => m.state === 'completed' && m.reportChars > 0);
+    lines.push(
+      `${PANEL_MERGE_PREFIX} ${String(contributed.length)} of ${String(members.length)} members produced a report.`,
+      '',
+      ...members.map((m) => {
+        const label = `\`${m.id}\` ${m.provider}`;
+        if (m.state === 'completed' && m.reportChars > 0) {
+          return `- ✅ ${label}: ${String(m.reportChars)} chars, ${String(m.sourceCount)} cited sources`;
+        }
+        if (m.state === 'completed') return `- ⚠ ${label}: completed but produced no report text`;
+        const why = m.failureKind ? failureTag(m.failureKind) : m.state;
+        return `- ❌ ${label}: ${m.state} (${why})${m.error ? `, ${m.error.split('\n')[0]?.slice(0, 160) ?? ''}` : ''}`;
+      }),
+      '',
+    );
+    if (contributed.length < members.length) {
+      lines.push(
+        `> [!WARNING]\n> ${String(members.length - contributed.length)} of ${String(members.length)} members contributed nothing. ` +
+          'Read anything below as the breadth of the members that answered, not of the panel that was paid for.',
+        '',
+      );
+    }
+
     if (completed.length < 2) {
       lines.push(
-        `${PANEL_MERGE_PREFIX} ${String(completed.length)} of ${String(members.length)} members completed, ` +
+        `${String(completed.length)} of ${String(members.length)} members completed, ` +
           'so there is nothing to merge. Nothing was charged for this check.',
       );
     } else {
@@ -1071,7 +1135,7 @@ export class Runner {
       if (evidence.length < 2) return;
       const merged = mergeEvidence(evidence);
       lines.push(
-        `${PANEL_MERGE_PREFIX} ${String(evidence.length)} members, ` +
+        `Merged ${String(evidence.length)} members: ` +
           `${String(merged.sources.length)} distinct sources across ${String(merged.independentDomains)} independent registrable domains.`,
         '',
         describeOverlap(merged),
@@ -1157,7 +1221,57 @@ export class Runner {
   private async committedFor(provider: ProviderId): Promise<number> {
     const since = new Date(Date.now() - this.config.budgetWindowHours * 3_600_000).toISOString();
     const { entries } = await this.store.readLedgerStrict(since);
-    return entries.filter((e) => e.provider === provider).reduce((sum, e) => sum + e.estimatedCostUsd, 0);
+    return Store.netCommittedUsd(entries.filter((e) => e.provider === provider));
+  }
+
+  /**
+   * Give back the commitment for a request the provider provably refused.
+   *
+   * The ledger is written *before* the paid call on purpose, so a crash
+   * over-counts rather than under-counts. That default is right and is not
+   * changing. But a 429, 400, 401 or 403 is the provider saying it never
+   * created anything, and holding money against a call that never reached a
+   * model is a ceiling reduced for nothing: two of the owner's runs held $9
+   * each on requests that were refused in under a second.
+   *
+   * Three properties make this safe to have at all:
+   *
+   * - **Only on a definitive rejection.** `boughtNothing` gates it, and an
+   *   ambiguous failure keeps its commitment, always. The safe direction is
+   *   unchanged for every case where the outcome is unknown.
+   * - **Append-only.** A compensating `release` line, never an edit to the
+   *   reservation. The ledger stays a record of what happened, including the
+   *   part where we reserved and then learned better.
+   * - **Idempotent and bounded.** The record carries `budgetReleased`, and
+   *   `netCommittedUsd` refuses to give back more than the run reserved, so
+   *   neither a retry nor a replayed line can release twice.
+   *
+   * The spend-affecting order in `start()` is untouched: this runs afterwards,
+   * as compensation, and never as a step inside admission control.
+   */
+  private async releaseReservation(run: RunRecord, reason: string): Promise<RunRecord> {
+    if (run.budgetReleased || run.estimatedCostUsd <= 0) return run;
+    const released: RunRecord = { ...run, budgetReleased: true };
+    await this.withAdmissionLock(async () => {
+      await this.store.appendLedger({
+        at: new Date().toISOString(),
+        runId: run.id,
+        tier: run.tier,
+        estimatedCostUsd: run.estimatedCostUsd,
+        provider: run.provider,
+        kind: 'release',
+        reason: reason.slice(0, 300),
+        ...(run.label ? { label: run.label } : {}),
+      });
+      await this.store.saveRun(released);
+    });
+    await this.store.appendJournal(
+      run.id,
+      'note',
+      `Budget commitment of $${run.estimatedCostUsd.toFixed(2)} released: ${reason} ` +
+        'The reservation line stays on the ledger and is compensated by a release line, so the history is intact.',
+    );
+    return released;
   }
 
   /** Poll one run against the API and persist whatever changed. */
@@ -1382,16 +1496,28 @@ export class Runner {
 export function describeRun(run: RunRecord): string {
   const age = Math.round((Date.now() - Date.parse(run.createdAt)) / 60_000);
   const bits = [
-    `${run.id} [${run.state}]`,
+    // The failure kind rides on the state word itself, so a broken adapter is
+    // visible in a dense listing without anyone opening the run.
+    `${run.id} [${run.state}${run.failureKind ? `: ${failureTag(run.failureKind)}` : ''}]`,
     `${run.tier}/${run.archetype}`,
     `${age}m old`,
   ];
   if (run.state === 'completed') bits.push(`${run.sourceCount} sources`);
-  if (run.error) bits.push(`error: ${run.error.slice(0, 120)}`);
+  if (run.budgetReleased) bits.push(`$${run.estimatedCostUsd.toFixed(2)} released`);
+  // The upstream message, not a paraphrase. The first line is the provider's
+  // own words, which is what turns "it failed" into "you were over your
+  // tokens-per-minute limit by 24,000 tokens".
+  if (run.error) bits.push(`error: ${(run.error.split('\n')[0] ?? run.error).slice(0, 160)}`);
   return bits.join(' · ');
 }
 
-export function stateHint(state: RunState): string {
+/**
+ * What to do next, given a state and, when it failed, why.
+ *
+ * `failed` used to say one thing for every failure. It is the difference
+ * between "file a bug" and "try a narrower question", so the kind decides.
+ */
+export function stateHint(state: RunState, failureKind?: RunFailureKind, status?: number): string {
   switch (state) {
     case 'planning':
       return 'Awaiting plan approval, call `research_approve_plan`.';
@@ -1402,7 +1528,9 @@ export function stateHint(state: RunState): string {
     case 'completed':
       return 'Read it with `research_read` (starts with an outline, not the whole report).';
     case 'failed':
-      return 'Failed. The error is on the record; starting again will cost another run.';
+      return failureKind
+        ? describeFailureKind(failureKind, status)
+        : 'Failed. The error is on the record; starting again will cost another run.';
     case 'cancelled':
       return 'Cancelled.';
     default: {

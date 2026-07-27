@@ -65,8 +65,31 @@ export interface CliAdapter {
   readonly pathHints: readonly string[];
   /** Config paths whose *presence* implies authentication. Never read. */
   readonly authPaths: readonly string[];
-  /** Argv for a single headless prompt. */
+  /**
+   * Argv for a single headless prompt, in the form the current builds want.
+   *
+   * Used verbatim unless {@link headlessAlternate} is declared and its probe
+   * says this binary documents the older form instead.
+   */
   readonly headless: (prompt: string) => readonly string[];
+  /**
+   * The form to use instead when *this* binary documents it.
+   *
+   * Version-awareness by probing rather than by comparing version numbers. A
+   * version comparison encodes a belief about which builds changed their flags,
+   * and that belief is wrong the moment a vendor backports or a user pins. The
+   * probe asks the binary what it documents and uses the answer, so two Codex
+   * installs at different versions each get the form they accept.
+   */
+  readonly headlessAlternate?: {
+    /** Argv for the probe. Must be offline, free, and free of side effects. */
+    readonly probeArgs: readonly string[];
+    /** What the probe output must contain for the alternate form to be chosen. */
+    readonly expect: RegExp;
+    readonly argv: (prompt: string) => readonly string[];
+    /** Said out loud in `research_doctor` when the alternate is selected. */
+    readonly why: string;
+  };
   /** Dated, sourced coverage claim. */
   readonly billing: string;
   /** Anything that would cost the user money unexpectedly. */
@@ -98,7 +121,36 @@ export const CLI_ADAPTERS: readonly CliAdapter[] = [
     identity: /codex/i,
     pathHints: ['/.codex/', '/codex/'],
     authPaths: [home('.codex', 'auth.json'), home('.codex')],
-    headless: (prompt) => ['exec', '--search', prompt],
+    // `--search` is NOT valid on `codex exec`. It is documented on `codex
+    // --help` and absent from `codex exec --help`, so every headless run died
+    // at clap's argument parsing before any research happened. Verified by hand
+    // against codex-cli 0.145.0 on 27 July 2026: `codex exec --search` answers
+    // `error: unexpected argument '--search' found` and exits 2. Setting
+    // `web_search = "live"` in `~/.codex/config.toml` is not a workaround
+    // either, because the invocation dies before config is ever read.
+    //
+    // The bare positional is the whole fix. Live retrieval was then measured
+    // rather than assumed: asked for the current top three Hacker News titles
+    // with shell forbidden, a fact that turns over hourly and no local command
+    // can reach, plain `codex exec` returned all three in order. So web search
+    // is already on by default in `exec` on this build.
+    //
+    // `-c web_search=live` is deliberately NOT sent. It is accepted and
+    // recognised here, but the same measurement showed it changes nothing, and
+    // an unrecognised `-c` key is rejected at config load on a build that does
+    // not know it. That is the same class of failure as the bug above, on a
+    // path the offline argv self-test cannot see, bought for an effect that was
+    // proven absent.
+    headless: (prompt) => ['exec', prompt],
+    headlessAlternate: {
+      // An older Codex may genuinely take `--search` on `exec`, and on such a
+      // build search may not be on by default, which is what the flag was for.
+      // Asked of the binary rather than inferred from a version number.
+      probeArgs: ['exec', '--help'],
+      expect: /--search\b/,
+      argv: (prompt) => ['exec', '--search', prompt],
+      why: 'this build documents `--search` on `codex exec`, so it is used; current builds do not and are given the bare positional',
+    },
     billing:
       'Sign in with ChatGPT is documented (verified 25 July 2026); which tiers qualify and what the limits are is not stated on the CLI page. Treat coverage as unconfirmed.',
   },
@@ -275,6 +327,219 @@ export async function probeAllClis(timeoutMs = 4_000): Promise<CliStatus[]> {
   return Promise.all(CLI_ADAPTERS.map((a) => probeCli(a, timeoutMs)));
 }
 
+/* --------------------------------------------------- headless argv form ---- */
+
+/**
+ * Which headless form this particular binary takes.
+ *
+ * Codex is why this exists: `--search` is valid on `codex` and invalid on
+ * `codex exec`, and the adapter shipped the invalid one, so every `local-codex`
+ * run died at argument parsing before any research happened. CLI runs ledger at
+ * $0, so it cost nothing visible while silently consuming a panel seat.
+ *
+ * **Probed, never version-compared.** Comparing version numbers encodes a
+ * belief about which builds changed their flags, and the belief is wrong the
+ * moment a vendor backports or a user pins an old release. `<bin> exec --help`
+ * asks the binary what it documents and the answer decides.
+ *
+ * **Cached in memory, not on disk, and that is the deliberate half.**
+ * `model-cache.ts` persists because its probe costs a paid model round trip, so
+ * asking twice is asking twice for money. This probe is a `--help` on a local
+ * binary: offline, free, and a few milliseconds. Persisting it would buy
+ * nothing and introduce the one failure a cache of this shape can have, an
+ * upgrade in place at the same path being answered from a stale file. The key
+ * is the RESOLVED ABSOLUTE PATH, because two Codex installs on one machine can
+ * differ and the name on PATH does not distinguish them.
+ */
+const headlessForms = new Map<string, 'default' | 'alternate'>();
+
+/** Reset the in-memory probe cache. Tests only; a process never needs it. */
+export function clearHeadlessFormCache(): void {
+  headlessForms.clear();
+}
+
+function formKey(adapter: CliAdapter, binPath: string): string {
+  return `${adapter.id}::${binPath}`;
+}
+
+/** Run a probe and return its combined output, whatever the exit code. */
+async function probeOutput(
+  bin: string,
+  args: readonly string[],
+  timeoutMs: number,
+): Promise<{ stdout: string; stderr: string; code: number | null } | null> {
+  try {
+    const { stdout, stderr } = await run(bin, [...args], { timeout: timeoutMs, maxBuffer: 2_000_000 });
+    return { stdout, stderr, code: 0 };
+  } catch (e: unknown) {
+    // `execFile` rejects on a non-zero exit, and the output we need to read is
+    // on the error. A help screen printed to stderr with exit 1 is normal.
+    const err = e as { stdout?: unknown; stderr?: unknown; code?: unknown };
+    if (typeof err.stdout === 'string' || typeof err.stderr === 'string') {
+      return {
+        stdout: typeof err.stdout === 'string' ? err.stdout : '',
+        stderr: typeof err.stderr === 'string' ? err.stderr : '',
+        code: typeof err.code === 'number' ? err.code : null,
+      };
+    }
+    return null;
+  }
+}
+
+/**
+ * The argv builder this binary actually takes.
+ *
+ * Falls back to `adapter.headless` whenever the probe cannot answer. A probe
+ * that fails says nothing about which form is right, and the default is the
+ * form current builds document, so guessing the alternate on a failure would
+ * turn one unreadable binary into a broken run.
+ */
+export async function resolveHeadless(
+  adapter: CliAdapter,
+  binPath: string,
+  timeoutMs = 4_000,
+): Promise<(prompt: string) => readonly string[]> {
+  const alternate = adapter.headlessAlternate;
+  if (!alternate) return adapter.headless;
+
+  const key = formKey(adapter, binPath);
+  let form = headlessForms.get(key);
+  if (form === undefined) {
+    const out = await probeOutput(binPath, alternate.probeArgs, timeoutMs);
+    form = out && alternate.expect.test(`${out.stdout}\n${out.stderr}`) ? 'alternate' : 'default';
+    headlessForms.set(key, form);
+  }
+  return form === 'alternate' ? alternate.argv : adapter.headless;
+}
+
+/* ------------------------------------------------------ argv self-test ----- */
+
+/**
+ * An inert token standing in for the brief.
+ *
+ * Not `--help` itself: a CLI whose prompt flag requires a value refuses a value
+ * beginning with `-`, so substituting the help flag for the brief made `grok`
+ * fail with "a value is required for '--single <PROMPT>'", which is our probe
+ * starving a flag rather than the adapter being wrong. Measured on 27 July 2026
+ * across the four CLIs installed here.
+ */
+const ARGV_PROBE_PROMPT = 'dossier-argv-self-test';
+
+export type ArgvCheckState = 'accepted' | 'rejected' | 'inconclusive' | 'skipped';
+
+export interface CliArgvCheck {
+  readonly id: CliId;
+  readonly label: string;
+  readonly state: ArgvCheckState;
+  /** The argv that was parsed, with the help flag appended. */
+  readonly argv: readonly string[];
+  readonly detail: string;
+}
+
+/**
+ * Signatures of an argument parser refusing the argv it was handed.
+ *
+ * Narrow on purpose. Anything outside this reads as `inconclusive`, because
+ * accusing an adapter of being broken when the binary merely wanted a login is
+ * a bug report sent to the wrong person.
+ */
+export const ARGV_REJECTION_PATTERN =
+  /unexpected argument|unknown (?:option|argument|flag|switch)|unrecogni[sz]ed (?:option|argument)|invalid (?:option|flag)|no such option|error: unexpected/i;
+
+/**
+ * Does the binary accept the argv this adapter would really run?
+ *
+ * The gap `research_doctor` had: it proved a binary answers `--version` and has
+ * a sign-in file, and neither of those touches the headless invocation that
+ * actually runs the research. A `--version` probe passed happily for eight
+ * months while every `local-codex` run died on an argument the adapter had
+ * always sent.
+ *
+ * The self-test builds the **real** headless argv, with the brief replaced by
+ * an inert token and `--help` appended, and runs it against the binary. Every
+ * CLI here intercepts `--help` during parsing, so the flags are validated and
+ * then the process prints its help and exits without doing any work, reaching
+ * no model and spending nothing. Verified by hand across `claude`, `codex`,
+ * `grok` and `cursor-agent` on 27 July 2026: all four exit 0 in milliseconds,
+ * and `codex exec --search ... --help` exits 2 with the parse error.
+ *
+ * **What it cannot see.** Argument parsing only. A value the binary accepts as
+ * an argument and rejects later while loading config would pass this, because
+ * `--help` short-circuits before config is read. That is one reason the Codex
+ * adapter sends no `-c` override.
+ */
+export async function checkHeadlessArgv(
+  adapter: CliAdapter,
+  timeoutMs = 10_000,
+  /** A status already obtained, so the doctor does not run `--version` twice. */
+  known?: CliStatus,
+): Promise<CliArgvCheck> {
+  const base = { id: adapter.id, label: adapter.label } as const;
+  const status = known ?? (await probeCli(adapter));
+  if (status.state === 'absent' || status.state === 'ambiguous') {
+    return {
+      ...base,
+      state: 'skipped',
+      argv: [],
+      detail:
+        status.state === 'absent'
+          ? 'not installed, so there is no argv to check'
+          : 'not run: the binary could not be identified, and an unidentified binary is never invoked',
+    };
+  }
+
+  const bin = status.path ?? resolveOnPath(adapter.bin);
+  if (!bin) return { ...base, state: 'skipped', argv: [], detail: 'the binary vanished from PATH between the two checks' };
+
+  const headless = await resolveHeadless(adapter, bin, timeoutMs);
+  const argv = [...headless(ARGV_PROBE_PROMPT), '--help'];
+  const out = await probeOutput(bin, argv, timeoutMs);
+  if (!out) {
+    return {
+      ...base,
+      state: 'inconclusive',
+      argv,
+      detail: `the binary did not answer within ${String(Math.round(timeoutMs / 1000))}s, so its argument parsing was not exercised`,
+    };
+  }
+
+  if (out.code === 0) {
+    return { ...base, state: 'accepted', argv, detail: 'the binary parsed this invocation and printed its help' };
+  }
+
+  const text = `${out.stdout}\n${out.stderr}`.trim();
+  const firstLine = text.split('\n').find((l) => l.trim().length > 0)?.trim() ?? '(no output)';
+  // A rejection naming the help flag we appended is our probe's fault, not the
+  // adapter's. Reporting it as a broken adapter would be a false accusation.
+  const blamesProbe = /'--help'|"--help"|`--help`/.test(firstLine);
+  if (ARGV_REJECTION_PATTERN.test(text) && !blamesProbe) {
+    return {
+      ...base,
+      state: 'rejected',
+      argv,
+      detail: `the binary REFUSED this invocation at argument parsing (exit ${String(out.code ?? -1)}): ${firstLine.slice(0, 300)}`,
+    };
+  }
+  return {
+    ...base,
+    state: 'inconclusive',
+    argv,
+    detail:
+      `exit ${String(out.code ?? -1)} with no argument-parse signature, so this is not evidence the argv is wrong: ` +
+      firstLine.slice(0, 300),
+  };
+}
+
+/** Self-test every known CLI in parallel. Offline, free, no model is reached. */
+export async function checkAllHeadlessArgv(
+  timeoutMs = 10_000,
+  known?: readonly CliStatus[],
+): Promise<CliArgvCheck[]> {
+  return Promise.all(
+    CLI_ADAPTERS.map((a) => checkHeadlessArgv(a, timeoutMs, known?.find((s) => s.id === a.id))),
+  );
+}
+
 /* ------------------------------------------------------- model identity ---- */
 
 /**
@@ -381,9 +646,13 @@ export async function probeCliModel(adapter: CliAdapter, timeoutMs = 60_000): Pr
   const bin = status.path ?? resolveOnPath(adapter.bin);
   if (!bin) return { ...base, state: 'failed', detail: 'the binary vanished from PATH between the two checks' };
 
+  // The same form a research run would use. Asking through an argv the binary
+  // rejects would report "the CLI did not answer" for a defect in the adapter.
+  const headless = await resolveHeadless(adapter, bin);
+
   let raw: string;
   try {
-    const { stdout, stderr } = await run(bin, [...adapter.headless(MODEL_PROBE_PROMPT)], {
+    const { stdout, stderr } = await run(bin, [...headless(MODEL_PROBE_PROMPT)], {
       timeout: timeoutMs,
       maxBuffer: 4_000_000,
     });

@@ -33,6 +33,29 @@ beforeAll(async () => {
   );
   await mcp.store.saveRun(makeRun({ id: 'dr_planning002', state: 'planning', planApproved: false, completedAt: undefined }));
   await mcp.store.saveRun(makeRun({ id: 'dr_failed00001', state: 'failed', error: 'upstream quota exhausted', completedAt: undefined }));
+  // Two failures that are the SAME state and completely different events: one
+  // provider refusing a request, one adapter that could never have worked.
+  await mcp.store.saveRun(
+    makeRun({
+      id: 'dr_ratelimit01',
+      state: 'failed',
+      failureKind: 'rate-limited',
+      failureStatus: 429,
+      budgetReleased: true,
+      error:
+        'OpenAI 429: Rate limit reached for gpt-5.6-sol on tokens per min (TPM): Limit 1000000, Used 923902, Requested 96709. Please try again in 1.236s.',
+      completedAt: undefined,
+    }),
+  );
+  await mcp.store.saveRun(
+    makeRun({
+      id: 'dr_brokenadap',
+      state: 'failed',
+      failureKind: 'adapter-rejected',
+      error: "`codex` refused the invocation Dossier built: error: unexpected argument '--search' found",
+      completedAt: undefined,
+    }),
+  );
   await mcp.store.saveRun(makeRun({ id: 'dr_cancelled01', state: 'cancelled', completedAt: undefined }));
   await mcp.store.saveRun(
     makeRun({
@@ -147,6 +170,53 @@ describe('TAIL-01/02: journal replay', () => {
     const result = await mcp.callTool('research_tail', { runId: 'dr_completed01', sinceSeq: 99, refresh: false });
     expect(result.text).toMatch(/No new events/i);
     expect(result.text).toMatch(/Cursor unchanged/i);
+  });
+});
+
+describe('FAIL-04: a failed run says WHY, in the listing and in the status', () => {
+  it('labels the failure kind rather than the bare word `failed`', async () => {
+    const list = await mcp.callTool('research_list', { state: 'failed' });
+    expect(list.text).toMatch(/dr_ratelimit01[\s\S]*?rate-limited/);
+    expect(list.text).toMatch(/dr_brokenadap[\s\S]*?BROKEN ADAPTER/);
+  });
+
+  it('shows the upstream message in the listing, not only on the record', async () => {
+    // The text was always stored and never surfaced, so a quota problem, an
+    // entitlement problem and a malformed request all read the same.
+    const list = await mcp.callTool('research_list', { state: 'failed' });
+    expect(list.text).toContain('Used 923902');
+  });
+
+  it('warns that a refused invocation is a defect in Dossier, not in the setup', async () => {
+    const list = await mcp.callTool('research_list', { state: 'failed' });
+    expect(list.text).toMatch(/REFUSED the invocation/i);
+    expect(list.text).toContain('research_doctor');
+  });
+
+  it('says a released commitment is released, rather than still showing the reservation', async () => {
+    const list = await mcp.callTool('research_list', { state: 'failed' });
+    expect(list.text).toMatch(/\$0\.00 \(\$2\.00 released\)/);
+  });
+
+  it('surfaces the provider message and the status in `research_status`', async () => {
+    const status = await mcp.callTool('research_status', { runId: 'dr_ratelimit01', refresh: false });
+    expect(status.text).toMatch(/HTTP 429/);
+    expect(status.text).toContain('Used 923902');
+    expect(status.text).toMatch(/rate-limited/);
+    // And says the money came back, since that is the question a person asks.
+    expect(status.text).toMatch(/reservation was released/);
+  });
+
+  it('tells a caller a broken adapter is broken software, not a hard question', async () => {
+    const status = await mcp.callTool('research_status', { runId: 'dr_brokenadap', refresh: false });
+    expect(status.text).toMatch(/ADAPTER IS BROKEN/);
+    expect(status.text).toContain("unexpected argument '--search'");
+  });
+
+  it('leaves an unclassified failure exactly as it always read', async () => {
+    const status = await mcp.callTool('research_status', { runId: 'dr_failed00001', refresh: false });
+    expect(status.text).toContain('upstream quota exhausted');
+    expect(status.text).not.toMatch(/BROKEN ADAPTER/);
   });
 });
 

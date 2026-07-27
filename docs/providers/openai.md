@@ -181,6 +181,23 @@ Dossier's own posture is in [security.md](../security.md): all retrieved content
 
 ---
 
+## Rate limits, and why a 429 is not a failed run
+
+OpenAI publishes per-minute token and request limits per usage tier, and a research run is input-heavy enough to hit the token ceiling on an otherwise quiet account. The response is an HTTP 429 whose body names the wait, usually a second or two:
+
+```
+Rate limit reached for gpt-5.6-sol on tokens per min (TPM):
+Limit 1000000, Used 923902, Requested 96709. Please try again in 1.236s.
+```
+
+Dossier used to treat that as a hard failure, on the rule that a paid create is attempted exactly once. The rule exists because a create that timed out **after** the provider accepted it has already bought the report, so a retry buys a second. That reasoning is right, and it was applied too broadly: a 429 is the provider declining to admit the request, so nothing was created and a retry cannot buy anything twice.
+
+Two runs failed that way at $9 each, for want of about a second.
+
+Now: a 429 is retried, honouring `Retry-After` where OpenAI sends one and the delay named in the message where it does not, bounded by attempt count, by a total-delay ceiling, and by the caller's deadline. A timeout, a dropped connection and a 5xx are still attempted exactly once and reported as an unknown outcome, because any of those may have been accepted.
+
+If it still fails after the retries, the budget commitment is released and the run says so. See [releasing a commitment for a request that bought nothing](../tools.md#releasing-a-commitment-for-a-request-that-bought-nothing).
+
 ## Troubleshooting
 
 | Symptom | Cause |
@@ -190,6 +207,7 @@ Dossier's own posture is in [security.md](../security.md): all retrieved content
 | Cost far above estimate | No `max_tool_calls` cap |
 | Report ignores recent events | June 2024 cutoff, plus no date filter. Ask for sources by date explicitly |
 | `400` on structured output | Not supported on these models. Use a different backend for schema-bound work |
+| `429` on starting a run | You are over a per-minute token or request limit. Dossier retries this now, honouring the wait OpenAI names in the message, and releases the budget commitment if it still fails, because a 429 creates nothing |
 
 ---
 

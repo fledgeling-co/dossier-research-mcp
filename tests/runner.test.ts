@@ -5,7 +5,14 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { loadConfig, type Config } from '../src/config.js';
 import type { CreateRunArgs, DeepResearchClient } from '../src/gemini/client.js';
 import type { InteractionSnapshot } from '../src/gemini/types.js';
-import { BudgetExceededError, ConcurrencyExceededError, Runner } from '../src/research/runner.js';
+import { AmbiguousSpendError } from '../src/net/retry.js';
+import {
+  BudgetExceededError,
+  ConcurrencyExceededError,
+  describeRun,
+  Runner,
+  stateHint,
+} from '../src/research/runner.js';
 import { Store } from '../src/store/store.js';
 
 /**
@@ -186,12 +193,15 @@ describe('lifecycle', () => {
     );
   });
 
-  it('records failure with the reported reason', async () => {
+  it('records failure with the reported reason, and says which kind of failure it was', async () => {
     const runner = new Runner(store, config, () => scriptedClient([snapshot({ status: 'failed', error: 'upstream 500' })]));
     const { run } = await runner.start(START);
     const advanced = await runner.refresh(run.id);
     expect(advanced?.state).toBe('failed');
-    expect(advanced?.error).toBe('upstream 500');
+    // The upstream text first and verbatim, then what it means. A run that
+    // started and then failed is failed research, not a broken adapter.
+    expect(advanced?.error).toContain('upstream 500');
+    expect(advanced?.failureKind).toBe('research');
   });
 
   it('holds a collaborative-planning run for approval, then releases it', async () => {
@@ -455,5 +465,200 @@ describe('spend gate hardening', () => {
     );
     // ...and the lock still works afterwards, rather than deadlocking.
     expect((await runner.budget()).committedUsd).toBe(3);
+  });
+});
+
+/**
+ * Failure kinds, and giving money back for a request that never reached a model.
+ *
+ * Two shipped defects meet here. Every failure rendered as the single word
+ * `failed`, so a `local-codex` adapter that could never have worked looked
+ * exactly like a hard research question. And the budget commitment, written
+ * before the paid call on purpose so a crash over-counts, was held even when
+ * the provider had answered "no": two of the owner's OpenAI runs held $9 each
+ * against 429s that were refused in about a second.
+ */
+describe('failure classification and the compensating release', () => {
+  /** A client whose create throws whatever it is handed. */
+  const refusing = (thrown: unknown): DeepResearchClient => ({
+    createRun() {
+      throw thrown;
+    },
+    async getRun(interactionId) {
+      return { interactionId, status: 'in_progress', markdown: '', thoughts: [], images: [] };
+    },
+    async cancelRun() {
+      /* no-op */
+    },
+    async followUp() {
+      return '';
+    },
+  });
+
+  const httpError = (status: number, message: string): unknown =>
+    Object.assign(new Error(message), { status });
+
+  it('FAIL-03/BUDGET-04: a 429 is labelled rate-limited and its commitment is released', async () => {
+    const upstream =
+      'OpenAI 429: Rate limit reached for gpt-5.6-sol on tokens per min (TPM): Limit 1000000, Used 923902, Requested 96709. Please try again in 1.236s.';
+    const runner = new Runner(store, config, () => refusing(httpError(429, upstream)));
+    await expect(runner.start(START)).rejects.toThrow(/429/);
+
+    const runs = await store.listRuns();
+    const failed = runs[0];
+    expect(failed?.state).toBe('failed');
+    expect(failed?.failureKind).toBe('rate-limited');
+    expect(failed?.failureStatus).toBe(429);
+    // FAIL-02: the provider's own words, kept verbatim on the record rather
+    // than replaced by a paraphrase.
+    expect(failed?.error).toContain('Used 923902');
+    expect(failed?.error).toContain('Rate limited by the provider');
+
+    // The money is back. $9 held against a call that never reached a model was
+    // the whole cost of this bug.
+    expect(failed?.budgetReleased).toBe(true);
+    expect((await runner.budget()).committedUsd).toBe(0);
+  });
+
+  it('BUDGET-04: releases by APPENDING a compensating line, never by editing history', async () => {
+    const runner = new Runner(store, config, () => refusing(httpError(429, 'OpenAI 429: slow down')));
+    await expect(runner.start(START)).rejects.toThrow();
+
+    const entries = await store.readLedger();
+    // Both lines are there: what we reserved, and what we gave back. A ledger
+    // that quietly loses the reservation cannot answer "what happened".
+    expect(entries).toHaveLength(2);
+    expect(entries[0]?.kind).toBeUndefined(); // a reservation, written as it always was
+    expect(entries[0]?.estimatedCostUsd).toBe(3);
+    expect(entries[1]?.kind).toBe('release');
+    expect(entries[1]?.estimatedCostUsd).toBe(3);
+    expect(entries[1]?.runId).toBe(entries[0]?.runId);
+    expect(entries[1]?.reason).toMatch(/refused/);
+  });
+
+  it('BUDGET-04: 400, 401 and 403 release too, since nothing was created', async () => {
+    for (const status of [400, 401, 403]) {
+      const fresh = await mkdtemp(join(tmpdir(), 'drmcp-'));
+      const s = new Store(fresh);
+      await s.init();
+      const runner = new Runner(s, { ...config, storeDir: fresh }, () =>
+        refusing(httpError(status, `refused ${String(status)}`)),
+      );
+      await expect(runner.start(START)).rejects.toThrow();
+      const failed = (await s.listRuns())[0];
+      expect(failed?.failureKind, String(status)).toBe('provider-rejected');
+      expect((await runner.budget()).committedUsd, String(status)).toBe(0);
+      await rm(fresh, { recursive: true, force: true });
+    }
+  });
+
+  it('BUDGET-05: an ambiguous failure KEEPS its commitment', async () => {
+    // The provider may have accepted this and may be billing for it right now.
+    // Releasing here would under-count spend, which is the one direction a
+    // ceiling must never fail.
+    const runner = new Runner(store, config, () =>
+      refusing(new AmbiguousSpendError('OpenAI', new Error('socket hang up'))),
+    );
+    await expect(runner.start(START)).rejects.toThrow(AmbiguousSpendError);
+
+    const failed = (await store.listRuns())[0];
+    expect(failed?.failureKind).toBe('ambiguous');
+    expect(failed?.budgetReleased).toBeFalsy();
+    expect((await runner.budget()).committedUsd).toBe(3);
+    expect(failed?.error).toContain('may have accepted');
+  });
+
+  it('BUDGET-05: a 5xx and a timeout keep it too', async () => {
+    for (const thrown of [httpError(503, 'upstream boom'), Object.assign(new Error('t'), { name: 'TimeoutError' })]) {
+      const fresh = await mkdtemp(join(tmpdir(), 'drmcp-'));
+      const s = new Store(fresh);
+      await s.init();
+      const runner = new Runner(s, { ...config, storeDir: fresh }, () => refusing(thrown));
+      await expect(runner.start(START)).rejects.toThrow();
+      expect((await runner.budget()).committedUsd, String(thrown)).toBe(3);
+      await rm(fresh, { recursive: true, force: true });
+    }
+  });
+
+  it('BUDGET-06: a release can never give back more than its run reserved', async () => {
+    // The reason releases are a separate KIND rather than a negative amount:
+    // a negative amount has no natural ceiling, so one hand-edited ledger line
+    // would hand anyone an unlimited budget.
+    const entries = [
+      { at: 'a', runId: 'r1', tier: 'fast' as const, estimatedCostUsd: 3, provider: 'openai' as const },
+      { at: 'b', runId: 'r1', tier: 'fast' as const, estimatedCostUsd: 3, provider: 'openai' as const, kind: 'release' as const },
+      // Forged, duplicated, or replayed. None of them may lower the total.
+      { at: 'c', runId: 'r1', tier: 'fast' as const, estimatedCostUsd: 9999, provider: 'openai' as const, kind: 'release' as const },
+      { at: 'd', runId: 'r2', tier: 'max' as const, estimatedCostUsd: 7, provider: 'gemini' as const },
+      { at: 'e', runId: 'ghost', tier: 'max' as const, estimatedCostUsd: 500, provider: 'gemini' as const, kind: 'release' as const },
+    ];
+    expect(Store.netCommittedUsd(entries)).toBe(7);
+    // And an absent `kind` is a reservation, which is what every line written
+    // before releases existed is.
+    expect(Store.netCommittedUsd([entries[0]!])).toBe(3);
+  });
+
+  it('BUDGET-04: releasing is idempotent, so a repeat cannot give the money back twice', async () => {
+    const runner = new Runner(store, config, () => refusing(httpError(429, 'OpenAI 429: slow down')));
+    await expect(runner.start(START)).rejects.toThrow();
+    const failed = (await store.listRuns())[0];
+    expect(failed?.budgetReleased).toBe(true);
+
+    // A second identical request is a new run with its own reservation; the
+    // first run's release must not compound onto it.
+    await expect(runner.start({ ...START, question: 'another', prompt: 'another' })).rejects.toThrow();
+    expect((await runner.budget()).committedUsd).toBe(0);
+    const releases = (await store.readLedger()).filter((e) => e.kind === 'release');
+    expect(releases).toHaveLength(2);
+    expect(new Set(releases.map((r) => r.runId)).size).toBe(2);
+  });
+
+  it('BUDGET-04: a release is a correction, not a second run in the window', async () => {
+    // `runsInWindow` counts what ran. A release line is a correction to a
+    // reservation already counted, so counting it would report two runs for
+    // one refused request, and `research_budget` would list a refunded $3 as
+    // a $3 commitment.
+    const runner = new Runner(store, config, () => refusing(httpError(429, 'OpenAI 429: slow down')));
+    await expect(runner.start(START)).rejects.toThrow();
+    const budget = await runner.budget();
+    expect(budget.runsInWindow).toBe(1);
+    expect(budget.committedUsd).toBe(0);
+    expect(budget.remainingUsd).toBe(budget.budgetUsd);
+  });
+
+  it('FAIL-01: an argument-parse refusal from a CLI is a broken adapter, not failed research', async () => {
+    // Exactly the shipped `local-codex` failure, arriving the way the local
+    // backend reports it: the run started, the binary refused the argv, and the
+    // transcript is the parser's complaint.
+    const runner = new Runner(store, config, () =>
+      scriptedClient([
+        snapshot({
+          status: 'failed',
+          error: "`codex` refused the invocation Dossier built: error: unexpected argument '--search' found",
+        }),
+      ]),
+    );
+    const { run } = await runner.start(START);
+    const advanced = await runner.refresh(run.id);
+    expect(advanced?.failureKind).toBe('adapter-rejected');
+    expect(advanced?.error).toContain('THE ADAPTER IS BROKEN');
+    expect(describeRun(advanced!)).toContain('BROKEN ADAPTER');
+  });
+
+  it('FAIL-01: the adapter’s own verdict is honoured over text matching', async () => {
+    const runner = new Runner(store, config, () =>
+      scriptedClient([snapshot({ status: 'failed', error: 'ran out of context', failureKind: 'adapter-rejected' })]),
+    );
+    const { run } = await runner.start(START);
+    expect((await runner.refresh(run.id))?.failureKind).toBe('adapter-rejected');
+  });
+
+  it('FAIL-01: stateHint says what to do, and it differs by kind', () => {
+    expect(stateHint('failed', 'adapter-rejected')).toMatch(/ADAPTER IS BROKEN/);
+    expect(stateHint('failed', 'rate-limited', 429)).toMatch(/HTTP 429/);
+    expect(stateHint('failed', 'ambiguous')).toMatch(/UNKNOWN/);
+    // An unclassified failure keeps exactly the wording it always had, rather
+    // than being labelled with a guess.
+    expect(stateHint('failed')).toMatch(/The error is on the record/);
   });
 });

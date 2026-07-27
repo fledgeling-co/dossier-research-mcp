@@ -7,10 +7,12 @@ import type { CreateRunArgs, DeepResearchClient } from '../gemini/client.js';
 import type { CostBand, DurationOptions } from '../gemini/cost.js';
 import type { InteractionSnapshot } from '../gemini/types.js';
 import {
+  ARGV_REJECTION_PATTERN,
   CLI_ADAPTERS,
   CLI_IDS,
   hasSignInFile,
   probeCli,
+  resolveHeadless,
   resolveOnPath,
   type CliAdapter,
   type CliId,
@@ -267,6 +269,11 @@ export function localProvider(config: Config, adapter: CliAdapter): ResearchProv
       const bin = status.path ?? resolveOnPath(adapter.bin);
       if (!bin) throw new Error(`\`${adapter.bin}\` is no longer on PATH.`);
 
+      // Which headless form THIS binary takes, asked of the binary rather than
+      // assumed from its version. Cached per resolved path, so this is one
+      // offline `--help` per install rather than one per run.
+      const headless = await resolveHeadless(adapter, bin);
+
       mkdirSync(dir, { recursive: true, mode: 0o700 });
       // Millisecond-plus-counter rather than a random id: this is a file name,
       // not a security boundary, and a sortable one is easier to clean up. The
@@ -286,7 +293,7 @@ export function localProvider(config: Config, adapter: CliAdapter): ResearchProv
           String(capabilities.maxWallClockMinutes * 60_000),
           String(MAX_OUTPUT_BYTES),
           bin,
-          ...adapter.headless(args.prompt),
+          ...headless(args.prompt),
         ],
         { detached: true, stdio: 'ignore' },
       );
@@ -314,6 +321,12 @@ export function localProvider(config: Config, adapter: CliAdapter): ResearchProv
         const parsed = SidecarSchema.safeParse(safeJson(raw));
         if (parsed.success) {
           const ok = parsed.data.exit === 0;
+          // A binary that refused the argv wrote its parser's complaint to the
+          // transcript and exited before doing anything. That is a broken
+          // adapter, not failed research, and reporting the two the same way is
+          // how `local-codex` sent `--search` for months while every run showed
+          // up as an ordinary failure.
+          const argvRejected = !ok && ARGV_REJECTION_PATTERN.test(markdown);
           return Promise.resolve({
             interactionId,
             status: ok ? 'completed' : 'failed',
@@ -323,9 +336,11 @@ export function localProvider(config: Config, adapter: CliAdapter): ResearchProv
             ...(ok
               ? {}
               : {
-                  error:
-                    parsed.data.error ??
-                    `the CLI exited with code ${String(parsed.data.exit)}${parsed.data.signal ? ` (signal ${parsed.data.signal})` : ''}`,
+                  failureKind: argvRejected ? ('adapter-rejected' as const) : ('research' as const),
+                  error: argvRejected
+                    ? `\`${adapter.bin}\` refused the invocation Dossier built: ${firstLine(markdown)}`
+                    : (parsed.data.error ??
+                      `the CLI exited with code ${String(parsed.data.exit)}${parsed.data.signal ? ` (signal ${parsed.data.signal})` : ''}`),
                 }),
           });
         }
@@ -469,6 +484,11 @@ export function localProvider(config: Config, adapter: CliAdapter): ResearchProv
 }
 
 let counter = 0;
+
+/** The first non-empty line of a transcript: what the parser actually said. */
+function firstLine(text: string): string {
+  return (text.split('\n').find((l) => l.trim().length > 0)?.trim() ?? '(no output)').slice(0, 300);
+}
 
 function read(path: string): string {
   try {

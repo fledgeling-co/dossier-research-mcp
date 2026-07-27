@@ -187,7 +187,15 @@ export function xaiProvider(config: Config): ResearchProvider {
         });
       }
       return (await res.json()) as Record<string, unknown>;
-    }, { provider: 'xAI' });
+    }, {
+      provider: 'xAI',
+      rateLimit: {
+        onRetry: ({ attempt, delayMs }) =>
+          process.stderr.write(
+            `[dossier] xai rate-limited on create (attempt ${String(attempt)}); waiting ${String(delayMs)}ms. Nothing was created, so this retry cannot buy a second report.\n`,
+          ),
+      },
+    });
 
   const buildTools = (opts: XaiOptions): Record<string, unknown>[] => {
     const web: Record<string, unknown> = { type: 'web_search' };

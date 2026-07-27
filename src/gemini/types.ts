@@ -86,6 +86,16 @@ export interface InteractionSnapshot {
   readonly images: readonly { readonly data: string; readonly mimeType: string }[];
   readonly error?: string;
   /**
+   * Why it failed, when the adapter can tell.
+   *
+   * A string rather than an import of `RunFailureKind`, to keep this file free
+   * of a dependency on the research layer; the runner narrows it. The case that
+   * needs it is the local CLI backend, which is the only adapter that can read
+   * a transcript and see that the binary refused the argv rather than that the
+   * research went badly.
+   */
+  readonly failureKind?: 'adapter-rejected' | 'research';
+  /**
    * What the provider says the run actually cost, when it says.
    *
    * Everything else here is an estimate reserved before the fact, so an

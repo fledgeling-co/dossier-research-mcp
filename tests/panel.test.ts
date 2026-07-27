@@ -827,4 +827,77 @@ describe('starting a panel', () => {
     // operator is told at the moment the panel finishes rather than never.
     expect(merge?.message).toMatch(/overlap|WARNING/i);
   });
+
+  it('PANEL-28: names every member and says which ones produced a report', async () => {
+    const report = '# Findings\n\nAcme leads ([source](https://alpha.example/a)).\n';
+    const runner = new Runner(
+      store,
+      config,
+      (id) =>
+        scriptedClient([
+          id === 'gemini'
+            ? snapshot({ status: 'completed', markdown: report })
+            : snapshot({
+                status: 'failed',
+                error: "error: unexpected argument '--search' found",
+                failureKind: 'adapter-rejected',
+              }),
+        ]),
+      undefined,
+      flat,
+    );
+    const result = await runner.startPanel({ ...PANEL_ARGS, members: ['gemini', 'perplexity'] });
+    await runner.tick();
+
+    const journal = await store.readJournal(result.started[0]!.run.id);
+    const merge = journal.find((e) => e.message.startsWith('Panel merge:'));
+    // The headline is the contribution count, not the merge. A silently
+    // failing member inflates the apparent breadth of a panel: without this,
+    // one report out of two read exactly like two-way coverage.
+    expect(merge?.message).toMatch(/1 of 2 members produced a report/);
+    expect(merge?.message).toContain('gemini');
+    expect(merge?.message).toContain('perplexity');
+    // And the failure carries its kind, so a member that never ran because the
+    // adapter is broken is distinguishable here from one whose research failed.
+    expect(merge?.message).toMatch(/BROKEN ADAPTER/);
+  });
+
+  it('PANEL-29: warns when fewer members contributed than were paid for', async () => {
+    const runner = new Runner(
+      store,
+      config,
+      () => scriptedClient([snapshot({ status: 'failed', error: 'upstream said no' })]),
+      undefined,
+      flat,
+    );
+    const result = await runner.startPanel({ ...PANEL_ARGS, members: ['gemini', 'perplexity'] });
+    await runner.tick();
+
+    const journal = await store.readJournal(result.started[0]!.run.id);
+    const merge = journal.find((e) => e.message.startsWith('Panel merge:'));
+    expect(merge?.message).toMatch(/0 of 2 members produced a report/);
+    expect(merge?.message).toMatch(/2 of 2 members contributed nothing/);
+    expect(merge?.message).toMatch(/breadth of the members that answered/);
+  });
+
+  it('PANEL-28: a panel where everyone answered says so without a warning', async () => {
+    const report = (host: string): string => `# Findings\n\nAcme leads ([source](https://${host}/a)).\n`;
+    const runner = new Runner(
+      store,
+      config,
+      (id) =>
+        scriptedClient([
+          snapshot({ status: 'completed', markdown: report(id === 'gemini' ? 'alpha.example' : 'beta.example') }),
+        ]),
+      undefined,
+      flat,
+    );
+    const result = await runner.startPanel({ ...PANEL_ARGS, members: ['gemini', 'perplexity'] });
+    await runner.tick();
+
+    const journal = await store.readJournal(result.started[0]!.run.id);
+    const merge = journal.find((e) => e.message.startsWith('Panel merge:'));
+    expect(merge?.message).toMatch(/2 of 2 members produced a report/);
+    expect(merge?.message).not.toMatch(/contributed nothing/);
+  });
 });

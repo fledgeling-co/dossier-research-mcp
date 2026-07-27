@@ -63,9 +63,11 @@ A panel runs the same three gates, but over the whole membership at once rather 
 - **Concurrency** must fit the whole panel. A panel of five needs five slots at once, and is refused whole rather than admitted in part.
 - **Budget** reserves the **sum** of every member's worst case in one critical section, before any member starts. A panel that can't be afforded in full starts nothing, writes no ledger line, and tells you the whole figure it needed.
 
-Each member comes back as its own run id, bound by a shared panel id. `research_status`, `research_read`, `research_tail` and `research_budget` all work per member exactly as they do for a single run. Every member is attempted once; a call that spends money is never retried.
+Each member comes back as its own run id, bound by a shared panel id. `research_status`, `research_read`, `research_tail` and `research_budget` all work per member exactly as they do for a single run. A paid create is attempted once, with one exception: a 429 is retried, because a rate limiter that answered created nothing. See [a failed run says which kind of failure it was](#a-failed-run-says-which-kind-of-failure-it-was).
 
-When the last member reaches a terminal state the panel is merged automatically with `research_synthesise`'s free deterministic pass, and the result including the overlap warning is written to every member's journal. Read it with `research_tail`. Agreement between members is not corroboration, and support is counted in independent registrable domains.
+When the last member reaches a terminal state the panel is merged automatically with `research_synthesise`'s free deterministic pass, and the result is written to every member's journal. Read it with `research_tail`. Agreement between members is not corroboration, and support is counted in independent registrable domains.
+
+The merge note **opens with a roll-call**: how many members produced a report, then every member by name with its size and source count, or its state and failure kind. A member that fails silently otherwise inflates the apparent breadth of the panel, because the only thing reported was the merge and the merge only ever described the members that finished. Four members returning one report read exactly like four-way coverage. When fewer members contributed than were paid for, the note carries a warning saying to read the breadth as the answering members', not the panel's.
 
 Set `DOSSIER_REQUIRE_CONTRACT=true` to make the plan-then-start handshake mandatory. Worth doing on any server an autonomous agent can reach. The fingerprint binds the whole membership, so a plan for a three-backend panel won't start a two-backend one.
 
@@ -184,10 +186,27 @@ The "could be on" rows are the point. Without them you cannot tell that a capabi
 
 | Parameter | Type | Notes |
 |---|---|---|
-| `probeLocal` | `boolean` | Also probe the coding CLIs and browser tooling on this machine. Local, offline and free: it runs `--version` on each binary and checks for a sign-in file by existence, never reading a credential |
+| `probeLocal` | `boolean` | Also probe the coding CLIs and browser tooling on this machine. Local, offline and free: it runs `--version` on each binary, checks for a sign-in file by existence, never reading a credential, and runs the argv self-test below |
 | `probeModels` | `boolean` | Ask each signed-in CLI which model it serves, and cache the answer. **This one costs a short model call per CLI**, billed to that CLI's own subscription. It implies `probeLocal`, since knowing which CLIs are identified and signed in is a prerequisite. Readings are shown with their age, and a reading older than 30 days no longer removes a backend from a panel |
 
 `research_doctor` is annotated `readOnlyHint: false` because of `probeModels`. Annotations are fixed per tool rather than per call, so the tool carries the stronger claim even though the default invocation reads nothing and spends nothing.
+
+#### The argv self-test
+
+A binary answering `--version` proves nothing about the argv that carries your brief, and that gap is where a real bug lived: the Codex adapter sent `--search` to `codex exec`, which does not accept it, so every `local-codex` run died at argument parsing while `research_doctor` reported the backend CONFIGURED, UNVERIFIED.
+
+So the audit now builds each adapter's **real** headless invocation, replaces the brief with an inert token, appends `--help`, and runs it. The flags are parsed, then the process prints its help and exits without reaching a model. Offline, free, milliseconds.
+
+| Verdict | Meaning |
+|---|---|
+| `ACCEPTED` | The binary parsed this invocation. Not a promise the research will succeed, only that it will start |
+| `REJECTED` | The binary refused it at argument parsing. **This is a defect in Dossier, not in your setup**, and every run on that backend will fail the same way |
+| `INCONCLUSIVE` | Non-zero exit with no argument-parse signature, for instance a binary wanting a login. Deliberately not called a failure: accusing an adapter here would send a bug report to the wrong person |
+| skipped | Absent, or a binary whose identity could not be confirmed. An unidentified binary is never invoked, on the same rule that governs a research run |
+
+It runs on the default path rather than behind its own flag. It does spawn a process per identified CLI, which is the argument for a flag, and the argument loses: `probeLocal` already runs `--version` on every one of them, and putting the one check that finds this class of bug behind an option nobody sets is how the bug survived the first time.
+
+It checks argument parsing and nothing else. A value the binary accepts as an argument and rejects later while loading its config would still pass, because `--help` short-circuits before config is read.
 
 ### `research_evidence`, free
 
@@ -419,6 +438,28 @@ The typed `outcome` is adapted from `last30days-skill`'s per-source status, whic
 ### `research_list`, `research_cancel`, `research_budget`
 
 List runs, which reads the local store rather than the API, so it's cheap. Cancel an in-flight run; the committed spend stays on the ledger, because Google bills for work already done. Check your spend position and largest commitments.
+
+#### A failed run says which kind of failure it was
+
+`failed` on its own was doing too much work. "The adapter's invocation was rejected by the binary" and "the research failed" need opposite responses: the first means the software is broken and no question would have worked, the second means the question was hard. Every failed run now carries a kind, shown in the listing, in `research_status`, and in a panel's contribution roll-call.
+
+| Kind | What happened | Budget |
+|---|---|---|
+| `BROKEN ADAPTER` | The binary refused the argv Dossier built. Re-running changes nothing | held; nothing was charged anyway |
+| `rate-limited` | HTTP 429. The provider declined to admit the request and usually named a wait of seconds | **released** |
+| `rejected by provider` | HTTP 400, 401 or 403. The request, the key or the entitlement needs fixing | **released** |
+| `outcome unknown` | A timeout, a dropped connection, a 5xx, or any other status. The provider may have accepted it and may be billing | **held** |
+| `research failed` | The run started, ran, and failed on its own terms | held |
+
+The provider's own error text is shown alongside, verbatim, in both the listing and the status. It was always stored on the record and never surfaced, so a quota problem, an entitlement problem and a malformed request all read as the same unexplained failure.
+
+#### Releasing a commitment for a request that bought nothing
+
+The ledger is written **before** the paid call on purpose, so a crash over-counts rather than under-counts. That is right and has not changed. But a 429, 400, 401 or 403 is the provider saying it created nothing, and holding money against a call that never reached a model is a ceiling reduced for nothing.
+
+Those four statuses, and only those four, release the commitment. It is done by **appending a compensating `release` line** naming the same run, never by editing or deleting the reservation, so the ledger stays an append-only record of what happened including the part where Dossier reserved and then learned better. A release can never give back more than its own run reserved, so a duplicated or hand-edited release line cannot lower committed spend without bound.
+
+Everything else keeps its commitment. A 404 or a 409 very likely created nothing either, but "very likely" is the wrong standard when being wrong releases money against a report that was really bought.
 
 </details>
 

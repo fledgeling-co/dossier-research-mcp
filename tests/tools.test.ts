@@ -7,11 +7,13 @@ import { loadConfig, type Config } from '../src/config.js';
 import type { DeepResearchClient, FollowUpArgs } from '../src/gemini/client.js';
 import type { InteractionSnapshot } from '../src/gemini/types.js';
 import { Runner } from '../src/research/runner.js';
+import type { CliArgvCheck } from '../src/local/cli.js';
 import {
   buildDeps,
   createServer,
   FOLLOWUP_CAVEAT,
   followUpContext,
+  renderArgvSelfTest,
   type ServerDeps,
 } from '../src/server.js';
 import { Store } from '../src/store/store.js';
@@ -355,5 +357,77 @@ describe('the documented public library surface', () => {
     expect(built.preEngineered).toBe(false);
     expect(built.prompt).toContain('UK and Singapore');
     expect(built.prompt).toContain('inform a board paper');
+  });
+});
+
+/**
+ * DOCTOR-01: the audit now checks the invocation that actually runs.
+ *
+ * The gap that let a broken adapter report 🟡 CONFIGURED, UNVERIFIED for
+ * months. A `--version` probe and a sign-in file prove a binary exists and
+ * someone logged into it; neither touches the argv carrying the brief, which is
+ * exactly where `codex exec --search` died.
+ *
+ * The renderer is tested directly rather than through a spawned CLI, for the
+ * same reason every other test here avoids one: the check itself is covered
+ * against scripted fake binaries in `local-cli`, and what needs asserting here
+ * is that a refusal is reported loudly enough to act on.
+ */
+describe('DOCTOR-01: the argv self-test section', () => {
+  const check = (over: Partial<CliArgvCheck>): CliArgvCheck => ({
+    id: 'codex',
+    label: 'Codex CLI',
+    state: 'accepted',
+    argv: ['exec', 'dossier-argv-self-test', '--help'],
+    detail: 'the binary parsed this invocation and printed its help',
+    ...over,
+  });
+
+  it('names a refused adapter, says it is Dossier’s defect, and gives the way out', () => {
+    const text = renderArgvSelfTest([
+      check({
+        state: 'rejected',
+        argv: ['exec', '--search', 'dossier-argv-self-test', '--help'],
+        detail: "the binary REFUSED this invocation at argument parsing (exit 2): error: unexpected argument '--search' found",
+      }),
+    ]).join('\n');
+
+    expect(text).toMatch(/REJECTED/);
+    expect(text).toContain("unexpected argument '--search'");
+    // The two things a person needs: whose bug it is, and how to stop paying a
+    // panel seat for it in the meantime.
+    expect(text).toMatch(/defect in Dossier/);
+    expect(text).toContain('`local-codex`');
+  });
+
+  it('shows the real argv, so the failing invocation is reproducible by hand', () => {
+    const text = renderArgvSelfTest([check({})]).join('\n');
+    expect(text).toContain('exec dossier-argv-self-test --help');
+  });
+
+  it('claims only that a run will START, never that it will succeed', () => {
+    const text = renderArgvSelfTest([check({})]).join('\n');
+    expect(text).toMatch(/not a promise the research will succeed/);
+  });
+
+  it('admits what a help probe cannot see', () => {
+    // `--help` short-circuits before config is loaded, so a value the binary
+    // accepts as an argument and rejects later still passes this.
+    const text = renderArgvSelfTest([check({})]).join('\n');
+    expect(text).toMatch(/rejects later while loading config/);
+  });
+
+  it('does not report an inconclusive result as a broken adapter', () => {
+    const text = renderArgvSelfTest([
+      check({ state: 'inconclusive', detail: 'exit 1 with no argument-parse signature: not logged in' }),
+    ]).join('\n');
+    expect(text).toMatch(/INCONCLUSIVE/);
+    expect(text).not.toMatch(/defect in Dossier/);
+  });
+
+  it('says nothing about CLIs it skipped, rather than listing every tool in existence', () => {
+    const text = renderArgvSelfTest([check({ state: 'skipped', detail: 'not installed', argv: [] })]).join('\n');
+    expect(text).toMatch(/No installed, identified CLI to test/);
+    expect(text).not.toContain('Codex CLI');
   });
 });

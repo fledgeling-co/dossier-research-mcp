@@ -301,6 +301,7 @@ Acceptance criteria are taken from the README's tool contracts and the tool desc
 | **BUDGET-04** | A definitively-rejected run releases its commitment as a compensating `release` line; the reservation line is never mutated or removed | unit: `runner` | ✓ |
 | **BUDGET-05** | An ambiguous failure KEEPS its commitment, because the provider may have accepted the request | unit: `runner` | ✓ |
 | **BUDGET-06** | A release can never give back more than its run reserved, so a duplicated or forged release cannot lower committed spend without bound | unit: `runner` | ✓ |
+| **BUDGET-07** | A release is a correction, not a second run: it does not inflate the run count and is never listed as a commitment | unit: `runner` | ✓ |
 | **DOCTOR-01** | `research_doctor` runs the argv self-test on its default path and names any adapter whose invocation the binary refuses | unit: `tools` | ✓ |
 
 ### The paid project

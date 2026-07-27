@@ -4,10 +4,13 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   CLI_ADAPTERS,
+  checkHeadlessArgv,
+  clearHeadlessFormCache,
   normaliseModelName,
   parseModelAnswer,
   probeCli,
   probeCliModel,
+  resolveHeadless,
   resolveOnPath,
   type CliAdapter,
 } from '../src/local/cli.js';
@@ -50,6 +53,12 @@ beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'dossier-cli-'));
   originalPath = process.env['PATH'];
   process.env['PATH'] = dir;
+  // The headless-form probe caches by resolved absolute path, and every test
+  // here writes a different fake binary to a fresh temp path, so this is belt
+  // and braces rather than load-bearing. It is here because a cache keyed on a
+  // path that a later test reuses is exactly the failure that only shows on the
+  // second run of the suite.
+  clearHeadlessFormCache();
 });
 
 afterEach(async () => {
@@ -313,6 +322,250 @@ describe('CLI-25: the probed-model cache', () => {
     expect(describeProbeAge(now - 5 * 60_000, now)).toBe('5 minutes ago');
     expect(describeProbeAge(now - 3 * 3_600_000, now)).toBe('3 hours ago');
     expect(describeProbeAge(now - 2 * 86_400_000, now)).toBe('2 days ago');
+  });
+});
+
+/* --------------------------------------------------- headless argv form ---- */
+
+/**
+ * Choosing, and then checking, the argv that carries the brief.
+ *
+ * The defect these cover shipped and broke every `local-codex` run: the adapter
+ * sent `--search`, which is valid on `codex` and invalid on `codex exec`, so
+ * clap refused the invocation before any research happened. A hermetic suite
+ * could not see it, because nothing in the suite ran the real argv against a
+ * real binary and nothing checked that it parsed.
+ *
+ * Nothing here shells out to a real CLI. The fake binary below is scripted to
+ * behave like an argument parser: it accepts a known flag set, prints help, and
+ * refuses anything else with the message clap actually emits.
+ */
+
+/**
+ * A fake binary that parses arguments.
+ *
+ * `--version` identifies it. `--help` prints usage and exits 0, but only after
+ * every earlier argument has been checked against `accepted`, which is the
+ * ordering a real parser has and the reason a `--help` probe is a parse test.
+ */
+async function fakeParser(
+  name: string,
+  opts: { version: string; accepted: readonly string[]; helpMentions?: readonly string[] },
+): Promise<string> {
+  const path = join(dir, name);
+  const accepted = opts.accepted.join(' ');
+  const mentions = (opts.helpMentions ?? []).join('\\n');
+  await writeFile(
+    path,
+    `#!/bin/sh
+if [ "$1" = "--version" ]; then echo "${opts.version}"; exit 0; fi
+help=0
+for arg in "$@"; do
+  case "$arg" in
+    --help) help=1 ;;
+    -*)
+      ok=0
+      for allowed in ${accepted}; do
+        if [ "$arg" = "$allowed" ]; then ok=1; fi
+      done
+      if [ "$ok" = "0" ]; then
+        echo "error: unexpected argument '$arg' found" >&2
+        exit 2
+      fi
+      ;;
+  esac
+done
+if [ "$help" = "1" ]; then printf 'Usage: fake [OPTIONS]\\n${mentions}\\n'; exit 0; fi
+echo "ran with: $@"
+exit 0
+`,
+  );
+  await chmod(path, 0o755);
+  return path;
+}
+
+describe('CLI-26: no shipped adapter sends an argument its binary rejects', () => {
+  it('does not send `--search` to `codex exec`', () => {
+    // The whole defect. `--search` is documented on `codex --help` and absent
+    // from `codex exec --help`, so every headless run died at clap's argument
+    // parsing. Verified by hand against codex-cli 0.145.0: `codex exec
+    // --search` answers `error: unexpected argument '--search' found`.
+    const codex = CLI_ADAPTERS.find((a) => a.id === 'codex');
+    expect(codex?.headless('a question')).toEqual(['exec', 'a question']);
+    expect(codex?.headless('a question')).not.toContain('--search');
+  });
+
+  it('keeps the older form reachable, behind a probe of the binary rather than a version number', () => {
+    // An older Codex may genuinely take `--search` on `exec`. The alternate is
+    // not deleted; it is gated on what this binary documents.
+    const codex = CLI_ADAPTERS.find((a) => a.id === 'codex');
+    expect(codex?.headlessAlternate?.argv('a question')).toEqual(['exec', '--search', 'a question']);
+    expect(codex?.headlessAlternate?.probeArgs).toEqual(['exec', '--help']);
+  });
+
+  it('still passes the brief as an argv element for every adapter, including the alternate', () => {
+    const hostile = 'what is `rm -rf /` in shell?';
+    for (const a of CLI_ADAPTERS) {
+      expect(a.headless(hostile), a.id).toContain(hostile);
+      if (a.headlessAlternate) expect(a.headlessAlternate.argv(hostile), a.id).toContain(hostile);
+    }
+  });
+});
+
+describe('CLI-27/28: the headless form is probed, not assumed', () => {
+  const codexish = (over: Partial<CliAdapter> = {}): CliAdapter =>
+    adapter({
+      headless: (p) => ['exec', p],
+      headlessAlternate: {
+        probeArgs: ['exec', '--help'],
+        expect: /--search\b/,
+        argv: (p) => ['exec', '--search', p],
+        why: 'this build documents it',
+      },
+      ...over,
+    });
+
+  it('uses the alternate when the binary documents it', async () => {
+    const bin = await fakeParser('faketool', {
+      version: 'Test CLI 1.0',
+      accepted: ['--search'],
+      helpMentions: ['      --search  Search the web'],
+    });
+    const headless = await resolveHeadless(codexish(), bin);
+    expect(headless('q')).toEqual(['exec', '--search', 'q']);
+  });
+
+  it('uses the current form when the binary does not document the alternate', async () => {
+    const bin = await fakeParser('faketool', { version: 'Test CLI 2.0', accepted: [] });
+    const headless = await resolveHeadless(codexish(), bin);
+    expect(headless('q')).toEqual(['exec', 'q']);
+  });
+
+  it('falls back to the current form when the probe cannot answer at all', async () => {
+    // A probe that fails says nothing about which form is right. Guessing the
+    // alternate on a failure would turn one unreadable binary into a broken run.
+    const path = join(dir, 'faketool');
+    await writeFile(path, '#!/bin/sh\nexit 7\n');
+    await chmod(path, 0o755);
+    const headless = await resolveHeadless(codexish(), path);
+    expect(headless('q')).toEqual(['exec', 'q']);
+  });
+
+  it('caches by resolved absolute path, so two installs of one CLI can differ', async () => {
+    // Two Codex installs on one machine really can be different builds, and
+    // the name on PATH does not distinguish them. Caching by CLI id alone would
+    // serve the first one's answer to the second.
+    const old = await fakeParser('old-codex', {
+      version: 'Test CLI 1.0',
+      accepted: ['--search'],
+      helpMentions: ['      --search'],
+    });
+    const current = await fakeParser('new-codex', { version: 'Test CLI 2.0', accepted: [] });
+    expect((await resolveHeadless(codexish(), old))('q')).toEqual(['exec', '--search', 'q']);
+    expect((await resolveHeadless(codexish(), current))('q')).toEqual(['exec', 'q']);
+    // And the answer is remembered rather than re-probed: deleting the binary
+    // leaves the cached decision intact.
+    await rm(old, { force: true });
+    expect((await resolveHeadless(codexish(), old))('q')).toEqual(['exec', '--search', 'q']);
+  });
+
+  it('leaves an adapter with no alternate exactly as declared, probing nothing', async () => {
+    const plain = adapter({});
+    const headless = await resolveHeadless(plain, join(dir, 'does-not-exist'));
+    expect(headless('q')).toEqual(['-p', 'q']);
+  });
+});
+
+describe('CLI-29/30/31: the parse-only argv self-test', () => {
+  /** An adapter that reaches `ready`, so the self-test will actually run it. */
+  async function ready(over: Partial<CliAdapter> = {}): Promise<CliAdapter> {
+    const authPath = join(dir, 'auth.json');
+    await writeFile(authPath, '{}');
+    return adapter({ authPaths: [authPath], ...over });
+  }
+
+  it('accepts an invocation the binary parses', async () => {
+    await fakeParser('faketool', { version: 'Test CLI 1.0', accepted: ['-p'] });
+    const check = await checkHeadlessArgv(await ready());
+    expect(check.state).toBe('accepted');
+    // The REAL argv, with the brief replaced by an inert token and the help
+    // flag appended. Not a stand-in: the point is that these exact flags parsed.
+    expect(check.argv).toEqual(['-p', 'dossier-argv-self-test', '--help']);
+  });
+
+  it('catches exactly the shipped defect: an argument the binary refuses', async () => {
+    // `--search` accepted nowhere, which is what `codex exec` does with it.
+    await fakeParser('faketool', { version: 'Test CLI 1.0', accepted: [] });
+    const check = await checkHeadlessArgv(await ready({ headless: (p) => ['exec', '--search', p] }));
+    expect(check.state).toBe('rejected');
+    expect(check.detail).toMatch(/REFUSED/);
+    expect(check.detail).toMatch(/unexpected argument '--search'/);
+  });
+
+  it('reports a non-zero exit with no parse signature as inconclusive, never as rejected', async () => {
+    // A binary that wants a login exits non-zero and is not a broken adapter.
+    // Accusing it would send a bug report to the wrong person.
+    const path = join(dir, 'faketool');
+    await writeFile(
+      path,
+      '#!/bin/sh\nif [ "$1" = "--version" ]; then echo "Test CLI 1.0"; exit 0; fi\necho "not logged in" >&2\nexit 1\n',
+    );
+    await chmod(path, 0o755);
+    const check = await checkHeadlessArgv(await ready());
+    expect(check.state).toBe('inconclusive');
+    expect(check.detail).toMatch(/not logged in/);
+  });
+
+  it('blames its own probe rather than the adapter when the refusal names `--help`', async () => {
+    // The help flag is ours, not the adapter's. A binary that refuses it is
+    // telling us about our probe.
+    const path = join(dir, 'faketool');
+    await writeFile(
+      path,
+      '#!/bin/sh\nif [ "$1" = "--version" ]; then echo "Test CLI 1.0"; exit 0; fi\n' +
+        'echo "error: unexpected argument \'--help\' found" >&2\nexit 2\n',
+    );
+    await chmod(path, 0o755);
+    const check = await checkHeadlessArgv(await ready());
+    expect(check.state).toBe('inconclusive');
+  });
+
+  it('never invokes an absent binary', async () => {
+    const check = await checkHeadlessArgv(await ready());
+    expect(check.state).toBe('skipped');
+    expect(check.argv).toEqual([]);
+    expect(check.detail).toMatch(/not installed/);
+  });
+
+  it('never invokes an unidentified binary, on the same rule as a research run', async () => {
+    await fakeParser('faketool', { version: 'some-other-vendor 9.9.9', accepted: ['-p'] });
+    const check = await checkHeadlessArgv(await ready());
+    expect(check.state).toBe('skipped');
+    expect(check.detail).toMatch(/could not be identified/);
+  });
+
+  it('tests the form the probe chose, not the declared default', async () => {
+    // An older binary that documents `--search` and accepts only `--search`
+    // must come back accepted, which only happens if the self-test asks the
+    // same question `createRun` would.
+    await fakeParser('faketool', {
+      version: 'Test CLI 1.0',
+      accepted: ['--search'],
+      helpMentions: ['      --search'],
+    });
+    const check = await checkHeadlessArgv(
+      await ready({
+        headless: (p) => ['exec', p],
+        headlessAlternate: {
+          probeArgs: ['exec', '--help'],
+          expect: /--search\b/,
+          argv: (p) => ['exec', '--search', p],
+          why: 'documented here',
+        },
+      }),
+    );
+    expect(check.state).toBe('accepted');
+    expect(check.argv).toContain('--search');
   });
 });
 

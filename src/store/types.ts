@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { RESEARCH_TIERS } from '../gemini/types.js';
 import { ARCHETYPE_NAMES } from '../research/archetypes.js';
+import { RUN_FAILURE_KINDS } from '../research/failure.js';
 import { PROVIDER_IDS } from '../providers/types.js';
 
 /**
@@ -138,6 +139,35 @@ export const RunRecordSchema = z.object({
   corpusStores: z.array(z.string().max(300)).max(20).default([]),
 
   error: z.string().max(4000).optional(),
+  /**
+   * Why it failed, when it failed.
+   *
+   * `failed` alone could not tell a broken adapter from a hard question, and
+   * they need opposite responses. Optional so every record written before this
+   * existed still parses; absent means "not classified", which renders as the
+   * plain `failed` it always did rather than as a guess.
+   */
+  failureKind: z.enum(RUN_FAILURE_KINDS).optional(),
+  /**
+   * The HTTP status the provider returned, when it returned one.
+   *
+   * Held so a 429 can be labelled as a 429. The error text carries it too, but
+   * only in prose, and prose is not something a caller can branch on.
+   */
+  failureStatus: z.number().int().min(100).max(599).optional(),
+  /**
+   * True once the budget commitment for this run has been released.
+   *
+   * On the record as well as in the ledger because it is the flag that makes
+   * the release idempotent: a run whose commitment was already returned must
+   * not return it twice if the record is re-saved.
+   *
+   * Optional rather than defaulted, so absent means "never released", which is
+   * what every record written before this existed means. A default would make
+   * the field required on the output type and force every construction site to
+   * restate a fact none of them has an opinion about.
+   */
+  budgetReleased: z.boolean().optional(),
 });
 export type RunRecord = z.infer<typeof RunRecordSchema>;
 
@@ -154,6 +184,29 @@ export const LedgerEntrySchema = z.object({
   runId: z.string().max(64),
   tier: z.enum(RESEARCH_TIERS),
   estimatedCostUsd: z.number().nonnegative(),
+  /**
+   * Whether this line commits money or gives it back.
+   *
+   * The ledger stays append-only: a request the provider provably refused is
+   * compensated with a `release` line naming the same `runId`, never by editing
+   * or deleting the reservation. The history of what happened is the point, and
+   * "we reserved $9 and then learned nothing was created" is a truer record
+   * than a reservation that quietly vanishes.
+   *
+   * The amount stays `nonnegative` rather than allowing a negative reservation,
+   * deliberately. A negative amount would be the smaller diff and it would hand
+   * anyone who can write to the ledger an unlimited budget: one hand-edited
+   * line of `-1000000` and the ceiling is gone. Releases are a separate kind so
+   * they can be bounded by what was actually reserved for that run.
+   *
+   * Optional, so every line written before this existed reads as a
+   * reservation, which is what it was. `netCommittedUsd` treats an absent kind
+   * as `reserve`, which is the direction that counts spend rather than hiding
+   * it.
+   */
+  kind: z.enum(['reserve', 'release']).optional(),
+  /** Why a release happened. Ignored on a reservation. */
+  reason: z.string().max(300).optional(),
   label: z.string().max(200).optional(),
   /**
    * Which backend the money went to.

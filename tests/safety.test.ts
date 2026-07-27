@@ -3,7 +3,19 @@ import { backendLimitations, loadConfig } from '../src/config.js';
 import { toSnapshot } from '../src/gemini/types.js';
 import { estimateCost, estimateDuration, formatDuration } from '../src/gemini/cost.js';
 import { isPrivateAddress, safeFetch } from '../src/net/safe-fetch.js';
-import { classify, pollDelayMs, retry, retryAfterMs } from '../src/net/retry.js';
+import {
+  AmbiguousSpendError,
+  attemptOnceThenSettle,
+  classify,
+  DEFINITIVE_REJECTION_STATUSES,
+  httpStatusOf,
+  isDefinitiveRejection,
+  nextRetryDelayMs,
+  pollDelayMs,
+  retry,
+  retryAfterMs,
+  retryDelayFromMessage,
+} from '../src/net/retry.js';
 import { grepReport } from '../src/research/report.js';
 import { scoreCitations } from '../src/research/citations.js';
 import { normaliseCitations } from '../src/research/report.js';
@@ -429,6 +441,153 @@ describe('retry and backoff', () => {
     expect(pollDelayMs(base, 50, { random: () => 1, maxMs: 600_000 })).toBeLessThanOrEqual(600_000);
     // Recovery is immediate, not gradual.
     expect(pollDelayMs(base, 0)).toBe(base);
+  });
+});
+
+/**
+ * The rule about money, and the $18 it cost to get too coarse.
+ *
+ * `attemptOnceThenSettle` refused to retry anything, on the correct reasoning
+ * that a create which timed out after the provider accepted it has already
+ * bought the report. The reasoning is right and the rule was too broad: a 429
+ * is the provider declining to admit the request and naming a wait. Two of the
+ * owner's OpenAI runs died there at $9 each, both asking for about a second.
+ *
+ * Every test in here is about which side of that line a failure falls on,
+ * because being wrong in one direction wastes money and being wrong in the
+ * other buys a second report.
+ */
+describe('paid creation: rejected versus unknown', () => {
+  const never = async (): Promise<void> => undefined;
+
+  const rateLimit = (message: string, extra: Record<string, unknown> = {}): unknown =>
+    Object.assign(new Error(message), { status: 429, ...extra });
+
+  it('RETRY-01: retries a 429, because a rate limiter that answered created nothing', async () => {
+    let calls = 0;
+    const result = await attemptOnceThenSettle(
+      async () => {
+        calls += 1;
+        if (calls < 3) throw rateLimit('Rate limit reached for gpt-5.6-sol. Please try again in 1.236s.');
+        return 'created';
+      },
+      { provider: 'OpenAI', rateLimit: { sleep: never, random: () => 0.5 } },
+    );
+    expect(result).toBe('created');
+    expect(calls).toBe(3);
+  });
+
+  it('RETRY-02: still attempts a timeout, a dropped connection and a 5xx exactly once', async () => {
+    for (const thrown of [
+      Object.assign(new Error('aborted'), { name: 'TimeoutError' }),
+      Object.assign(new Error('socket hang up'), { code: 'ECONNRESET' }),
+      Object.assign(new Error('upstream boom'), { status: 503 }),
+    ]) {
+      let calls = 0;
+      const error = await attemptOnceThenSettle(
+        async () => {
+          calls += 1;
+          throw thrown;
+        },
+        { provider: 'OpenAI', rateLimit: { sleep: never } },
+      ).catch((e: unknown) => e);
+      expect(calls, String(thrown)).toBe(1);
+      expect(error, String(thrown)).toBeInstanceOf(AmbiguousSpendError);
+    }
+  });
+
+  it('RETRY-03: treats 400, 401 and 403 as definitive rejections and does not retry them', async () => {
+    for (const status of [400, 401, 403]) {
+      let calls = 0;
+      const error = await attemptOnceThenSettle(
+        async () => {
+          calls += 1;
+          throw Object.assign(new Error(`refused ${String(status)}`), { status });
+        },
+        { provider: 'OpenAI', rateLimit: { sleep: never } },
+      ).catch((e: unknown) => e);
+      expect(calls, String(status)).toBe(1);
+      // The provider's own error, not an ambiguity warning: a rejected request
+      // is one the caller can fix.
+      expect(error, String(status)).not.toBeInstanceOf(AmbiguousSpendError);
+      expect(isDefinitiveRejection(error)).toBe(true);
+    }
+  });
+
+  it('RETRY-03: keeps every other status ambiguous, which is the expensive direction to be wrong in', () => {
+    // A 404 or a 409 very likely created nothing too. "Very likely" is the
+    // wrong standard when being wrong releases a commitment for a report that
+    // was really bought.
+    for (const status of [404, 409, 422, 500, 503]) {
+      expect(isDefinitiveRejection({ status }), String(status)).toBe(false);
+    }
+    for (const status of [400, 401, 403, 429]) {
+      expect(isDefinitiveRejection({ status }), String(status)).toBe(true);
+    }
+    expect(DEFINITIVE_REJECTION_STATUSES).toEqual([400, 401, 403, 429]);
+  });
+
+  it('RETRY-04: reads the delay out of the provider’s message when there is no Retry-After', () => {
+    // OpenAI's 429 body, verbatim from the owner's failed run.
+    expect(
+      retryDelayFromMessage(
+        new Error(
+          'Rate limit reached for gpt-5.6-sol on tokens per min (TPM): Limit 1000000, Used 923902, Requested 96709. Please try again in 1.236s.',
+        ),
+      ),
+    ).toBe(1236);
+    expect(retryDelayFromMessage(new Error('try again in 500ms'))).toBe(500);
+    expect(retryDelayFromMessage(new Error('try again in 2m'))).toBe(120_000);
+    // And does NOT find a delay in the quota numbers, which is how a naive
+    // pattern ends up sleeping for eleven days.
+    expect(retryDelayFromMessage(new Error('Limit 1000000, Used 923902'))).toBeUndefined();
+  });
+
+  it('RETRY-04: prefers Retry-After, then the message, then its own backoff', () => {
+    const withHeader = Object.assign(new Error('try again in 9s'), {
+      status: 429,
+      headers: { 'retry-after': '2' },
+    });
+    expect(nextRetryDelayMs(withHeader, 1, { random: () => 1 })).toBe(2000);
+    expect(nextRetryDelayMs(new Error('try again in 9s'), 1, { random: () => 1 })).toBe(9000);
+    // Nothing said, so the jittered exponential step is used.
+    expect(nextRetryDelayMs(new Error('nothing useful'), 1, { random: () => 1, baseMs: 500 })).toBe(500);
+  });
+
+  it('RETRY-05: is bounded by attempts, by total delay, and by the caller’s deadline', async () => {
+    const attempted = async (opts: Record<string, unknown>): Promise<number> => {
+      let calls = 0;
+      await attemptOnceThenSettle(
+        async () => {
+          calls += 1;
+          throw rateLimit('Please try again in 5s.');
+        },
+        { provider: 'OpenAI', rateLimit: { sleep: never, ...opts } },
+      ).catch(() => undefined);
+      return calls;
+    };
+
+    expect(await attempted({ attempts: 2, maxTotalDelayMs: 60_000 })).toBe(2);
+    // A 5-second wait against a 6-second budget affords one retry, not two.
+    expect(await attempted({ attempts: 9, maxTotalDelayMs: 6_000 })).toBe(2);
+    // A deadline already in the past stops it dead: sleeping to make an attempt
+    // the caller can no longer use helps nobody.
+    expect(await attempted({ attempts: 9, deadlineAt: Date.now() - 1 })).toBe(1);
+  });
+
+  it('RETRY-06: finds a status carried only on a wrapped error’s cause', () => {
+    // `GeminiRequestError` keeps the SDK's error on `cause` and nowhere else,
+    // so a wrapped 429 used to classify as an unrecognised failure: never
+    // backed off, never eligible for the retry above.
+    const wrapped = new Error('Gemini interactions.create failed: quota');
+    wrapped.cause = { status: 429 };
+    expect(classify(wrapped)).toBe('rate-limited');
+    expect(isDefinitiveRejection(wrapped)).toBe(true);
+    expect(httpStatusOf(wrapped)).toBe(429);
+    // A circular cause chain must not hang the walk.
+    const loop = new Error('a');
+    loop.cause = loop;
+    expect(httpStatusOf(loop)).toBeUndefined();
   });
 });
 
