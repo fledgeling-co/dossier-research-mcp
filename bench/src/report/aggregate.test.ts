@@ -287,3 +287,40 @@ describe('ordering is deterministic', () => {
     expect(agg.taskGroups.map((g) => g.taskId)).toEqual(['t1', 't2']);
   });
 });
+
+describe('REPORT-01 the repetition floor survives two-stage aggregation', () => {
+  it('is unmet when every task was run once, however many tasks there are', () => {
+    // Six tasks run once each gives a real six-task spread. What it does not
+    // give is any information about how much the backend varies between runs
+    // of one task, which is the thing repetitions exist to measure.
+    const cells = SIX.map((t) => scoredCell(t.id, 'gemini', 1, 'technical', { accuracy: 0.8 }));
+    const agg = aggregate({ cells, corpus: corpus(SIX) });
+    const group = agg.categoryGroups[0];
+    expect(group?.verdict.scorable).toBe(true);
+    expect(group?.metrics.accuracy?.spread).not.toBeNull();
+    expect(group?.repetitionFloor.met).toBe(false);
+    expect(group?.repetitionFloor.minRepetitions).toBe(1);
+    expect(group?.repetitionFloor.why).toMatch(/it is not ranked/);
+  });
+
+  it('is met when every task cleared the floor', () => {
+    const cells = SIX.flatMap((t) =>
+      [1, 2, 3].map((r) => scoredCell(t.id, 'gemini', r, 'technical', { accuracy: 0.8 })),
+    );
+    const agg = aggregate({ cells, corpus: corpus(SIX) });
+    expect(agg.categoryGroups[0]?.repetitionFloor.met).toBe(true);
+    expect(agg.backends[0]?.repetitionFloor.met).toBe(true);
+  });
+
+  it('takes the weakest task, not the average, so one thin task still blocks it', () => {
+    const cells = [
+      ...['t1', 't2', 't3', 't4', 't5'].flatMap((id) =>
+        [1, 2, 3, 4, 5].map((r) => scoredCell(id, 'gemini', r, 'technical', { accuracy: 0.8 })),
+      ),
+      scoredCell('t6', 'gemini', 1, 'technical', { accuracy: 0.8 }),
+    ];
+    const agg = aggregate({ cells, corpus: corpus(SIX) });
+    expect(agg.categoryGroups[0]?.repetitionFloor.met).toBe(false);
+    expect(agg.categoryGroups[0]?.repetitionFloor.minRepetitions).toBe(1);
+  });
+});

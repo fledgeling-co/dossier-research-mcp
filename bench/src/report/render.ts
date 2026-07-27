@@ -360,6 +360,8 @@ function candidatesFor(
         scorable: b.scorableCategories.length > 0,
         why: `${b.provider} has no scorable category, so it has no overall figure`,
         completionRate: b.completion.rate,
+        repetitionsMet: b.repetitionFloor.met,
+        repetitionsWhy: b.repetitionFloor.why,
       })),
       scopeScorable: agg.backends.some((b) => b.scorableCategories.length > 0),
     };
@@ -372,6 +374,8 @@ function candidatesFor(
       scorable: g.verdict.scorable,
       why: g.verdict.scorable ? '' : g.verdict.why,
       completionRate: g.completion.rate,
+      repetitionsMet: g.repetitionFloor.met,
+      repetitionsWhy: g.repetitionFloor.why,
     })),
     scopeScorable: agg.corpus.tasksByCategory[scope] >= agg.minTasksPerCategory,
   };

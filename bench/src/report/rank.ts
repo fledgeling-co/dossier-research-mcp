@@ -31,6 +31,13 @@ export const OVERLAP_NOTE =
 export type WithheldReason =
   | 'metric-not-rankable'
   | 'scope-not-scorable'
+  /**
+   * Nobody has a value at all, which is a different statement from nobody
+   * having enough of them. Kept apart because "only 0 backends could be
+   * compared" reads as a sampling problem when the truth is that the metric was
+   * never measured here, and those have different fixes.
+   */
+  | 'metric-not-measured'
   | 'sample-below-spread-floor'
   | 'too-few-candidates';
 
@@ -44,6 +51,20 @@ export interface RankCandidate {
   readonly why: string;
   /** Printed beside the value, always. */
   readonly completionRate: number | null;
+  /**
+   * Whether the repetitions underneath the value clear the floor.
+   *
+   * Separate from the value's own spread, and the separation is the point. A
+   * backend run once per task across six tasks has a perfectly good six-task
+   * spread and no information at all about how much it varies between runs of
+   * the same task. Ranking on the first while ignoring the second is precisely
+   * the rank ordering of noise `docs/plan/benchmark.md` warns about, and it is
+   * the case the brief names: at one repetition, print the numbers and refuse
+   * to rank.
+   */
+  readonly repetitionsMet: boolean;
+  /** Why the repetitions fall short, when they do. */
+  readonly repetitionsWhy: string;
 }
 
 export interface RankedEntry {
@@ -128,8 +149,10 @@ export function rankBackends(
   //    everyone, which is the brief's headline case: print the numbers, refuse
   //    to rank. A rank ordering without a spread is a rank ordering of noise.
   const eligible: { provider: string; value: SpreadReport; completionRate: number | null }[] = [];
-  let belowFloor = 0;
+  let belowSpreadFloor = 0;
+  let belowRepetitionFloor = 0;
   let floor = 0;
+  let withValue = 0;
   for (const candidate of candidates) {
     if (!candidate.scorable) {
       excluded.push({ provider: candidate.provider, why: candidate.why });
@@ -142,12 +165,26 @@ export function rankBackends(
       });
       continue;
     }
+    withValue += 1;
     if (candidate.value.spread === null) {
-      belowFloor += 1;
+      belowSpreadFloor += 1;
       floor = candidate.value.eligibility.floor;
       excluded.push({
         provider: candidate.provider,
         why: `${candidate.provider}: ${candidate.value.spreadWithheld}`,
+      });
+      continue;
+    }
+    // The second half of the floor, and the one a two-stage aggregation hides.
+    // The value above has a spread across tasks; this asks whether the runs
+    // behind those tasks were repeated enough to say anything about the
+    // backend's own variation.
+    if (!candidate.repetitionsMet) {
+      belowRepetitionFloor += 1;
+      floor = candidate.value.eligibility.floor;
+      excluded.push({
+        provider: candidate.provider,
+        why: `${candidate.provider}: ${candidate.repetitionsWhy}`,
       });
       continue;
     }
@@ -158,16 +195,46 @@ export function rankBackends(
     });
   }
 
+  // Nobody has a value at all. Said as that, rather than as a comparison of
+  // zero backends, because the fix is measuring the metric rather than running
+  // more repetitions.
+  if (withValue === 0) {
+    return {
+      metric,
+      scope,
+      entries: null,
+      withheld: 'metric-not-measured',
+      note: `no backend has a value for ${metricDescriptor(metric).label} in ${scopeName(scope)}, so there is nothing to order. This is a metric that was never measured here, not a sample too small to separate.`,
+      excluded,
+    };
+  }
+
+  const belowFloor = belowSpreadFloor + belowRepetitionFloor;
   if (belowFloor > 0) {
+    // The two shortfalls are named separately because they are different
+    // problems with different fixes. Too few results is a sample too small to
+    // spread; too few repetitions is a figure that says nothing about how much
+    // the backend varies between runs of the same task, however many tasks
+    // stand behind it. A two-stage aggregation hides the second one, and
+    // hiding it is how a plausible ranking gets assembled out of single runs.
+    const causes: string[] = [];
+    if (belowSpreadFloor > 0) {
+      causes.push(`${String(belowSpreadFloor)} with too few results for a spread`);
+    }
+    if (belowRepetitionFloor > 0) {
+      causes.push(
+        `${String(belowRepetitionFloor)} whose tasks were not repeated enough for the spread to say anything about run-to-run variation`,
+      );
+    }
     return {
       metric,
       scope,
       entries: null,
       withheld: 'sample-below-spread-floor',
       note:
-        `${String(belowFloor)} of ${String(candidates.length)} backends have no reportable spread in ${scopeName(scope)}, ` +
-        `so no ordering is stated. The numbers above are the numbers; the sample is what cannot rank them. ` +
-        `A spread needs ${String(floor)} results, and this is the point at which a benchmark would otherwise publish a confident ranking it cannot support.`,
+        `Of the ${String(withValue)} backends with a value in ${scopeName(scope)}: ${causes.join(', ')}. ` +
+        `No ordering is stated. The numbers above are the numbers; the sample is what cannot rank them. ` +
+        `The floor is ${String(floor)} results, and this is the point at which a benchmark would otherwise publish a confident ranking it cannot support.`,
       excluded,
     };
   }

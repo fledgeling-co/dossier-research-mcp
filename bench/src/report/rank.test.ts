@@ -14,6 +14,8 @@ function candidate(
     scorable: true,
     why: '',
     completionRate: 1,
+    repetitionsMet: true,
+    repetitionsWhy: 'the fixture ran enough repetitions',
   };
 }
 
@@ -46,8 +48,8 @@ describe('REPORT-02 a withheld ranking names the condition that failed', () => {
       candidate('a', [0.5], 1),
       candidate('b', [0.6], 1),
     ]);
-    expect(ranking.note).toMatch(/no reportable spread/);
-    expect(ranking.note).toMatch(/A spread needs 3 results/);
+    expect(ranking.note).toMatch(/too few results for a spread/);
+    expect(ranking.note).toMatch(/The floor is 3 results/);
     expect(ranking.note).toMatch(/confident ranking it cannot support/);
   });
 
@@ -84,7 +86,7 @@ describe('REPORT-02 a withheld ranking names the condition that failed', () => {
     const ranking = rankBackends('accuracy', OVERALL, [
       candidate('a', [0.5, 0.6, 0.7]),
       candidate('b', [0.1, 0.2, 0.3]),
-      { provider: 'c', value: null, scorable: false, why: 'c completed nothing', completionRate: 0 },
+      { provider: 'c', value: null, scorable: false, why: 'c completed nothing', completionRate: 0, repetitionsMet: false, repetitionsWhy: 'nothing ran' },
     ]);
     expect(ranking.excluded).toContainEqual({ provider: 'c', why: 'c completed nothing' });
     expect(ranking.entries?.map((e) => e.provider)).toEqual(['a', 'b']);
@@ -166,9 +168,29 @@ describe('a candidate with no value never enters the ordering', () => {
     const ranking = rankBackends('accuracy', OVERALL, [
       candidate('a', [0.9, 0.91, 0.92]),
       candidate('b', [0.1, 0.11, 0.12]),
-      { provider: 'c', value: null, scorable: true, why: '', completionRate: 1 },
+      { provider: 'c', value: null, scorable: true, why: '', completionRate: 1, repetitionsMet: true, repetitionsWhy: '' },
     ]);
     expect(ranking.entries?.map((e) => e.provider)).toEqual(['a', 'b']);
     expect(ranking.excluded.map((e) => e.provider)).toEqual(['c']);
+  });
+});
+
+describe('a metric nobody measured is not a sample problem', () => {
+  it('says the metric was never measured, rather than counting zero candidates', () => {
+    const ranking = rankBackends('refusal', OVERALL, [
+      { provider: 'a', value: null, scorable: true, why: '', completionRate: 1, repetitionsMet: true, repetitionsWhy: '' },
+      { provider: 'b', value: null, scorable: true, why: '', completionRate: 1, repetitionsMet: true, repetitionsWhy: '' },
+    ]);
+    expect(ranking.withheld).toBe('metric-not-measured');
+    expect(ranking.note).toMatch(/never measured here, not a sample too small/);
+  });
+
+  it('counts the spread shortfall against the backends that had a value', () => {
+    const ranking = rankBackends('accuracy', OVERALL, [
+      candidate('a', [0.5], 1),
+      candidate('b', [0.6], 1),
+      { provider: 'c', value: null, scorable: false, why: 'c ran nothing', completionRate: 0, repetitionsMet: false, repetitionsWhy: 'nothing ran' },
+    ]);
+    expect(ranking.note).toMatch(/Of the 2 backends with a value/);
   });
 });

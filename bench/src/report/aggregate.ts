@@ -1,6 +1,7 @@
 import { TASK_CATEGORIES, type TaskCategory } from '../tasks/schema.js';
 import type { TaskCorpus } from '../tasks/corpus.js';
 import { METRIC_IDS, type MetricId } from './metrics.js';
+import { MIN_REPETITIONS_FOR_SPREAD } from '../run/cell.js';
 import { summarise, type SampleUnit, type SpreadReport } from './spread.js';
 import type { RegistryCounts, ScoredCell } from './harvest.js';
 
@@ -57,6 +58,31 @@ export type ScorableVerdict =
       readonly why: string;
     };
 
+/**
+ * Whether the repetitions underneath a figure clear the spread floor.
+ *
+ * Carried up from stage 1, and it is the fix for the subtlest hole in a
+ * two-stage aggregation. A backend run **once** per task still produces a
+ * six-task spread at the category level, and that spread is real: it describes
+ * how much the category varies. What it does not describe is the backend's
+ * non-determinism, which is the thing repetitions exist to measure and the
+ * thing `docs/plan/benchmark.md` means when it says a single run per cell is a
+ * rank ordering of noise.
+ *
+ * So a category figure whose tasks were each run once is printed, with its
+ * numbers, and **never ranked**. That is exactly the brief's headline case,
+ * and without this field it would have passed silently: a plausible ranking
+ * assembled from single runs, which is the failure this whole slice exists to
+ * prevent, appearing in its own output.
+ */
+export interface RepetitionFloor {
+  readonly met: boolean;
+  /** The smallest completed repetition count behind any task in the figure. */
+  readonly minRepetitions: number;
+  readonly floor: number;
+  readonly why: string;
+}
+
 export interface CompletionCounts {
   readonly attempted: number;
   readonly completed: number;
@@ -92,6 +118,8 @@ export interface CategoryGroup {
   readonly staleTasks: number;
   readonly completion: CompletionCounts;
   readonly verdict: ScorableVerdict;
+  /** Whether the repetitions behind this figure clear the spread floor. */
+  readonly repetitionFloor: RepetitionFloor;
   /** Across tasks. Populated even when the verdict withholds, so JSON keeps it. */
   readonly metrics: Readonly<Record<MetricId, SpreadReport | null>>;
   readonly costUsd: SpreadReport | null;
@@ -106,6 +134,7 @@ export interface BackendSummary {
   readonly completion: CompletionCounts;
   readonly scorableCategories: readonly TaskCategory[];
   readonly excludedCategories: readonly { readonly category: TaskCategory; readonly why: string }[];
+  readonly repetitionFloor: RepetitionFloor;
   readonly metrics: Readonly<Record<MetricId, SpreadReport | null>>;
   readonly costUsd: SpreadReport | null;
   readonly wallClockMs: SpreadReport | null;
@@ -304,6 +333,45 @@ function buildTaskGroups(cells: readonly ScoredCell[]): TaskGroup[] {
   return groups;
 }
 
+/**
+ * The weakest repetition count behind a figure decides whether it may be ranked.
+ *
+ * The MINIMUM rather than the median, because one task run once is enough to
+ * make the whole figure partly an ordering of noise, and a rule that averaged
+ * that away would be a rule that only bites when it does not matter.
+ */
+function repetitionFloor(
+  completedPerTask: readonly number[],
+  scopeLabel: string,
+): RepetitionFloor {
+  const floor = MIN_REPETITIONS_FOR_SPREAD;
+  if (completedPerTask.length === 0) {
+    return {
+      met: false,
+      minRepetitions: 0,
+      floor,
+      why: `nothing completed in ${scopeLabel}, so there are no repetitions to judge`,
+    };
+  }
+  const minRepetitions = Math.min(...completedPerTask);
+  if (minRepetitions >= floor) {
+    return {
+      met: true,
+      minRepetitions,
+      floor,
+      why: `every task in ${scopeLabel} completed at least ${String(minRepetitions)} repetitions`,
+    };
+  }
+  return {
+    met: false,
+    minRepetitions,
+    floor,
+    why:
+      `at least one task in ${scopeLabel} completed only ${String(minRepetitions)} repetition${minRepetitions === 1 ? '' : 's'}, ` +
+      `below the floor of ${String(floor)}. The figure is printed; it is not ranked, because a spread across tasks says nothing about how much this backend varies between runs of the same task.`,
+  };
+}
+
 function verdictFor(
   tasksInCorpus: number,
   tasksCompleted: number,
@@ -389,6 +457,10 @@ function buildCategoryGroups(
         staleTasks: staleByCategory[category],
         completion: counts,
         verdict: verdictFor(tasksInCorpus, tasksCompleted, minTasks, provider, category),
+        repetitionFloor: repetitionFloor(
+          scored.map((g) => g.completion.completed),
+          `${provider}'s ${category} tasks`,
+        ),
         metrics,
         costUsd: metricOver(
           scored.map((g) => g.costUsd?.median ?? null),
@@ -448,6 +520,10 @@ function buildBackends(
       completion: mergeCompletion(mine.map((g) => g.completion)),
       scorableCategories: scorable.map((g) => g.category),
       excludedCategories: excluded,
+      repetitionFloor: repetitionFloor(
+        scorable.map((g) => g.repetitionFloor.minRepetitions),
+        `${provider}'s scorable categories`,
+      ),
       metrics,
       // Cost and wall clock are taken over EVERY category, not only the
       // scorable ones. A price is a fact about what was spent; withholding it

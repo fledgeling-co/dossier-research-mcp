@@ -1,0 +1,406 @@
+import { readFileSync, readdirSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { describe, expect, it } from 'vitest';
+import { aggregate } from './aggregate.js';
+import { formatValue, rankings, render, renderJson, renderMarkdown } from './render.js';
+import { summarise } from './spread.js';
+import { corpus, scoredCell, task } from './fixtures.js';
+
+const SIX = ['t1', 't2', 't3', 't4', 't5', 't6'].map((id) => task(id, 'technical'));
+
+/** A corpus with a scorable category, an under-sampled one and a stale task. */
+function realistic() {
+  const tasks = [
+    ...['t1', 't2', 't3', 't4', 't5'].map((id) => task(id, 'technical')),
+    task('t6', 'technical', true),
+    task('c1', 'contested'),
+    task('c2', 'contested'),
+  ];
+  const cells = [
+    ...['t1', 't2', 't3', 't4', 't5', 't6'].flatMap((id, i) =>
+      [1, 2, 3].map((r) =>
+        scoredCell(
+          id,
+          'gemini',
+          r,
+          'technical',
+          {
+            accuracy: 0.6 + i * 0.05,
+            'citation-accuracy': 0.8,
+            'citation-sources': 40 + i,
+          },
+          {
+            stale: id === 't6',
+            registry: { present: 2, absent: 0, unchecked: 7, invalid: 0 },
+          },
+        ),
+      ),
+    ),
+    ...['t1', 't2', 't3', 't4', 't5', 't6'].flatMap((id, i) =>
+      [1, 2, 3].map((r) =>
+        scoredCell(
+          id,
+          'perplexity',
+          r,
+          'technical',
+          { accuracy: 0.4 + i * 0.04, 'citation-accuracy': 0.9, 'citation-sources': 9 },
+          { stale: id === 't6', estimatedCostUsd: 0.5, wallClockMs: 120_000 },
+        ),
+      ),
+    ),
+    ...['t1', 't2'].flatMap((id) =>
+      [1, 2, 3].map((r) =>
+        scoredCell(id, 'openai', r, 'technical', {}, { outcome: 'failed', failureKind: '429' }),
+      ),
+    ),
+    ...['c1', 'c2'].flatMap((id) =>
+      [1, 2, 3].map((r) => scoredCell(id, 'gemini', r, 'contested', { accuracy: 0.4 })),
+    ),
+  ];
+  return aggregate({ cells, corpus: corpus(tasks) });
+}
+
+describe('REPORT-06 no value is ever bare', () => {
+  it('carries the sample size and the spread when there is one', () => {
+    expect(formatValue(summarise([0.1, 0.2, 0.3], 3))).toBe('0.2 [0.15-0.25] (n=3)');
+  });
+
+  it('carries the sample size and says the spread is absent when there is not', () => {
+    expect(formatValue(summarise([0.4], 1))).toBe('0.4 (n=1, no spread)');
+  });
+
+  it('says a metric was not measured rather than printing a zero', () => {
+    expect(formatValue(null)).toBe('not measured');
+    expect(formatValue(null)).not.toContain('0');
+  });
+
+  it('renders every metric cell with an n or with "not measured"', () => {
+    const whole = renderMarkdown(realistic());
+    // The score tables only. The validity panel above them is counts and
+    // failure kinds by design, and it is what gives those scores their context.
+    const markdown = whole.slice(whole.indexOf('## Per-backend scorecard'), whole.indexOf('## By category'));
+    for (const line of markdown.split('\n')) {
+      if (!line.startsWith('| gemini |') && !line.startsWith('| perplexity |')) continue;
+      for (const cellText of line.split('|').slice(3)) {
+        const text = cellText.trim();
+        if (text === '') continue;
+        // Every score column is a value with a sample size, a "not measured",
+        // a completion rate, a price, a wall clock, a registry count or an
+        // explicit "nothing checked". Nothing is a number standing on its own.
+        expect(text).toMatch(/n=\d|not measured|nothing checked|%|\$|s$|^\d+$/);
+      }
+    }
+  });
+});
+
+describe('REPORT-11 and REPORT-12 the validity panel comes first', () => {
+  const markdown = renderMarkdown(realistic());
+  const indexOf = (needle: string): number => markdown.indexOf(needle);
+
+  it('puts the completion-rate table above the first score', () => {
+    expect(indexOf('### Completion rate')).toBeGreaterThan(-1);
+    expect(indexOf('### Completion rate')).toBeLessThan(indexOf('## Per-backend scorecard'));
+  });
+
+  it('puts the stale count above the first score, with its share', () => {
+    expect(indexOf('### Stale tasks')).toBeLessThan(indexOf('## Per-backend scorecard'));
+    expect(markdown).toMatch(/\*\*1 of 8 tasks are stale\*\* \(12\.5%\)/);
+    expect(markdown).toContain('Stale: t6.');
+  });
+
+  it('puts the unchecked registry count above the first score, with the BENCH-03 caveat', () => {
+    expect(indexOf('### Registry checks, and how many never ran')).toBeLessThan(
+      indexOf('## Per-backend scorecard'),
+    );
+    expect(markdown).toMatch(/came back `unchecked`/);
+    expect(markdown).toMatch(/arXiv rate-limiting/);
+    expect(markdown).toMatch(/Crossref alone would report a genuine DOI as fabricated/);
+    expect(markdown).toMatch(/checks that never ran/);
+  });
+
+  it('says a failed cell is counted here and nowhere else', () => {
+    expect(markdown).toMatch(/reaches no metric denominator/);
+    expect(markdown).toMatch(/never scored as a zero/);
+  });
+
+  it('names the failure kinds so a rate limit is legible', () => {
+    expect(markdown).toMatch(/\| openai \| 6 \| 0 \| 0\.0% \(0\/6\) \| 429 6 \|/);
+  });
+
+  it('says when nothing was checked at all, rather than showing a flattering zero', () => {
+    const agg = aggregate({
+      cells: SIX.flatMap((t) => [1, 2, 3].map((r) => scoredCell(t.id, 'a', r, 'technical', { accuracy: 1 }))),
+      corpus: corpus(SIX),
+    });
+    expect(renderMarkdown(agg)).toMatch(/No identifier was checked against a registry/);
+  });
+});
+
+describe('REPORT-13 cost and wall clock sit beside the scores', () => {
+  it('renders a cost table with a total and a median per cell', () => {
+    const markdown = renderMarkdown(realistic());
+    expect(markdown).toContain('## What it cost');
+    expect(markdown).toContain('Median cost per cell');
+    expect(markdown).toContain('Median wall clock');
+    expect(markdown).toMatch(/\$\d+\.\d\d/);
+    expect(markdown).toMatch(/estimate band, never a quote/);
+  });
+});
+
+describe('REPORT-09 accuracy and volume are separate columns', () => {
+  const markdown = renderMarkdown(realistic());
+
+  it('renders two citation tables, not one', () => {
+    expect(markdown).toContain('### Citation accuracy');
+    expect(markdown).toContain('### Citation volume');
+    expect(markdown).toMatch(/Accuracy and volume are two tables and never one number/);
+  });
+
+  it('keeps a volume column out of the accuracy table', () => {
+    const accuracySection = markdown.slice(
+      markdown.indexOf('### Citation accuracy'),
+      markdown.indexOf('### Citation volume'),
+    );
+    expect(accuracySection).toContain('Citation accuracy');
+    expect(accuracySection).not.toContain('Sources cited');
+    expect(accuracySection).not.toContain('Independent domains');
+  });
+
+  it('keeps an accuracy column out of the volume table', () => {
+    const volumeSection = markdown.slice(
+      markdown.indexOf('### Citation volume'),
+      markdown.indexOf('### Registry checks per backend'),
+    );
+    expect(volumeSection).toContain('Sources cited');
+    expect(volumeSection).not.toContain('| Citation accuracy |');
+    expect(volumeSection).toMatch(/never ranked and never combined/);
+  });
+
+  it('keeps the citation metrics out of the report-quality scorecard entirely', () => {
+    const scorecard = markdown.slice(
+      markdown.indexOf('## Per-backend scorecard'),
+      markdown.indexOf('## Citations'),
+    );
+    expect(scorecard).toContain('Accuracy');
+    expect(scorecard).not.toContain('Sources cited');
+    expect(scorecard).not.toContain('Citation accuracy');
+  });
+});
+
+describe('REPORT-03 and REPORT-05 the under-sampled category on the page', () => {
+  const markdown = renderMarkdown(realistic());
+
+  it('names the under-sampled category and its task count', () => {
+    expect(markdown).toMatch(/Under-sampled and therefore unscored:\*\* contested \(2 tasks\)/);
+    expect(markdown).toMatch(/authoring tasks, not re-running research/);
+  });
+
+  it('renders under-sampled rather than a score in every category matrix', () => {
+    const matrix = markdown.slice(markdown.indexOf('### Accuracy\n'), markdown.indexOf('### Relevance'));
+    expect(matrix).toMatch(/\| contested \| 2 \| under-sampled \|/);
+  });
+
+  it('prints the floors in force at the top', () => {
+    expect(markdown).toMatch(/a spread needs 3 results; a category needs 5 tasks/);
+  });
+
+  it('prints a lowered floor rather than the default', () => {
+    const tasks = [task('c1', 'contested'), task('c2', 'contested')];
+    const cells = tasks.flatMap((t) =>
+      [1, 2, 3].map((r) => scoredCell(t.id, 'gemini', r, 'contested', { accuracy: 1 })),
+    );
+    const agg = aggregate({ cells, corpus: corpus(tasks), minTasksPerCategory: 2 });
+    expect(renderMarkdown(agg)).toMatch(/a category needs 2 tasks/);
+  });
+
+  it('shows a backend withheld for completing too few tasks, with the count', () => {
+    const cells = [
+      ...['t1', 't2'].flatMap((id) =>
+        [1, 2, 3].map((r) => scoredCell(id, 'openai', r, 'technical', { accuracy: 1 })),
+      ),
+      ...['t3', 't4', 't5', 't6'].flatMap((id) =>
+        [1, 2, 3].map((r) =>
+          scoredCell(id, 'openai', r, 'technical', {}, { outcome: 'failed', failureKind: '429' }),
+        ),
+      ),
+    ];
+    const agg = aggregate({ cells, corpus: corpus(SIX) });
+    expect(renderMarkdown(agg)).toMatch(/withheld \(2\/6 tasks\)/);
+  });
+});
+
+describe('REPORT-01 and REPORT-18 the ranking on the page', () => {
+  it('states no ranking at all when every cell was run once', () => {
+    const cells = SIX.map((t) => scoredCell(t.id, 'gemini', 1, 'technical', { accuracy: 0.8 })).concat(
+      SIX.map((t) => scoredCell(t.id, 'openai', 1, 'technical', { accuracy: 0.4 })),
+    );
+    const markdown = renderMarkdown(aggregate({ cells, corpus: corpus(SIX) }));
+    expect(markdown).toMatch(/\*\*No ranking is stated\.\*\*/);
+    expect(markdown).toMatch(/the sample is what cannot order them/);
+    // The numbers are still there. Refusing to rank is not refusing to report.
+    expect(markdown).toMatch(/80\.0%/);
+    expect(markdown).toMatch(/40\.0%/);
+  });
+
+  it('states a ranking when the sample supports it, with the overlap note', () => {
+    const markdown = renderMarkdown(realistic());
+    expect(markdown).toContain('### Accuracy, technical');
+    expect(markdown).toMatch(/not a significance test/);
+    expect(markdown).toMatch(/BENCH-13/);
+  });
+
+  it('lists everything withheld with the condition that failed', () => {
+    const markdown = renderMarkdown(realistic());
+    const withheld = markdown.slice(markdown.indexOf('### Withheld'));
+    expect(withheld).toContain('scope-not-scorable');
+    expect(withheld).toContain('metric-not-measured');
+  });
+
+  it('names the excluded categories on the backend overall', () => {
+    const agg = realistic();
+    const gemini = agg.backends.find((b) => b.provider === 'gemini');
+    expect(gemini?.excludedCategories.map((e) => e.category)).toEqual(['contested']);
+    expect(gemini?.scorableCategories).toEqual(['technical']);
+  });
+});
+
+describe('REPORT-21 recency renders unavailable, never zero', () => {
+  it('names the missing publication dates in the limits and the column caveat', () => {
+    const markdown = renderMarkdown(realistic());
+    expect(markdown).toMatch(/\*\*Recency is unavailable\*\*, not zero/);
+    expect(markdown).toMatch(/no publication date is recorded/);
+  });
+});
+
+describe('REPORT-24 rendering is deterministic', () => {
+  it('renders byte-identical markdown twice', () => {
+    const agg = realistic();
+    expect(renderMarkdown(agg)).toBe(renderMarkdown(agg));
+    expect(renderMarkdown(realistic())).toBe(renderMarkdown(realistic()));
+  });
+
+  it('renders byte-identical json twice', () => {
+    expect(renderJson(realistic())).toBe(renderJson(realistic()));
+  });
+});
+
+describe('REPORT-30 the json carries everything the markdown summarises', () => {
+  it('includes the per-task groups, the verdicts and the rankings', () => {
+    const parsed: unknown = JSON.parse(renderJson(realistic()));
+    expect(parsed).toMatchObject({
+      aggregate: {
+        minTasksPerCategory: 5,
+        corpus: { staleTasks: 1 },
+      },
+    });
+    const typed = parsed as {
+      aggregate: { taskGroups: unknown[]; categoryGroups: unknown[]; backends: unknown[] };
+      rankings: unknown[];
+    };
+    expect(typed.aggregate.taskGroups.length).toBeGreaterThan(0);
+    expect(typed.aggregate.categoryGroups.length).toBeGreaterThan(0);
+    expect(typed.aggregate.backends.length).toBe(3);
+    expect(typed.rankings.length).toBeGreaterThan(0);
+  });
+
+  it('routes both formats through one entry point', () => {
+    const agg = realistic();
+    expect(render(agg, 'markdown')).toBe(renderMarkdown(agg));
+    expect(render(agg, 'json')).toBe(renderJson(agg));
+  });
+});
+
+describe('an empty store renders a report rather than crashing', () => {
+  it('says there are no cells instead of printing a table of nothing', () => {
+    const markdown = renderMarkdown(aggregate({ cells: [], corpus: corpus([]) }));
+    expect(markdown).toContain('_No cells recorded._');
+    expect(markdown).toContain('_No tasks loaded._');
+    expect(markdown).toMatch(/\*\*No ranking is stated\.\*\*/);
+  });
+});
+
+describe('a pipeline gap is named as ours, not as a backend result', () => {
+  it('lists it in the validity panel', () => {
+    const cells = [
+      scoredCell('t1', 'gemini', 1, 'technical', {}, { gaps: ['t1/gemini/1: no snapshot'] }),
+    ];
+    const markdown = renderMarkdown(aggregate({ cells, corpus: corpus([task('t1', 'technical')]) }));
+    expect(markdown).toContain('### Gaps in this pipeline, not in the backends');
+    expect(markdown).toContain('t1/gemini/1: no snapshot');
+  });
+
+  it('names an orphan cell and says the corpus moved', () => {
+    const cells = [scoredCell('gone', 'gemini', 1, 'technical', { accuracy: 1 })];
+    const markdown = renderMarkdown(aggregate({ cells, corpus: corpus([task('t1', 'technical')]) }));
+    expect(markdown).toMatch(/name a task the corpus no longer holds/);
+    expect(markdown).toContain('gone/gemini/1');
+  });
+});
+
+describe('REPORT-23 rendering is pure over stored bytes', () => {
+  const here = dirname(fileURLToPath(import.meta.url));
+
+  it('imports no filesystem and no network anywhere except the CLI', () => {
+    // Read from their own source rather than asserted in prose. The property
+    // this protects is the one `docs/plan/benchmark.md` bought by separating
+    // the run from the scoring: a metric added later applies to research
+    // already paid for, and it stops being true the moment rendering needs a
+    // disk. `cli.ts` is the single documented exception; `fixtures.ts` and the
+    // tests are not shipped logic, and `render.test.ts` reads source on purpose.
+    const exempt = new Set(['cli.ts', 'fixtures.ts']);
+    const files = readdirSync(here).filter(
+      (f) => f.endsWith('.ts') && !f.endsWith('.test.ts') && !exempt.has(f),
+    );
+    expect(files.length).toBeGreaterThan(4);
+    for (const file of files) {
+      const source = readFileSync(join(here, file), 'utf8');
+      const imports = [...source.matchAll(/^import[^;]*from\s+'([^']+)'/gm)].map((m) => m[1] ?? '');
+      for (const specifier of imports) {
+        expect(specifier, `${file} imports ${specifier}`).not.toMatch(
+          /^node:(fs|http|https|net|dns|child_process|worker_threads)/,
+        );
+      }
+      expect(source, `${file} reaches a network`).not.toMatch(/\bfetch\s*\(/);
+    }
+  });
+
+  it('keeps the exception to exactly one file, so the exemption cannot quietly grow', () => {
+    const cli = readFileSync(join(here, 'cli.ts'), 'utf8');
+    expect(cli).toMatch(/from 'node:fs'/);
+    expect(cli).not.toMatch(/\bfetch\s*\(/);
+    // Nothing here can start a run, and that is structural rather than a
+    // promise. Asserted on the imports rather than on the text, because the
+    // doc comment above them says the same thing and a prose match would pass
+    // on the comment while the import sat underneath it.
+    const imports = [...cli.matchAll(/^import[^;]*from\s+'([^']+)'/gm)].map((m) => m[1] ?? '');
+    for (const specifier of imports) {
+      expect(specifier, `cli.ts imports ${specifier}`).not.toMatch(/runner|providers|gemini/);
+    }
+  });
+});
+
+describe('a value that could not be measured never becomes a zero on the page', () => {
+  it('prints the reason family rather than a number', () => {
+    const cells = SIX.flatMap((t) =>
+      [1, 2, 3].map((r) => scoredCell(t.id, 'gemini', r, 'technical', { accuracy: 0.5 })),
+    );
+    const markdown = renderMarkdown(aggregate({ cells, corpus: corpus(SIX) }));
+    const scorecard = markdown.slice(
+      markdown.indexOf('## Per-backend scorecard'),
+      markdown.indexOf('## Citations'),
+    );
+    expect(scorecard).toContain('not measured');
+    expect(scorecard).not.toMatch(/\|\s*0\.0%\s*\|/);
+  });
+
+  it('reports every ranking for an unmeasured metric as not measured', () => {
+    const cells = SIX.flatMap((t) =>
+      [1, 2, 3].map((r) => scoredCell(t.id, 'gemini', r, 'technical', { accuracy: 0.5 })),
+    );
+    const all = rankings(aggregate({ cells, corpus: corpus(SIX) }));
+    const refusal = all.filter((r) => r.metric === 'refusal');
+    expect(refusal.length).toBeGreaterThan(0);
+    for (const r of refusal) expect(r.withheld).toBe('metric-not-measured');
+  });
+});
