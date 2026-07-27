@@ -118,6 +118,30 @@ A seven-backend panel researched what already exists. The report is `../deep-res
 
 **One place the prior art and this design genuinely disagree.** DeepTRACE's support check uses a model judge. This design forbids a model in the scoring loop and uses token containment instead, which is weaker and exact. Both are kept: containment is the default because it is free and repeatable, the judged variant is available for anyone who wants it, and BENCH-10 scores the two against the same labelled corpus so the gap between them is measured rather than assumed.
 
+## Rule 4 versus purpose 2, resolved 27 July 2026
+
+BENCH-09 found these in conflict and was right to stop rather than pick.
+
+Purpose 2 makes Dossier's free local loop the **control**, and asks whether it scores near a paid backend. Admission rule 4 says a task must be shown to fail before it is admitted. Read strictly, "must fail" means *no backend already passes*, which excludes every task the control passes and forces the control's score to zero by construction. The control would then measure nothing, and the answer to purpose 2 would be an artefact of the corpus rather than a finding.
+
+**The rule means the task must not be saturated, not that every backend must fail it.** Admit a task when **at least one probed backend does not already pass**.
+
+The reasoning: a task every backend passes measures nothing and cannot move, which is what rule 4 exists to prevent. A task some backends pass and others fail is the discriminating case, and discrimination is the entire point. Excluding it would throw away the only tasks that can produce a ranking.
+
+BENCH-09 admitted on this reading. The stricter reading would have admitted four of its seven, and its evidence names which, so nothing needs re-running if this is ever revisited.
+
+## What BENCH-09 established, which changes what a good task looks like
+
+It authored 27 tasks anchored on immutable post-cutoff events, each cited to a machine-readable primary source at a stable URL, and verified every gold fact against the live source. Closed-book, **0 of 27 were answerable from model weights**, so the anchoring worked.
+
+Search-enabled, **Claude Code already passed 23 of 27** and Codex passed 20 of those. The corpus was almost entirely saturated on arrival.
+
+The cause is worth stating as a rule for whoever authors the next batch: **a single primary source at a stable URL is a lookup, not research.** An agent fetches `nodejs.org/dist/index.json` once and reads off four answers. Anchoring a fact so it cannot rot and anchoring it so it cannot be trivially retrieved are different problems, and solving only the first produces a corpus that measures fetching.
+
+Two shapes survived, and they are the shapes to build on: **answers that are an absence**, and **fabricated premises**. Neither is retrievable from a single document, because there is no document to retrieve.
+
+The prior art names the fix, LiveDRBench's problem inversion, and BENCH-09 did not apply it. That is the highest-value next step in the corpus, ahead of adding categories.
+
 ## Implementation
 
 TypeScript in this repo, typechecked by `tsgo`, for one reason that outweighs the others: `corroborate.ts`, `evidence.ts` and `citations.ts` already export 34 of the primitives the scorer needs, all already tested. Adopting a Python harness means a second implementation of independent-domain counting and source classification, and two implementations of a rule eventually disagree about what the rule is.
