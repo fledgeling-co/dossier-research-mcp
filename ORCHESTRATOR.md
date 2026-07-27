@@ -150,3 +150,11 @@ Nothing was lost, but the cost was real: four worktrees held uncommitted source 
   It found a real defect on the way: `research_plan` and `research_start` normalised grounding differently, so `[RUN, RUN]` priced a two-run grounding and started a one-run one, and the contract handshake then refused a request nobody had changed. The test for it was checked in both directions and fails against the pre-fix code.
 
   No Codex lane was available, so every reviewer on this item was Claude reviewing Claude, logged as a downgrade rather than passed off.
+
+## The capacity limit, measured twice
+
+Seven concurrent runners exhausted the account binding. Four then ran for hours without trouble and all four finished. Four later failed together. **So it is not a clean count threshold; the account's capacity varies through the day**, and any number can fail.
+
+What actually bounds the cost is not the concurrency number, it is **committing early**. The first failure took four worktrees with zero commits between them and cost hours of re-derivation. The second took three worktrees holding 11, 9 and 5 commits and cost minutes. Every runner prompt now says so, and the difference between the two waves is the whole argument.
+
+- **28 Jul, wave 3 resumed** — BENCH-08, 10 and 11, all three killed by capacity mid-flight and all three cheap to resume. BENCH-08 reported two review findings before dying, one of which is that its own matrix can print a confident-looking spread from single runs. That is the exact failure the slice exists to prevent, found in its own output, and it has been told to recover both findings before continuing.
