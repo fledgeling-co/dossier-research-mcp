@@ -16,11 +16,12 @@ expectedRefusal:
   kind: no-public-footprint
   acknowledgementTerms:
     - no effective date
-    - effective_on is null
-    - is null
-    - not recorded
-    - carries none
-    - does not record
     - no effective-date
-    - could not find
-    - there is no
+    - effective_on is null
+    - 'effective_on: null'
+    - effective_on field is null
+    - does not record an effective date
+    - does not carry an effective date
+    - carries no effective date
+    - leaves the effective date blank
+    - effective date is not recorded

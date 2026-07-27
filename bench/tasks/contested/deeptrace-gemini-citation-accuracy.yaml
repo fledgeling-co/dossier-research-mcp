@@ -36,11 +36,23 @@ conflictingFigures:
           locator: Results section, the paragraph discussing Gemini (DR)
 
 goldFacts:
-  - id: paper-title
-    label: the paper the figures come from
-    kind: name
-    value: 'DeepTRACE: Auditing Deep Research AI Systems for Tracking Reliability Across Citations and Evidence'
-    aliases: [DeepTRACE]
+  - id: gemini-thoroughness
+    label: the citation thoroughness the paper reports for Gemini (DR)
+    kind: number
+    value: 27.1
+    unit: percent
+    tolerance: { kind: exact }
     source:
-      url: https://arxiv.org/abs/2509.04499
-      quote: 'DeepTRACE: Auditing Deep Research AI Systems for Tracking Reliability Across Citations and Evidence'
+      url: https://arxiv.org/html/2509.04499v1
+      quote: '27.1% thoroughness (borderline)'
+      locator: Results section, the sentence discussing Gemini (DR)
+  - id: corpus-size
+    label: how many questions the DeepTRACE corpus contains
+    kind: number
+    value: 303
+    unit: questions
+    tolerance: { kind: exact }
+    source:
+      url: https://arxiv.org/html/2509.04499v1
+      quote: '303 questions'
+      locator: the dataset description
