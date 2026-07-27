@@ -17,6 +17,8 @@ serially, through the orchestrator.
 | BENCH-03 | Citation integrity scorers | [brief](BENCH-03-citation-integrity.md) | Untriaged | | |
 | BENCH-04 | Accuracy and relevance scorers | [brief](BENCH-04-accuracy-relevance.md) | Ready for Plan | [spec](../specs/spec-BENCH-04.md) | |
 | BENCH-04 | Accuracy and relevance scorers | [brief](BENCH-04-accuracy-relevance.md) | In Review | [spec](../specs/spec-BENCH-04.md) | [plan](../plans/plan-BENCH-04.md) |
+| BENCH-03 | Citation integrity scorers | [brief](BENCH-03-citation-integrity.md) | In Review | [spec](../specs/spec-BENCH-03.md) | [plan](../plans/plan-BENCH-03.md) |
+| BENCH-04 | Accuracy and relevance scorers | [brief](BENCH-04-accuracy-relevance.md) | Untriaged | | |
 | BENCH-05 | Due weight, viewpoint coverage | [brief](BENCH-05-due-weight.md) | Untriaged | | |
 | BENCH-06 | Calibration and refusal correctness | [brief](BENCH-06-calibration-refusal.md) | In Review | [spec](../specs/spec-BENCH-06.md) | [plan](../plans/plan-BENCH-06.md) |
 | BENCH-05 | Due weight, viewpoint coverage | [brief](BENCH-05-due-weight.md) | In Review | [spec](../specs/spec-BENCH-05.md) | [plan](../plans/plan-BENCH-05.md) |

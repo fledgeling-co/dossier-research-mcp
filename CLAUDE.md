@@ -102,6 +102,8 @@ docs/                   the documentation set; README is the approachable entry 
   bench/run-harness.md  the matrix, the spend refusal, resume, and why the
                         harness is built rather than adopted from promptfoo
   bench/due-weight.md   the viewpoint-coverage scorers, and every limit they carry
+  bench/citation-integrity.md  the five registries, what each answer cannot
+                        mean, and why an unreachable one is never `absent`
   releasing.md          the tag-triggered publish flow
   deep-research-api-vs-agent.md   which Gemini surface fits which job
   providers/            per-provider guides (Gemini, Perplexity, OpenAI, xAI,
@@ -152,6 +154,15 @@ bench/                  the benchmark. NOT compiled into dist/ and NOT published
                         and where each of them came from
   src/score/source-quality.ts  the source mix, the independent-domain count, and the
                         same count after syndication is collapsed. Both, always
+  src/score/identifiers.ts the five identifier kinds a registry can answer for
+  src/score/containment.ts token containment and anchor honesty; containment is
+                        not entailment and says so on every result
+  src/score/matrix.ts      the published statement-by-source algebra
+  src/score/citations.ts   citation integrity, pure over a report and a snapshot
+  src/citations/        the impure half: registries, the on-disk answer cache,
+                        the rate limiter and the evidence snapshot. Reaching a
+                        network lives here and nowhere in src/score/.
+                        docs/bench/citation-integrity.md
   src/run/cell.ts       what one matrix cell is; the resume key, the cell
                         record schema, the spread floor
   src/run/plan.ts       build the matrix, subtract what is recorded, total the

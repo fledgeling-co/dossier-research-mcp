@@ -40,6 +40,23 @@ This project follows [semantic versioning](https://semver.org/). Until 1.0 the m
   Relevance is required-term coverage minus a drift penalty, clamped, with coverage and drift also reported separately. It is crude on purpose: it only separates an answer about the right subject from one that is not, and accuracy decides whether it is correct.
 
   The accuracy scorer's output is the recovery record the calibration scorer already took as an input, keyed by the answer id the task format requires for exactly that seam.
+### Added
+
+- **Citation integrity scoring for the benchmark, in `bench/src/score/` and `bench/src/citations/`.** Four checks over a report's citations, in increasing strength: does the URL resolve, does the identifier exist in its registry, does the cited page contain what the statement asserts, and does a cited fragment name anything on the page. Documented in [`docs/bench/citation-integrity.md`](docs/bench/citation-integrity.md).
+
+  **An unreachable registry records `unchecked`, never `absent`, and `unchecked` leaves every denominator.** `absent` means a reference was fabricated, and saying that because a server was busy would make the benchmark the thing it exists to detect. Every check fails closed in one direction: a timeout, a 429, a 500, an unparseable body or a response shape that has changed since this was written all come back `unchecked`.
+
+  All five registries were checked against the live services on 27 July 2026 rather than read from their documentation, and three do not behave the way the design assumed. **Crossref alone would report a genuine reference as fabricated**: it is one DOI registration agency among several, and the real `10.5281/zenodo.3509134` answers 404 from Crossref and 200 from the global handle directory, so an `absent` DOI now rests on that directory and a Crossref 404 decides nothing on its own. **The book catalogue answers found for a made-up number**: a fabricated ISBN resolves to a real community-edited record listing exactly that number, so an ISBN result is reported as catalogue presence and never as proof a book exists, in either direction. **arXiv refused every lookup across a seven-minute span with a 429**, so `unchecked` is the ordinary answer from that archive rather than the rare one. Two more answer HTTP 200 for something that does not exist, a missing PMID with an error buried in the body and an unknown CVE with a result count of zero, so reading the status alone would have scored every fabricated reference in both as real.
+
+  Collection and scoring are separate halves. The collector reaches the network and writes one timestamped evidence snapshot; the scorer is pure and synchronous over a report plus that snapshot, so the same stored report scores the same twice and a metric added later can be applied to research already paid for. Every registry answer is cached on disk by identifier, an `unchecked` answer is never cached, and concurrent lookups of one identifier collapse onto a single request.
+
+  The dimensions are DeepTRACE's (arXiv 2509.04499, ICLR 2026), read from the paper rather than a summary, so the numbers are comparable with published work. **Citation accuracy and citation volume are always reported as two numbers**, because a backend citing a hundred sources at eighty percent and one citing ten at eighty percent are different products. Three departures are named on every result rather than published silently under the paper's names: support comes from token containment instead of a model judge, the relevance-filtered denominators are reported unavailable instead of approximated, and an `unchecked` pair leaves the denominator instead of counting as unsupported.
+
+  **Token containment is not entailment and says so on every result.** A page can contain "28.6%" while saying something else entirely about it. It is deliberately weaker than a reader and deliberately exact, repeatable and free; BENCH-10 measures the gap against a judged variant, which ships here as a real interface with no model on the default path.
+
+### Changed
+
+- **`src/research/citations.ts` exports the verdict rule it already had.** `judgeCitationStatus` and `judgeCitationError` were extracted from `verifyOne` unchanged, so the benchmark reads an HTTP status the same way the product does instead of restating the rule. Two implementations of one rule eventually disagree about what a 403 means.
 
 ### Fixed
 
