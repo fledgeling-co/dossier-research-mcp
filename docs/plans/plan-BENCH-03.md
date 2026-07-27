@@ -35,11 +35,19 @@ Merged: BENCH-01 (`bench/src/tasks/`), BENCH-02 (`bench/src/run/`), BENCH-06 (`b
 
 Append a `### BENCH-03` section to `docs/test-plan.md` with the `CITE-nn` rows below. Append only; never reorder another item's rows.
 
-### 2. `safeFetch` learns to say it stopped early
+### 2. Nothing in `src/` changes
 
-`src/net/safe-fetch.ts` caps the read at `maxBytes` and returns no signal that it did. "The page does not contain the number" and "we stopped reading before the number" are opposite findings, and without the flag the second is silently reported as the first. Add `truncated: boolean` to `SafeFetchResult`, set it where the read is cut short, and `false` on a `HEAD` or a complete body. One additive field; no caller constructs the type.
+The cross-family review asked for two additions to `src/net/safe-fetch.ts`, and reading the merged tree disproved both.
 
-The **request headers stay exactly as they are.** The polite-pool identity Crossref asks for is reachable through a `mailto` query parameter, verified 27 July 2026: with it the response carries `x-api-pool: polite-single` and `x-rate-limit-limit: 10`, without it `public-single` and `5`. Widening a security-sensitive fetcher's header surface to buy something a query parameter already buys is not a trade worth making.
+**Truncation is already solved in `bench/`, at the adapter.** `safeFetch` caps the read at `maxBytes` and returns no signal that it did, and "the page does not contain the number" and "we stopped reading before the number" are opposite findings. BENCH-09 reached that conclusion first and answered it in `bench/src/verify/cli.ts`, which derives `truncated: Buffer.byteLength(body, 'utf8') >= MAX_BYTES` and carries it on its own `FetchedSource`. Adding a second mechanism inside `src/` would put two definitions of truncation in one tree, which is the disagreement this plan is otherwise at pains to avoid. This slice uses the same idiom and the same exported type. The inference has a three-byte false-negative window, where the decoder holds an incomplete character back, and that is written down in a comment rather than papered over.
+
+**The polite-pool header is not needed.** Crossref's polite pool is reachable through a `mailto` query parameter, verified 27 July 2026: with it the response carries `x-api-pool: polite-single` and `x-rate-limit-limit: 10`, without it `public-single` and `5`. Widening a security-sensitive fetcher's header surface to buy something a query parameter already buys is not a trade worth making.
+
+### 2b. Reuse the matching primitives BENCH-09 already shipped
+
+`bench/src/verify/match.ts` exports `normalise`, `decodeEntities`, `extractText`, `numberForms`, `dateForms` and `valueAppears`, and they are exactly the primitives containment needs. They are reused rather than reimplemented, for the reason that module's own comment gives: a second regex that "finds numbers" would quietly disagree with the first about what a thousands separator is, and a disagreement between two implementations of one rule is invisible until it changes a score.
+
+What is genuinely new here is anchor collection, because `extractText` strips tags and the `id` and `name` attributes go with them.
 
 ### 3. Identifiers (`bench/src/score/identifiers.ts`, pure)
 
@@ -92,7 +100,7 @@ Takes a report, an injected registry transport, an injected page fetcher, an inj
 
 Per cited address it records the resolvability verdict from `verifyCitations`, then fetches the page body once through `safeFetch` for the containment and anchor checks. `verifyCitations` throws its bodies away, so the body comes from a direct `safeFetch` call, which is the same fetcher rather than a second one.
 
-HTML is reduced to text by a small pure extractor in `bench/src/citations/html.ts`: script, style and comment content dropped, tags stripped, entities decoded, whitespace collapsed. Anchor names (`id` and `name` attributes) are collected in the same pass.
+HTML is reduced to text by `extractText` from `bench/src/verify/match.ts`, which already drops script, style and comment content before stripping tags and decodes entities afterwards. Anchor names are collected separately from the raw HTML by a new `collectAnchors`, since `extractText` throws the attributes away with the tags.
 
 ### 7. The evidence snapshot (`bench/src/citations/evidence.ts`, no `node:fs`)
 
@@ -216,7 +224,8 @@ Export from `bench/src/score/index.ts` and a new `bench/src/citations/index.ts`.
 | **CITE-38** | The same report and snapshot score identically twice |
 | **CITE-39** | A report with no citations is `unmeasurable / no-citations` and still reports volume |
 | **CITE-40** | With every network call failing, collection still returns a complete snapshot |
-| **CITE-41** | `safeFetch` reports a truncated read, and a complete body and a `HEAD` report `false` |
+| **CITE-41** | A truncated page body is carried as truncated through collection into the containment verdict |
+| **CITE-42** | Number and text matching goes through BENCH-09's shared primitives, so the two slices cannot disagree about a thousands separator |
 
 ## Verify
 
