@@ -148,7 +148,7 @@ export const DUE_WEIGHT_LIMITS = {
   disagreementVocabulary: `A disagreement counts as flagged only when one of ${String(DISAGREEMENT_CUES.length)} fixed cue phrases appears within ${String(PROXIMITY_CHARS)} characters of the quantity as the task names it, or of a figure the report did state. A report flagging the disagreement in other wording is scored as not flagging it.`,
   unitNotGating:
     'A conflicting figure is matched on its value under the tolerance the task declares. The declared unit is reported where it appears near the figure and does not gate the match, because requiring the unit token would miss a figure written with a currency symbol.',
-  rejectionProximity: `A fringe claim counts as rejected when one of its recorded rejection cues appears within ${String(PROXIMITY_CHARS)} characters of any mention of its distinguishing term. One rejected mention is enough, so a report that dismissed the claim and then listed its source again is not penalised.`,
+  rejectionProximity: `A fringe claim counts as rejected when one of its recorded rejection cues appears within ${String(PROXIMITY_CHARS)} characters of a mention of its distinguishing term, One rejected mention is enough, so a report that dismissed the claim and then listed its source again is not penalised. Where a task records several fringe claims close together, a single cue can credit more than one of them, so a report that dismisses one claim and entertains another inside the same window is scored as rejecting both.`,
   fringeTermOnly:
     'The false-balance guard reads the distinguishing term only, never the fringe source URL. A URL-only mention gives nothing to measure a rejection cue against, so it could not be scored either way without guessing.',
   guardNotExercised:
@@ -447,6 +447,23 @@ function scoreConflicts(
   return { measured: true, score: total / findings.length, findings };
 }
 
+/**
+ * Was this fringe claim raised in order to be dismissed, or presented as live?
+ *
+ * A recorded rejection cue within the window of any mention counts. One rejected
+ * mention is enough, so a report that dismissed the claim and then listed its
+ * source again is not penalised: the guard exists to catch hedging, not
+ * thoroughness.
+ *
+ * A stricter rule was tried and rejected on evidence. Attributing each cue to
+ * the single nearest claim closes a narrow hole, where a report dismissing one
+ * claim and entertaining another in the same paragraph is credited for both, and
+ * it breaks the common case badly: a report that dismisses four claims in
+ * sequence has each cue sitting nearer to the *next* claim's mention than to the
+ * one it belongs to, so three of the four are scored as false balance. Trading a
+ * narrow false negative for a broad false positive against honest reports is the
+ * wrong way round, so the leniency stays and is stated in the output instead.
+ */
 function scoreOneFringe(claim: FringeClaim, normalised: string): FringeFinding {
   const mentions = findTermPositions(normalised, claim.distinguishingTerm);
   if (mentions.length === 0) {
@@ -480,13 +497,22 @@ function scoreFalseBalance(task: BenchTask, normalised: string): Measured<FalseB
   }
 
   const findings = task.fringeClaims.map((c) => scoreOneFringe(c, normalised));
-  const total = findings.reduce((sum, f) => sum + f.score, 0);
-  return {
-    measured: true,
-    score: total / findings.length,
-    surfaced: findings.filter((f) => f.outcome !== 'not-surfaced').length,
-    findings,
-  };
+  const raised = findings.filter((f) => f.outcome !== 'not-surfaced');
+
+  // **The denominator is the claims the report actually raised, not every claim
+  // the task records.** Averaging over all of them lets a claim nobody mentioned
+  // pay for one that was framed as live: a task recording twenty fringe claims
+  // where the report presents one as contested scores 19/20, and the whole
+  // suite's overall lands at 0.98 for a backend doing exactly what this guard
+  // exists to catch. Found by an out-of-family reviewer against an earlier
+  // version whose fixture used one claim per task and so could not see it.
+  //
+  // Not surfacing a claim is a non-event, not a credit. The question the guard
+  // asks is: of the fringe claims this report chose to raise, how many did it
+  // frame as settled rather than live?
+  const score = raised.length === 0 ? 1 : raised.filter((f) => f.score === 1).length / raised.length;
+
+  return { measured: true, score, surfaced: raised.length, findings };
 }
 
 /**

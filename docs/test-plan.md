@@ -485,6 +485,9 @@ The matrix is task times backend times repetition, and the money is spent one ce
 | **DUEWT-20** | The declared unit is reported where it sits near the matched figure and never gates the match | unit: `due-weight` | ✓ |
 | **DUEWT-21** | A guard score of one is reported alongside whether any report actually raised a fringe claim, so a silent backend cannot read as a guard that ran | unit: `due-weight-hedging` | ✓ |
 | **DUEWT-22** | Each stated number is assigned to at most one gold value, and by maximum matching rather than greedily, so a loose value cannot take the mention a tighter value uniquely needed | unit: `due-weight` | ✓ |
+| **DUEWT-23** | A fringe claim the report never raised is excluded from the guard's denominator, so surfacing one of twenty as contested scores zero rather than nineteen twentieths | unit: `due-weight-hedging` | ✓ |
+| **DUEWT-24** | A written-out date, a hyphenated token such as COVID-19, and a fraction yield no figures, while a range and a leading-dot decimal still do | unit: `due-weight-numbers` | ✓ |
+| **DUEWT-25** | A word boundary is decided on whole code points, so a term is not matched inside a word joined by a supplementary-plane letter | unit: `due-weight-text` | ✓ |
 
 ### The paid project
 

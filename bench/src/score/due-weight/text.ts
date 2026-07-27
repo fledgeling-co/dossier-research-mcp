@@ -98,6 +98,31 @@ function isWordChar(ch: string | undefined): boolean {
 }
 
 /**
+ * The whole code point ending just before `at`, not the code unit.
+ *
+ * Indexing a string gives a UTF-16 code unit, so beside a supplementary-plane
+ * letter it returns a lone surrogate, which `\p{L}` does not match. The boundary
+ * rule then reads "letter" as "not a letter" and a term matches inside a word.
+ * Found by an out-of-family reviewer, who demonstrated a match inside `a\u{10400}b`.
+ */
+function codePointBefore(s: string, at: number): string | undefined {
+  if (at <= 0) return undefined;
+  const low = s.charCodeAt(at - 1);
+  if (low >= 0xdc00 && low <= 0xdfff && at >= 2) {
+    const high = s.charCodeAt(at - 2);
+    if (high >= 0xd800 && high <= 0xdbff) return s.slice(at - 2, at);
+  }
+  return s[at - 1];
+}
+
+/** The whole code point starting at `at`. */
+function codePointAt(s: string, at: number): string | undefined {
+  if (at < 0 || at >= s.length) return undefined;
+  const cp = s.codePointAt(at);
+  return cp === undefined ? undefined : String.fromCodePoint(cp);
+}
+
+/**
  * Every position in already-normalised text where a term occurs, ascending.
  *
  * Both ends must sit on a word boundary when the term's own end is a letter or
@@ -112,8 +137,8 @@ export function findTermPositions(normalisedText: string, term: string): number[
   const needle = normaliseForMatch(term).trim();
   if (needle === '') return [];
 
-  const startIsWord = isWordChar(needle[0]);
-  const endIsWord = isWordChar(needle[needle.length - 1]);
+  const startIsWord = isWordChar(codePointAt(needle, 0));
+  const endIsWord = isWordChar(codePointBefore(needle, needle.length));
 
   const positions: number[] = [];
   let from = 0;
@@ -121,8 +146,8 @@ export function findTermPositions(normalisedText: string, term: string): number[
     const at = normalisedText.indexOf(needle, from);
     if (at === -1) return positions;
     from = at + 1;
-    if (startIsWord && isWordChar(normalisedText[at - 1])) continue;
-    if (endIsWord && isWordChar(normalisedText[at + needle.length])) continue;
+    if (startIsWord && isWordChar(codePointBefore(normalisedText, at))) continue;
+    if (endIsWord && isWordChar(codePointAt(normalisedText, at + needle.length))) continue;
     positions.push(at);
   }
 }

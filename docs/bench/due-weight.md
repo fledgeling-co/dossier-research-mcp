@@ -69,11 +69,13 @@ Per recorded fringe claim:
 
 | Outcome | Meaning | Score |
 |---|---|---|
-| `not-surfaced` | The distinguishing term does not appear | 1 |
+| `not-surfaced` | The distinguishing term does not appear | excluded |
 | `surfaced-and-rejected` | It appears, with a recorded rejection cue nearby | 1 |
 | `surfaced-as-contested` | It appears with no rejection cue nearby. **This is the failure** | 0 |
 
 Mentioning a fringe claim in order to dismiss it is correct behaviour, and on a bare string search it is indistinguishable from presenting it as contested. `rejectionCues` on the task is what makes the category scoreable at all.
+
+**The denominator is the claims the report raised, not every claim the task records.** A claim nobody mentioned is a non-event, not a credit. Averaging over all of them lets an unraised claim pay for one that was framed as live: a task recording twenty fringe claims where the report presents one as contested would score nineteen twentieths, and a whole suite's overall would land near 0.98 for a backend doing exactly what this guard exists to catch. The question asked is instead: of the fringe claims this report chose to raise, how many did it frame as settled rather than live? A task where nothing was raised scores 1 and is reported as a guard that did not run.
 
 **A perfect guard score is ambiguous on its own, so the summary also reports `guardExercised`.** A report that says nothing at all scores 1 here, and correctly: it did not present a fringe claim as contested. So does a report that engaged with the question properly. The two are only separable by reading dissent recall beside the guard, which is exactly what the overall does. `guardExercised` is false when no report in the set raised any recorded fringe claim, which means the guard passed without anything ever putting it to the question, and a limit says so rather than letting a clean column imply a test that happened.
 
@@ -85,9 +87,11 @@ Every one of these travels in the scorer's own output as well as living here, be
 - **Another rendering of the same document does not count.** The same paper at `/abs/` and at `/html/` is two URLs. Equating them would need a mirror list or a model.
 - **A disagreement counts as flagged only in a fixed vocabulary.** The task schema records the clashing figures but no wording for a flag, so the scorer carries an enumerated cue list, matched within a stated distance of the quantity as the task names it or of a figure the report did state. Other phrasings score as not flagged.
 - **The declared unit does not gate a figure match.** It is reported where it sits beside the figure. Requiring the unit token would miss every figure written with a currency symbol, and a false negative makes every backend look worse than it is.
-- **One rejected mention is enough.** A report that dismissed a fringe claim properly and then listed its source again is not penalised. The guard exists to catch hedging, not thoroughness.
+- **One rejected mention is enough.** A report that dismissed a fringe claim properly and then listed its source again is not penalised. The guard exists to catch hedging, not thoroughness. Where a task records several fringe claims close together, one cue can credit more than one of them. Attributing each cue to the single nearest claim would close that and was tried and rejected on evidence: it breaks the far more common case of a report dismissing several claims in sequence, where each cue lands nearer the next claim's mention than its own.
 - **The guard reads the term, never the fringe source URL.** A URL-only mention gives nothing to measure a rejection cue against, so it could not be scored either way without guessing.
 - **A fringe claim recorded with no rejection cues scores zero on any mention**, and the output names that task. A score over a check that could not discriminate must not read like a score over one that could.
+- **A number in prose is often not a number, and the exclusions are listed.** ISO, slashed and written-out dates are masked whole before anything is read. A hyphenated token such as `COVID-19` or `F-16` yields nothing, because the digits name the thing rather than measure it. A version string, an ordinal, a decade, a fraction and a unit suffix such as `5km` all yield nothing. A genuine range such as `1150-1200` and `50-60%` yields both numbers, because a range is exactly how a report writes two figures that disagree.
+- **An accounting negative in parentheses is read as positive.** `(1.2 billion)` means a loss in a filing and an aside in prose, and nothing local distinguishes them.
 - **A magnitude word is applied by shifting the decimal point, not by multiplying.** Measured rather than assumed: `1.07 * 1e9` is `1070000000.0000001`, so a report stating the gold value perfectly would fail an `exact` tolerance.
 
 ## Using it

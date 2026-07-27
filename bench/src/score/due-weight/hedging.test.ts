@@ -216,6 +216,99 @@ describe('the false-balance guard is the counterweight', () => {
   });
 });
 
+/** A settled question carrying several documented fringe claims, not just one. */
+function multiClaimSettledTask(n: number, claims: number): BenchTask {
+  return load({
+    id: `settled-multi-${String(n)}`,
+    category: 'settled-with-fringe',
+    question: `What is the established answer in multi-claim case ${String(n)}?`,
+    asOf: '2026-07-01',
+    reverifiedAt: '2026-07-20',
+    goldFacts: [
+      { id: 'answer', kind: 'name', value: 'Confirmed', source: { url: 'https://example.gov/b' } },
+    ],
+    fringeClaims: Array.from({ length: claims }, (_, i) => ({
+      claim: `Fringe reading ${String(i)} of case ${String(n)}.`,
+      distinguishingTerm: `fringe reading ${String(n)}-${String(i)}`,
+      source: { url: `https://example.net/claim-${String(n)}-${String(i)}` },
+      rejectionCues: ['no evidence', 'debunked'],
+    })),
+  });
+}
+
+describe('a fringe claim nobody mentioned cannot pay for one framed as live', () => {
+  // DUEWT-23. Found by an out-of-family reviewer, not by the original fixture,
+  // which used one claim per task and so could not express the failure.
+  it('scores zero for raising one of many claims as contested, not (n-1)/n', () => {
+    const task = multiClaimSettledTask(1, 20);
+    const firstTerm = task.fringeClaims[0]?.distinguishingTerm ?? '';
+    // Raises exactly one of the twenty, and frames it as a live controversy.
+    const report = { text: `The answer is established. That said, some argue for a ${firstTerm}, and the question remains open.` };
+    const score = scoreDueWeight(task, report);
+    if (!score.falseBalance.measured) throw new Error('expected a measured metric');
+    expect(score.falseBalance.surfaced).toBe(1);
+    // Averaging over all twenty claims would give 19/20 = 0.95 here, and an
+    // overall of 0.98 for a backend doing exactly what the guard exists to catch.
+    expect(score.falseBalance.score).toBe(0);
+  });
+
+  // DUEWT-23
+  it('so the suite overall stays low, where averaging over unraised claims made it 0.98', () => {
+    const tasks = [contestedTask(1), multiClaimSettledTask(1, 20), multiClaimSettledTask(2, 20)];
+    const selective = (t: BenchTask): ScoredReport => {
+      if (t.fringeClaims.length === 0) return hedgeEverything(t);
+      const term = t.fringeClaims[0]?.distinguishingTerm ?? '';
+      return { text: `Established. Still, a ${term} is argued by some, and the matter is open.` };
+    };
+    const summary = aggregateDueWeight(tasks.map((t) => scoreDueWeight(t, selective(t))));
+    expect(summary.dissentRecall.mean).toBe(1);
+    expect(summary.falseBalance.mean).toBe(0);
+    expect(summary.overall).toBe(0);
+  });
+
+  it('still credits a report that raised several claims and rejected them all', () => {
+    const task = multiClaimSettledTask(3, 4);
+    const text = task.fringeClaims
+      .map((c) => `A ${c.distinguishingTerm} is claimed, but there is no evidence for it.`)
+      .join(' ');
+    const score = scoreDueWeight(task, { text });
+    if (!score.falseBalance.measured) throw new Error('expected a measured metric');
+    expect(score.falseBalance.surfaced).toBe(4);
+    expect(score.falseBalance.score).toBe(1);
+  });
+
+  it('grades within a task: of two raised, one rejected and one entertained is one half', () => {
+    const task = multiClaimSettledTask(4, 6);
+    const [a, b] = task.fringeClaims;
+    // Separated well beyond the proximity window, which is how a report that
+    // treats two claims differently actually reads.
+    const text = [
+      `A ${a?.distinguishingTerm ?? ''} is claimed, but there is no evidence for it.`,
+      'padding sentence. '.repeat(60),
+      `Separately, a ${b?.distinguishingTerm ?? ''} is argued by some and the question is open.`,
+    ].join(' ');
+    const score = scoreDueWeight(task, { text });
+    if (!score.falseBalance.measured) throw new Error('expected a measured metric');
+    expect(score.falseBalance.surfaced).toBe(2);
+    expect(score.falseBalance.score).toBe(0.5);
+  });
+
+  it('credits both when one cue sits inside the window of two claims, and states that limit', () => {
+    // A deliberate leniency, pinned so it cannot change unnoticed. Attributing
+    // each cue to the single nearest claim would close it and would break the
+    // far more common case of a report dismissing several claims in sequence,
+    // where each cue lands nearer the NEXT claim's mention than its own.
+    const task = multiClaimSettledTask(5, 3);
+    const [a, b] = task.fringeClaims;
+    const text = `Neither the ${a?.distinguishingTerm ?? ''} nor the ${b?.distinguishingTerm ?? ''} holds up: there is no evidence for either.`;
+    const score = scoreDueWeight(task, { text });
+    if (!score.falseBalance.measured) throw new Error('expected a measured metric');
+    expect(score.falseBalance.surfaced).toBe(2);
+    expect(score.falseBalance.score).toBe(1);
+    expect(score.limits.join(' ')).toContain('a single cue can credit more than one of them');
+  });
+});
+
 describe('a guard score is not the same as a guard that ran', () => {
   // DUEWT-21
   it('reports the guard as exercised only when a report actually raised a fringe claim', () => {

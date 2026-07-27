@@ -39,7 +39,21 @@ import type { Tolerance } from '../../tasks/schema.js';
  * year with a month between 01 and 12. `2026-2030` is deliberately not here,
  * because that is a range of years and both of its numbers are real.
  */
-const DATE_SHAPES = /\d{4}-\d{2}-\d{2}|\d{1,2}\/\d{1,2}\/\d{2,4}|\d{4}\/\d{2}\/\d{2}|\d{4}-(?:0[1-9]|1[0-2])(?!\d)/g;
+const MONTH = '(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*';
+const DATE_SHAPES = new RegExp(
+  [
+    String.raw`\d{4}-\d{2}-\d{2}`,
+    String.raw`\d{1,2}/\d{1,2}/\d{2,4}`,
+    String.raw`\d{4}/\d{2}/\d{2}`,
+    String.raw`\d{4}-(?:0[1-9]|1[0-2])(?!\d)`,
+    // Written out, which is how a report actually dates a filing. `July 27,
+    // 2026` was yielding the figures 27 and 2026 to the conflict matcher.
+    `${MONTH} \\d{1,2}(?:st|nd|rd|th)?,? \\d{4}`,
+    `\\d{1,2}(?:st|nd|rd|th)? ${MONTH},? \\d{4}`,
+    `${MONTH} \\d{4}`,
+  ].join('|'),
+  'g',
+);
 
 /**
  * The numeric core: digits with optional thousands grouping, an optional decimal
@@ -52,7 +66,7 @@ const DATE_SHAPES = /\d{4}-\d{2}-\d{2}|\d{1,2}\/\d{1,2}\/\d{2,4}|\d{4}\/\d{2}\/\
  * `12,34` is either a typo or a European decimal and guessing would change a
  * score.
  */
-const NUMERIC_CORE = /(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?:e[-+]?\d+)?/;
+const NUMERIC_CORE = /(?:\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?|\.\d+)(?:e[-+]?\d+)?/;
 
 /**
  * Magnitude written attached to the number, as in `1.2bn` or `5m`.
@@ -91,7 +105,10 @@ const REJECT_BEFORE = /[\p{L}\p{N}._,/]/u;
 const VERSION_TAIL = /^\.\d/;
 /** `12,34` — grouping that is not in threes, so its meaning is not decidable. */
 const AMBIGUOUS_GROUP_TAIL = /^,\d/;
+/** `1/3` — a fraction or a path component, not the figure one. */
+const FRACTION_TAIL = /^\/\d/;
 const WORD_CHAR = /[\p{L}\p{N}]/u;
+const LETTER = /\p{L}/u;
 const STARTS_WORD = /^[\p{L}\p{N}]/u;
 const PERCENT_TAIL = /^ ?%/;
 
@@ -163,15 +180,25 @@ export function extractNumericMentions(text: string): NumericMention[] {
     if (before === '-' || before === '+') {
       const beforeSign = masked[start - 2];
       if (beforeSign === undefined || !WORD_CHAR.test(beforeSign)) {
+        // At a boundary, so a genuine sign.
         negative = before === '-';
         spanStart = start - 1;
+      } else if (LETTER.test(beforeSign)) {
+        // A letter then a hyphen then digits is one hyphenated token: `COVID-19`,
+        // `F-16`, `GPT-4`. The digits name the thing, they are not a figure about
+        // it, and feeding them to the conflict matcher invents evidence.
+        continue;
       }
+      // Otherwise a digit preceded the hyphen, so this is a range such as
+      // `1150-1200` and the number on the right is real and unsigned.
     } else if (before !== undefined && REJECT_BEFORE.test(before)) {
       continue;
     }
 
     const rest = masked.slice(coreEnd);
-    if (VERSION_TAIL.test(rest) || AMBIGUOUS_GROUP_TAIL.test(rest)) continue;
+    if (VERSION_TAIL.test(rest) || AMBIGUOUS_GROUP_TAIL.test(rest) || FRACTION_TAIL.test(rest)) {
+      continue;
+    }
 
     // An exponent already states the magnitude, so a suffix after one is not a
     // multiplier and is not read as one. `1.2e9 billion` is a typo, and guessing
