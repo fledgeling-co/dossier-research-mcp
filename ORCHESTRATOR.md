@@ -53,7 +53,7 @@ BENCH-09 is hand-authoring work and is the long pole in wall-clock terms. It sta
 | BENCH-03 | Citation integrity scorers | 01 | Paused | | |
 | BENCH-04 | Accuracy and relevance scorers | 01 | Paused | | |
 | BENCH-05 | Due weight, viewpoint coverage | 01 | **Resumed** | | |
-| BENCH-06 | Calibration and refusal correctness | 01 | **Resumed** | | |
+| BENCH-06 | Calibration and refusal correctness | 01 | **Merged** | `ai/bench-06` | 954 tests; took recency, found a product bug |
 | BENCH-07 | Source quality and syndication | 01 | Paused | | |
 | BENCH-08 | Reporting and comparison | 02, scorers | Blocked | | |
 | BENCH-09 | The seed task corpus | 01 | **Resumed** | | |
@@ -114,3 +114,8 @@ Nothing was lost, but the cost was real: four worktrees held uncommitted source 
 
 - **27 Jul, wave 2 died and was resumed in batches** — All seven failed on capacity. Six specs and three plans survived on disk, and four worktrees held uncommitted source. Resumed BENCH-02, 06 and 09 first, being the three furthest along and therefore with the most at risk. BENCH-03, 04, 05 and 07 are paused pending a free batch. BENCH-03 reported before dying that Codex registry probes gave three findings that change its design, which is worth collecting when it resumes.
 - **27 Jul, BENCH-05 resumed** — Four concurrent now rather than three. Its spec, plan and scorers were all untracked in the worktree with zero commits, so a second capacity error would have taken them; told to commit before continuing. The other three had two and three commits each by then, so the commit-early instruction is working.
+- **27 Jul, BENCH-06 merged** — 954 tests green, gate twice. It closed the recency orphan rather than re-parking it, and built the durability axis the design assumed already existed. Its parity test drives the benchmark's copy and the product's `assessStaleness` side by side so the restatement cannot drift.
+
+  It found a bug in the **product** doing so: `assessStaleness` compared a rounded day count, and `Math.round(-0.4)` is `-0` while `-0 < 0` is false, so a source stamped up to twelve hours after the as-of date was graded fresh. Fixed here, with a test proven to fail against the old check. This is the argument for building a second implementation of a rule and diffing it against the first.
+
+  Its own reviewer found that a refusal test **locked the defect in**: a report was scored as correctly refusing whenever acknowledgement wording appeared anywhere, even with another paragraph asserting the fabrication outright with a date and venue. The test was rewritten. No Codex lane was available, so the out-of-family critic is a logged downgrade to an independent Opus reviewer with fresh context.
