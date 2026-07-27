@@ -50,11 +50,11 @@ BENCH-09 is hand-authoring work and is the long pole in wall-clock terms. It sta
 |---|---|---|---|---|---|
 | BENCH-01 | Task format, gold-set schema and loader | none | **Merged** | `ai/bench-01` | 853 tests green; found 4 cross-brief defects |
 | BENCH-02 | The run harness | 01 | **Merged** | `ai/bench-02` | 1072 tests; adoption split on evidence |
-| BENCH-03 | Citation integrity scorers | 01 | Paused | | |
-| BENCH-04 | Accuracy and relevance scorers | 01 | Paused | | |
+| BENCH-03 | Citation integrity scorers | 01 | **Resumed** | | |
+| BENCH-04 | Accuracy and relevance scorers | 01 | **Resumed** | | |
 | BENCH-05 | Due weight, viewpoint coverage | 01 | **Resumed** | | |
 | BENCH-06 | Calibration and refusal correctness | 01 | **Merged** | `ai/bench-06` | 954 tests; took recency, found a product bug |
-| BENCH-07 | Source quality and syndication | 01 | Paused | | |
+| BENCH-07 | Source quality and syndication | 01 | **Resumed** | | |
 | BENCH-08 | Reporting and comparison | 02, scorers | Blocked | | |
 | BENCH-09 | The seed task corpus | 01 | **Merged** | `ai/bench-09` | 1001 tests; 7 admitted, 20 quarantined, $0 spent |
 | BENCH-10 | Self-eval of Dossier's own checking | 01, 03 | Blocked | | |
@@ -133,3 +133,6 @@ Nothing was lost, but the cost was real: four worktrees held uncommitted source 
   The repetition-dedupe fix needed two further fixes to actually work, both found by an out-of-family Codex review rather than by the runner: the repeat index was appended to a space-joined canonical string, so `wideSpec: "foo"` with repeat 7 hashed identically to `wideSpec: "foo repeat:7"` with none, and `runner.ts` threaded it through a truthiness test where `NaN` is falsy. The review found eight defects in total, including one the runner's own fix had introduced, and **one of the runner's tests asserted the opposite of what it proved**.
 
   Stale-task contradiction resolved: a stale task loads, is scored, and is counted stale. The rule now lives in one place with a dated amendment pointing at it rather than a silent edit.
+- **27 Jul, the paused three resumed** — BENCH-03, 04 and 07, making four concurrent with BENCH-05. Each was told which four items merged under it and what to read before designing, since all three branched before `bench/src/score/` and `bench/src/run/` existed and a parallel tree would conflict at merge.
+
+  BENCH-03 carries the one real risk: its only surviving artefact is a spec, and its last words before dying were that Codex registry probes had given **three findings that change the design**, which exist nowhere on disk. It has been told to recover or re-derive them before proceeding rather than continue as though the design were unchanged.
