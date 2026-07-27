@@ -173,6 +173,13 @@ Acceptance criteria are taken from the README's tool contracts and the tool desc
 | **CLI-13** | Capability outranks the CLI preference: a date window, X or a plan still routes to the API | unit: `providers` | ✓ |
 | **CLI-14** | The routing reason says a subscription quota is being spent, not an API balance | unit: `providers` | ✓ |
 | **CLI-15** | `DOSSIER_PROVIDERS` overrides in both directions: it can exclude the CLI or make it the only backend | unit: `providers` | ✓ |
+| **CLI-16** | Every CLI in `CLI_IDS` gets its own provider id, derived rather than hand-listed, so adding a CLI adds a backend | unit: `providers` | ✓ |
+| **CLI-17** | A CLI installed but not signed in is reported unavailable on its own and does not disqualify the others | unit: `local-provider`, `panel` | ✓ |
+| **CLI-18** | `DOSSIER_LOCAL_CLI` restricts the lane to the one CLI named, even when others are installed and signed in | unit: `local-provider` | ✓ |
+| **CLI-19** | `DOSSIER_PROVIDERS` accepts the umbrella `local` and an individual `local-<cli>` id, and the two compose | unit: `providers` | ✓ |
+| **CLI-20** | A record and a ledger line written before per-CLI ids, carrying `provider: "local"`, still parse and the id still resolves to a client | unit: `runner`, `providers` | ✓ |
+| **CLI-21** | Two CLIs answering one question at once write separate transcripts, each interaction id naming the CLI that produced it | unit: `local-provider` | ✓ |
+| **CLI-22** | The wizard writes `DOSSIER_LOCAL_CLI` only when the operator picked exactly one CLI, never as a side effect of detection | unit: `setup` | ✓ |
 | **BROWSER-01** | A browser binary is identified by version string or install-path provenance, and reported ambiguous when it is neither | unit: `browser-detect` | ✓ |
 | **BROWSER-02** | An MCP server package is probed by presence on disk only; `npx` is never invoked, because that would fetch and execute it | unit: `browser-detect` | ✓ |
 | **BROWSER-03** | Whether an MCP server is registered with a client is always reported unknown; no client config is read | unit: `browser-detect` | ✓ |
@@ -258,6 +265,10 @@ Acceptance criteria are taken from the README's tool contracts and the tool desc
 | **PANEL-18** | The contract fingerprint binds the whole membership, so a plan for one membership cannot start another | unit: `panel` | ✓ |
 | **PANEL-19** | An explicit `provider` still starts exactly one run on the single-provider path, with no panel id | unit: `panel` | ✓ |
 | **PANEL-20** | A member named twice is admitted once, so one backend's answer is never bought at two backends' prices | unit: `panel` | ✓ |
+| **PANEL-21** | Three signed-in CLIs give a free lane of three, ordered by preference, with the strongest leading | unit: `panel` | ✓ |
+| **PANEL-22** | Three CLIs on one question are three distinct fingerprints and three ledger lines at $0, never one answer deduped | unit: `panel` | ✓ |
+| **PANEL-23** | A free lane wide enough on its own to exceed the concurrency cap is refused whole, exactly as an unaffordable one is | unit: `panel` | ✓ |
+| **PANEL-24** | The ordinary panel, three free members plus two paid, is admitted under the shipped concurrency default | unit: `panel` | ✓ |
 
 ### The paid project
 

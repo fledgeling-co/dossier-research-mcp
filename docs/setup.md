@@ -208,7 +208,7 @@ Every value is Zod-validated once at start-up, so an invalid one fails fast with
 | `PERPLEXITY_API_KEY` | | Enables Perplexity: enforced date and domain filters, and native wide research |
 | `OPENAI_API_KEY` | | Enables OpenAI: a 100-domain filter and vector-store grounding |
 | `XAI_API_KEY` | | Enables xAI, which is the only backend that reaches X |
-| `DOSSIER_PROVIDERS` | | Explicit allow-list, comma separated. **Overrides detection**: a key present in your environment for some other tool should not silently become a place Dossier can spend money. Also the way to let the `local` CLI backend be chosen automatically, which it otherwise never is |
+| `DOSSIER_PROVIDERS` | | Explicit allow-list, comma separated. **Overrides detection in both directions**: a key present in your environment for some other tool should not silently become a place Dossier can spend money, and a backend named here joins even when the question profile would have left it out. Takes `gemini`, `perplexity`, `openai`, `xai`, an individual CLI as `local-claude`, `local-codex`, `local-agy`, `local-cursor`, `local-grok` or `local-gemini`, and `local` as an umbrella for every one of them |
 
 **Spend control.** The reason this server exists in the shape it does.
 
@@ -220,7 +220,7 @@ Every value is Zod-validated once at start-up, so an invalid one fails fast with
 | `DOSSIER_BUDGET_USD_PERPLEXITY` | `0` | As above |
 | `DOSSIER_BUDGET_USD_OPENAI` | `0` | As above |
 | `DOSSIER_BUDGET_USD_XAI` | `0` | As above |
-| `DOSSIER_MAX_CONCURRENT` | `10` | Runs in flight at once. Checked inside the same lock as the budget, so parallel calls cannot slip past it |
+| `DOSSIER_MAX_CONCURRENT` | `10` | Runs in flight at once. Checked inside the same lock as the budget, so parallel calls cannot slip past it. This bounds concurrent **work**, not spend: the budget ceiling bounds spend, and a panel reserves its whole worst case before any member starts. A panel is now commonly three or four signed-in CLIs plus two or three API backends, and a panel wider than this cap is refused whole, so the default leaves headroom for that and still refuses a runaway |
 | `DOSSIER_REQUIRE_CONTRACT` | `false` | Makes `research_plan` → `research_start` mandatory. **Turn this on for any server an autonomous agent can reach**: without the fingerprint from a plan, a looping agent makes free no-ops instead of $7 mistakes |
 | `DOSSIER_DEDUPE_TTL_MINUTES` | `1440` | How long an identical request collapses onto the existing run instead of paying again. Set `0` to disable, which you almost never want |
 
@@ -233,7 +233,7 @@ Every value is Zod-validated once at start-up, so an invalid one fails fast with
 | `DOSSIER_STALL_MINUTES` | `12` | Silence before a run is marked `stalled`. Raise it if you use `max` tier a lot, since a long synthesis phase is quiet by nature |
 | `DOSSIER_UTILITY_MODEL` | `gemini-3.1-pro-preview` | The cheap model behind titles, summaries and claim extraction. See [The utility model](how-it-works.md#the-utility-model) |
 | `DOSSIER_LOCAL_CORPUS_DIRS` | | Absolute directories `corpus_local_search` may read, colon or comma separated. Files are read and matched on this machine and never sent anywhere. **There is no tool that adds a directory**, deliberately: a file reader an agent can point anywhere is an exfiltration primitive, so the grant lives with you |
-| `DOSSIER_LOCAL_CLI` | | Which coding CLI backs `provider: "local"`: `claude`, `codex`, `agy`, `cursor`, `grok` or `gemini`. Omit to auto-detect in that order. `research_doctor` shows what is installed, identified and signed in |
+| `DOSSIER_LOCAL_CLI` | | **Restricts** the free lane to one CLI: `claude`, `codex`, `agy`, `cursor`, `grok` or `gemini`. Set it to a CLI id and the free lane contains only that CLI, even when others are installed and signed in. Unset, the default, every capable signed-in CLI joins. `research_doctor` shows what is installed, identified and signed in |
 
 **HTTP transport.** Only read with `--transport http`.
 

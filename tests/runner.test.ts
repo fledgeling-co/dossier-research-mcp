@@ -330,6 +330,55 @@ describe('store schema backward compatibility', () => {
     // And it is still visible in the index, which is where disappearance shows.
     expect((await store.listRuns()).map((r) => r.id)).toContain('dr_legacy00001');
   });
+
+  // CLI-20, the store half. Every CLI got its own provider id, so `local` stopped
+  // being the id of anything. Records and ledger lines written before that carry
+  // it, and dropping it from the enum would make each of them fail its parse and
+  // then vanish, which is the same silent history loss as above.
+  it('still parses a record and a ledger line that carry the pre-split `local` id', async () => {
+    const { writeFile, mkdir, appendFile } = await import('node:fs/promises');
+    await mkdir(join(dir, 'runs'), { recursive: true });
+    const legacy = {
+      id: 'dr_legacylocal',
+      interactionId: 'loc_old',
+      provider: 'local',
+      state: 'completed',
+      tier: 'fast',
+      archetype: 'technical',
+      question: 'q',
+      prompt: 'p',
+      promptWasPreEngineered: false,
+      fingerprint: 'fp2',
+      createdAt: '2026-07-25T00:00:00.000Z',
+      updatedAt: '2026-07-25T00:00:00.000Z',
+      lastProgressAt: '2026-07-25T00:00:00.000Z',
+      estimatedCostUsd: 0,
+      tags: [],
+      planApproved: true,
+      reportChars: 10,
+      sourceCount: 0,
+      imageCount: 0,
+      toolsUsed: [],
+      corpusStores: [],
+    };
+    await writeFile(join(dir, 'runs', 'dr_legacylocal.json'), JSON.stringify(legacy));
+    await appendFile(
+      join(dir, 'ledger.jsonl'),
+      `${JSON.stringify({
+        runId: 'dr_legacylocal',
+        provider: 'local',
+        tier: 'fast',
+        estimatedCostUsd: 0,
+        at: '2026-07-25T00:00:00.000Z',
+      })}\n`,
+    );
+
+    expect((await store.getRun('dr_legacylocal'))?.provider, 'a pre-split record must still parse').toBe('local');
+    expect((await store.listRuns()).map((r) => r.id)).toContain('dr_legacylocal');
+    // The ledger is read for the spend gate, so a line that fails to parse is
+    // counted at worst case rather than skipped. It has to still be readable.
+    expect((await store.readLedger()).map((e) => e.runId)).toContain('dr_legacylocal');
+  });
 });
 
 describe('spend gate hardening', () => {

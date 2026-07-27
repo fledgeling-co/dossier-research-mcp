@@ -3365,7 +3365,7 @@ function registerResources(server: FastMCP, deps: ServerDeps): void {
         lines.push(
           ready.length === 0
             ? '_No signed-in CLI found. Any of the above would give you a zero-API-cost research backend._'
-            : `_${String(ready.length)} CLI(s) ready, and a signed-in CLI is now **preferred** for any deep run it can do. That spends your subscription quota rather than an API balance, and Dossier cannot meter that quota. Capability still comes first: a date window, a domain filter, X or an editable plan routes to the API backend that can enforce it. Set \`DOSSIER_LOCAL_CLI\` to choose which CLI, or list only API providers in \`DOSSIER_PROVIDERS\` to keep the CLI out of automatic selection._`,
+            : `_${String(ready.length)} CLI(s) ready, and **every one of them joins the free lane of a panel** for any deep run it can do. You pay for those subscriptions already, so ${ready.length === 1 ? 'it answers' : 'they each answer'} rather than one being chosen and the rest sitting idle. That spends your subscription quota rather than an API balance, and Dossier cannot meter that quota. Capability still comes first: a date window, a domain filter, X or an editable plan routes to the API backend that can enforce it. Set \`DOSSIER_LOCAL_CLI\` to restrict the lane to one CLI, or list only API providers in \`DOSSIER_PROVIDERS\` to keep the CLIs out of automatic selection entirely._`,
         );
         if (ambiguous.length > 0) {
           lines.push(

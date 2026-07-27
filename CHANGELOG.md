@@ -30,6 +30,22 @@ This project follows [semantic versioning](https://semver.org/). Until 1.0 the m
 
   Naming a `provider` is unchanged in every respect and still starts exactly one run on exactly the path it always took, with no panel id.
 
+- **Every signed-in coding CLI now answers, rather than the best one of them.** Each CLI is its own backend with its own id: `local-claude`, `local-codex`, `local-grok`, `local-cursor`, `local-agy` and `local-gemini`, derived from the adapter table so adding a CLI later does not mean editing three files. On a machine with Claude Code, Codex and Grok all installed and signed in, the free lane of a panel is three members, three runs and three ledger lines at $0, ordered strongest first.
+
+  This was the shortfall in the panel work above. A panel assembled on that machine produced a free lane of **one**, because `ProviderId` admitted a single `local` id and the local adapter chose one CLI by preference order before the panel ever saw the rest. Two of three paid-for subscriptions sat idle on every run, which is the exact waste the panel was built to end.
+
+  Each CLI now carries its own label, its own model choice and its own detection, so a CLI that is installed but not signed in loses its own seat and does not disqualify the lane. Ledger lines at $0 are written and kept, because the ledger is the record of what ran and not only of what cost money. Three CLIs on one question are three distinct dedupe fingerprints, since the fingerprint includes the provider, so they do not collapse onto one answer.
+
+  Records and ledger lines written before this change carry `provider: "local"`. That id is kept in the schema and still parses, and `local` still resolves to a working backend, so nothing already on disk becomes unreadable. `DOSSIER_PROVIDERS` accepts the new ids, and `local` in it is an umbrella for every one of them.
+
+### Changed
+
+- **`DOSSIER_LOCAL_CLI` restricts the free lane instead of selecting the CLI.** Set it to a CLI id and the free lane holds only that CLI, however many others are installed and signed in. Unset, which is now the default, every capable signed-in CLI joins. The variable keeps its purpose as an operator override without contradicting the panel.
+
+### Fixed
+
+- **Setup wrote `DOSSIER_LOCAL_CLI` whenever any subscription was picked, which would now silently narrow the free lane to one CLI.** It wrote the first of the operator's picks. Under the old meaning that chose a CLI, which was harmless; under the new one it leaves every other subscription the operator had just told us about idle on every run. Setup now writes the variable only when exactly one CLI was picked, which is a deliberate choice of that one, and writes nothing when several were picked so all of them join.
+
 ## [0.7.0] - 2026-07-26
 
 ### Added

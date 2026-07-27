@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { RESEARCH_TIERS } from '../gemini/types.js';
 import { ARCHETYPE_NAMES } from '../research/archetypes.js';
+import { PROVIDER_IDS } from '../providers/types.js';
 
 /**
  * Persisted shapes. These are read back from disk on every server start, so
@@ -41,8 +42,13 @@ export const RunRecordSchema = z.object({
    * layer existed still parses. A store predating this change is by definition
    * a Gemini store, and a migration that invalidated existing runs would lose
    * reports people paid for.
+   *
+   * The enum is `PROVIDER_IDS`, which still carries the bare `local` id. That
+   * id is kept for two reasons, not one: every record written before the
+   * per-CLI split carries it, and `importRun` and the local research loop still
+   * write it today for runs that no CLI backend owns.
    */
-  provider: z.enum(['gemini', 'perplexity', 'openai', 'xai', 'local']).default('gemini'),
+  provider: z.enum(PROVIDER_IDS).default('gemini'),
   /**
    * The panel this run belongs to, when it was started as one member of one.
    *
@@ -155,7 +161,11 @@ export const LedgerEntrySchema = z.object({
    * Defaulted rather than required so every line written before per-provider
    * accounting existed still parses; a ledger that fails to load is a ledger
    * that reads as zero spend, which is the one failure this file cannot have.
+   *
+   * A free CLI member writes a line here at $0. The ledger is the record of
+   * what ran, not only of what cost money, so three CLIs on one question are
+   * three lines and the panel is legible afterwards.
    */
-  provider: z.enum(['gemini', 'perplexity', 'openai', 'xai', 'local']).default('gemini'),
+  provider: z.enum(PROVIDER_IDS).default('gemini'),
 });
 export type LedgerEntry = z.infer<typeof LedgerEntrySchema>;

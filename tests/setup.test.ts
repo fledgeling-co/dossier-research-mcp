@@ -37,16 +37,29 @@ describe('the registration command', () => {
   });
 
   it('names the CLI so a free backend can be chosen at all', () => {
-    // A $0 backend never wins a cost tie-break on its own, by design, so
-    // picking a subscription in the wizard has to opt it in explicitly.
+    // Picking a subscription in the wizard has to opt it into the allow-list
+    // explicitly, or a non-empty DOSSIER_PROVIDERS would exclude it.
     const args = registrationArgs(answers({ clis: ['claude'], providers: ['gemini'] }));
     expect(args).toContain('DOSSIER_PROVIDERS=gemini,local');
+    // One CLI picked is a deliberate choice of that one, so the restriction is
+    // written and says so.
     expect(args).toContain('DOSSIER_LOCAL_CLI=claude');
+  });
+
+  // CLI-22. `DOSSIER_LOCAL_CLI` restricts the free lane now, so writing the
+  // first of several picks would silently leave the other subscriptions the
+  // operator just told us about idle on every run, which is the exact waste the
+  // panel exists to end.
+  it('writes no DOSSIER_LOCAL_CLI when the operator picked more than one CLI', () => {
+    const args = registrationArgs(answers({ clis: ['claude', 'codex', 'grok'], providers: ['gemini'] }));
+    expect(args).toContain('DOSSIER_PROVIDERS=gemini,local');
+    expect(args.some((a) => a.startsWith('DOSSIER_LOCAL_CLI='))).toBe(false);
   });
 
   it('leaves provider selection alone when no subscription was chosen', () => {
     const args = registrationArgs(answers({ providers: ['gemini'] }));
     expect(args.some((a) => a.startsWith('DOSSIER_PROVIDERS='))).toBe(false);
+    expect(args.some((a) => a.startsWith('DOSSIER_LOCAL_CLI='))).toBe(false);
   });
 });
 

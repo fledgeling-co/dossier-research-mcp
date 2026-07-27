@@ -3,11 +3,32 @@ import type { DeepResearchClient } from '../gemini/client.js';
 import type { CostBand, DurationOptions } from '../gemini/cost.js';
 import type { ProfileSignal, QuestionProfile } from '../research/profile.js';
 import { geminiProvider } from './gemini.js';
-import { localProvider } from './local.js';
+import { localProviders } from './local.js';
 import { openAiProvider } from './openai.js';
 import { perplexityProvider } from './perplexity.js';
 import { xaiProvider } from './xai.js';
-import type { ProviderId, ResearchProvider, Shape } from './types.js';
+import {
+  isLocalProviderId,
+  LEGACY_LOCAL_ID,
+  type LocalProviderId,
+  type ProviderId,
+  type ResearchProvider,
+  type Shape,
+} from './types.js';
+
+/**
+ * Does the operator's allow-list admit this backend?
+ *
+ * Exact ids match, and the legacy `local` is read as "every CLI". Someone who
+ * set `DOSSIER_PROVIDERS=gemini,local` meant "the API plus my CLIs", and having
+ * that silently resolve to no CLI at all after the per-CLI split would turn a
+ * working configuration into a broken one on upgrade. `local-claude` still
+ * names exactly one.
+ */
+function allows(enabled: readonly string[], id: ProviderId): boolean {
+  if (enabled.includes(id)) return true;
+  return isLocalProviderId(id) && enabled.includes(LEGACY_LOCAL_ID);
+}
 
 /**
  * Which backends exist, which are usable, and which one should run this job.
@@ -34,15 +55,17 @@ export class ProviderRegistry {
       perplexityProvider(config),
       openAiProvider(config),
       xaiProvider(config),
-      localProvider(config),
+      // Every CLI, always built, whether or not it is installed. The API
+      // backends exist without their keys and report themselves unconfigured,
+      // and the CLIs behave the same way, so `list()` and `get()` do not depend
+      // on what happens to be on the developer's PATH.
+      ...localProviders(config),
     ];
     // An explicit allow-list is a deliberate operator choice and overrides
     // detection: a key present in the environment for some other tool should
     // not silently become a place Dossier can spend money.
     this.allowListInForce = config.enabledProviders.length > 0;
-    this.all = this.allowListInForce
-      ? built.filter((p) => config.enabledProviders.includes(p.id))
-      : built;
+    this.all = this.allowListInForce ? built.filter((p) => allows(config.enabledProviders, p.id)) : built;
   }
 
   list(): readonly ResearchProvider[] {
@@ -50,7 +73,15 @@ export class ProviderRegistry {
   }
 
   get(id: ProviderId): ResearchProvider | null {
-    return this.all.find((p) => p.id === id) ?? null;
+    const exact = this.all.find((p) => p.id === id);
+    if (exact) return exact;
+    // `local` is not a backend any more, but runs recorded before the per-CLI
+    // split carry it, and `refresh`, `approvePlan` and `cancel` all resolve a
+    // client from the id on the record. Resolving it to the leading local
+    // backend keeps those runs readable and cancellable; the transcript
+    // directory is shared, so it finds their output.
+    if (id === LEGACY_LOCAL_ID) return this.all.find((p) => isLocalProviderId(p.id)) ?? null;
+    return null;
   }
 
   /**
@@ -440,7 +471,14 @@ export function assemblePanelAmong(
     paid.push({ provider: p, lane: 'paid', reason, cost: costOf(p) });
   }
 
-  const byCost = (a: PanelMember, b: PanelMember): number => a.cost.highUsd - b.cost.highUsd;
+  // Cost orders the lane, and the order it was offered in breaks the tie. Every
+  // CLI costs $0, so cost alone leaves the free lane in whatever order the sort
+  // happens to produce; the registry builds the local backends strongest first,
+  // and this is what makes that preference the printed order rather than a
+  // property of `Array#sort` being stable.
+  const offered = new Map(configured.map((p, i) => [p.id, i] as const));
+  const at = (m: PanelMember): number => offered.get(m.provider.id) ?? Number.MAX_SAFE_INTEGER;
+  const byCost = (a: PanelMember, b: PanelMember): number => a.cost.highUsd - b.cost.highUsd || at(a) - at(b);
   free.sort(byCost);
   paid.sort(byCost);
 
@@ -535,11 +573,16 @@ function paidJoinReason(p: ResearchProvider, need: PanelNeed, cost: CostBand): s
       }
       return null;
     }
-    // `local` is billed to a subscription and never reaches here; the case
-    // exists so adding a provider id is a compile error rather than a silent
-    // omission from every panel.
-    case 'local':
+    default: {
+      // Everything left is a CLI backend, billed to a subscription, and never
+      // reaches here. The annotation is the exhaustiveness check the old `case
+      // 'local'` was: a new id that is not a local one fails to assign, so
+      // adding a paid backend is a compile error rather than a silent omission
+      // from every panel.
+      const cli: LocalProviderId | typeof LEGACY_LOCAL_ID = p.id;
+      void cli;
       return null;
+    }
   }
 }
 

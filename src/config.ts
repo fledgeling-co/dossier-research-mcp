@@ -1,6 +1,7 @@
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { z } from 'zod';
+import { CLI_IDS } from './local/cli.js';
 
 /**
  * Environment is a trust boundary: every value is Zod-parsed once, at startup,
@@ -70,6 +71,17 @@ const EnvSchema = z.object({
   DOSSIER_BUDGET_USD_PERPLEXITY: numeric(0, 0, 1_000_000),
   DOSSIER_BUDGET_USD_OPENAI: numeric(0, 0, 1_000_000),
   DOSSIER_BUDGET_USD_XAI: numeric(0, 0, 1_000_000),
+  /**
+   * How many runs may be in flight at once, across every backend.
+   *
+   * This bounds concurrent *work*, not spend. Spend is bounded by the budget
+   * ceiling, which reserves a panel in full before any member of it starts, so
+   * this number does not need to be small to be safe. It needs to be large
+   * enough that the ordinary panel is not refused: three or four signed-in CLIs
+   * in the free lane plus two or three paid backends is now the common shape,
+   * and a panel wider than the cap is refused whole rather than trimmed. Ten
+   * admits that with headroom and still refuses a runaway.
+   */
   DOSSIER_MAX_CONCURRENT: numeric(10, 1, 64),
   DOSSIER_REQUIRE_CONTRACT: boolish(false),
   DOSSIER_DEDUPE_TTL_MINUTES: numeric(1440, 0, 60 * 24 * 90),
@@ -89,7 +101,11 @@ const EnvSchema = z.object({
    * agent-set: see `localCorpusDirs` on Config for why that boundary matters.
    */
   DOSSIER_LOCAL_CORPUS_DIRS: z.string().max(4000).optional(),
-  DOSSIER_LOCAL_CLI: z.enum(['claude', 'codex', 'agy', 'grok', 'cursor', 'gemini']).optional(),
+  /**
+   * Restricts the free lane to one CLI. Derived from `CLI_IDS` so the adapter
+   * table stays the single place a CLI is declared.
+   */
+  DOSSIER_LOCAL_CLI: z.enum(CLI_IDS).optional(),
 });
 
 export type AuthMode = 'api-key' | 'vertex' | 'none';
@@ -132,7 +148,14 @@ export interface Config {
    * somebody sets it.
    */
   readonly localCorpusDirs: readonly string[];
-  /** Which coding CLI backs the `local` provider. Empty means auto-detect. */
+  /**
+   * Restricts the free lane to one CLI.
+   *
+   * Empty, the default, means every capable signed-in CLI joins the panel. Set
+   * to a CLI id it means that one and no other, even when the others are
+   * installed and signed in. It restricts; it no longer selects, because with
+   * one backend per CLI there is nothing left to select between.
+   */
   readonly localCli: string;
   readonly hermetic: boolean;
 }

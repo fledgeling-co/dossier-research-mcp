@@ -429,10 +429,14 @@ export function registrationArgs(answers: Answers): string[] {
     // Naming the CLI pins which backends exist at all. Since 0.5.1 a signed-in
     // CLI is preferred automatically for jobs it can do, so this line is no
     // longer what makes it reachable; it is the operator's record of the set
-    // they chose, and `DOSSIER_LOCAL_CLI` picks which CLI when several are on
-    // PATH.
+    // they chose.
     env.push('-e', `DOSSIER_PROVIDERS=${[...answers.providers, 'local'].join(',')}`);
-    env.push('-e', `DOSSIER_LOCAL_CLI=${answers.clis[0] ?? ''}`);
+    // `DOSSIER_LOCAL_CLI` restricts the free lane to one CLI, so it is written
+    // only when the operator picked exactly one. Writing the first of several
+    // would silently narrow the lane to that one and leave the other
+    // subscriptions they just told us about unused on every run, which is the
+    // waste the panel exists to end.
+    if (answers.clis.length === 1) env.push('-e', `DOSSIER_LOCAL_CLI=${answers.clis[0] ?? ''}`);
   }
   return ['mcp', 'add', 'dossier', '--scope', 'user', ...env, '--', 'npx', '-y', 'dossier-research-mcp@latest'];
 }

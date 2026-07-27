@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { loadConfig } from '../src/config.js';
+import { CLI_IDS } from '../src/local/cli.js';
 import { AmbiguousSpendError } from '../src/net/retry.js';
 import { ProviderRegistry, routeAmong } from '../src/providers/registry.js';
+import { isLocalProviderId } from '../src/providers/types.js';
 import type {
   Capabilities,
   CredentialStatus,
@@ -17,37 +19,50 @@ import { describeShaping, shapeRequest } from '../src/providers/options.js';
 const withKeys = (env: Record<string, string>) =>
   new ProviderRegistry(loadConfig({ DOSSIER_STORE_DIR: '/tmp/x', ...env }), () => null);
 
+/** Backends detected from a key, as opposed to from a binary on PATH. */
+const keyed = (ids: readonly ProviderId[]): ProviderId[] => ids.filter((id) => !isLocalProviderId(id));
+
 describe('provider detection', () => {
   it('reports every backend, configured or not, so a gap is visible', () => {
     const r = withKeys({ GEMINI_API_KEY: 'g' });
-    expect(r.list().map((p) => p.id)).toEqual(['gemini', 'perplexity', 'openai', 'xai', 'local']);
-    // `local` is filtered out of the availability assertion because it is
-    // detected from a binary on PATH, so including it would make this pass or
-    // fail depending on whether the developer has a coding CLI installed.
-    expect(r.available().map((p) => p.id).filter((id) => id !== 'local')).toEqual(['gemini']);
+    expect(keyed(r.list().map((p) => p.id))).toEqual(['gemini', 'perplexity', 'openai', 'xai']);
+    // The CLI backends are filtered out of the availability assertion because
+    // they are detected from a binary on PATH, so including them would make
+    // this pass or fail depending on what the developer has installed.
+    expect(keyed(r.available().map((p) => p.id))).toEqual(['gemini']);
     // The "could be on" case names the variable that would enable it.
     expect(r.get('xai')?.detect().fix).toMatch(/XAI_API_KEY/);
   });
 
-  it('keeps the local CLI backend listed and reachable by name', () => {
-    // Hermetic mode reports it not-configured, so `available()` cannot be
-    // asserted over here without depending on the developer's own PATH.
-    // CLI-08 covers preference with a scripted provider instead.
+  // CLI-16. One backend per CLI, derived from the adapter table rather than
+  // written out again, so adding a CLI adds a backend and no list falls behind.
+  it('gives every CLI in the adapter table its own backend', () => {
     const r = withKeys({ GEMINI_API_KEY: 'g' });
-    expect(r.list().map((p) => p.id)).toContain('local');
-    expect(r.get('local')).not.toBeNull();
-    const opted = withKeys({ GEMINI_API_KEY: 'g', DOSSIER_PROVIDERS: 'gemini,local' });
-    expect(opted.list().map((p) => p.id)).toContain('local');
+    const ids = r.list().map((p) => p.id);
+    for (const cli of CLI_IDS) expect(ids, cli).toContain(`local-${cli}`);
+    expect(ids.filter((id) => isLocalProviderId(id))).toHaveLength(CLI_IDS.length);
+    // Strongest first, so the free lane leads with it.
+    expect(ids.find((id) => isLocalProviderId(id))).toBe('local-claude');
+  });
+
+  // CLI-20, the registry half. Runs recorded before the split carry `local`, and
+  // refresh, approve and cancel all resolve a client from the id on the record,
+  // so the id has to keep resolving even though nothing answers to it any more.
+  // The store half, that such a record still parses, is in `runner.test.ts`.
+  it('still resolves the legacy `local` id to a working backend', () => {
+    const r = withKeys({ GEMINI_API_KEY: 'g' });
+    expect(r.list().map((p) => p.id)).not.toContain('local');
+    expect(r.get('local')?.id).toBe('local-claude');
   });
 
   it('never reports a key it cannot see as configured', () => {
     const r = withKeys({});
-    expect(r.available().filter((p) => p.id !== 'local')).toHaveLength(0);
-    // Scoped to the key-based backends. `local` is detected from a binary on
-    // PATH rather than a key, so asserting over it here would make this test
+    expect(keyed(r.available().map((p) => p.id))).toHaveLength(0);
+    // Scoped to the key-based backends. A CLI is detected from a binary on
+    // PATH rather than a key, so asserting over one here would make this test
     // pass or fail depending on whether the developer has Claude Code
-    // installed — and a machine-dependent assertion is worse than no assertion.
-    for (const p of r.list().filter((x) => x.id !== 'local')) {
+    // installed, and a machine-dependent assertion is worse than no assertion.
+    for (const p of r.list().filter((x) => !isLocalProviderId(x.id))) {
       expect(p.detect().state, p.id).toBe('not-configured');
     }
   });
@@ -715,11 +730,25 @@ describe('a subscription already paid for beats a metered API balance', () => {
   });
 
   it('is overridden in both directions by the operator allow-list', () => {
-    // Omitting the CLI from a non-empty DOSSIER_PROVIDERS keeps it out of the
-    // registry entirely, so routing never sees it.
+    // Omitting the CLIs from a non-empty DOSSIER_PROVIDERS keeps them out of the
+    // registry entirely, so routing never sees them.
     const onlyApi = withKeys({ PERPLEXITY_API_KEY: 'p', DOSSIER_PROVIDERS: 'perplexity' });
-    expect(onlyApi.list().map((p) => p.id)).not.toContain('local');
+    expect(onlyApi.list().filter((p) => isLocalProviderId(p.id))).toHaveLength(0);
     const onlyCli = withKeys({ PERPLEXITY_API_KEY: 'p', DOSSIER_PROVIDERS: 'local' });
-    expect(onlyCli.list().map((p) => p.id)).toEqual(['local']);
+    expect(keyed(onlyCli.list().map((p) => p.id))).toHaveLength(0);
+  });
+
+  // CLI-19. `local` was the only way to name a CLI before the split and is what
+  // every wizard-written config already carries, so it has to keep meaning "the
+  // CLIs" rather than quietly meaning none of them after an upgrade.
+  it('accepts both the umbrella `local` id and an individual CLI id', () => {
+    const umbrella = withKeys({ DOSSIER_PROVIDERS: 'local' });
+    expect(new Set(umbrella.list().map((p) => p.id))).toEqual(new Set(CLI_IDS.map((id) => `local-${id}`)));
+    const one = withKeys({ DOSSIER_PROVIDERS: 'local-codex' });
+    expect(one.list().map((p) => p.id)).toEqual(['local-codex']);
+    // And they compose, so an operator can widen a narrow list without knowing
+    // which form the other half was written in.
+    const both = withKeys({ PERPLEXITY_API_KEY: 'p', DOSSIER_PROVIDERS: 'perplexity,local-grok' });
+    expect(both.list().map((p) => p.id)).toEqual(['perplexity', 'local-grok']);
   });
 });

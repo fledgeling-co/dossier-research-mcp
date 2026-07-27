@@ -2,7 +2,7 @@ import type { Window } from '../research/shapes.js';
 import { windowEnforcement, windowToFromDate, windowToRecency } from '../research/shapes.js';
 import { encodeOpenAiOptions } from './openai.js';
 import { encodeFilters } from './perplexity.js';
-import type { ProviderId, Shape } from './types.js';
+import { isLocalProviderId, LEGACY_LOCAL_ID, type LocalProviderId, type ProviderId, type Shape } from './types.js';
 import { encodeXaiOptions } from './xai.js';
 
 /**
@@ -43,14 +43,28 @@ export interface ShapedRequest {
   readonly dropped: readonly string[];
 }
 
-/** Domain caps, per provider. Exceeding them is an API error, not a warning. */
-const DOMAIN_CAP: Record<ProviderId, number> = {
+/**
+ * Domain caps, per API backend. Exceeding them is an API error, not a warning.
+ *
+ * Keyed on the paid ids only, and exhaustively, so adding an API backend is a
+ * compile error here rather than a silent cap of zero.
+ */
+const DOMAIN_CAP: Record<Exclude<ProviderId, LocalProviderId | typeof LEGACY_LOCAL_ID>, number> = {
   gemini: 0,
   perplexity: 20,
   openai: 100,
   xai: 5,
-  local: 0,
 };
+
+/**
+ * No CLI backend accepts a domain filter, so every one of them caps at zero and
+ * a request that names sites gets prose labelled `requested` instead. Answered
+ * by predicate rather than by a row per CLI, so adding a CLI needs no edit here.
+ */
+function domainCap(provider: ProviderId): number {
+  if (isLocalProviderId(provider) || provider === LEGACY_LOCAL_ID) return 0;
+  return DOMAIN_CAP[provider];
+}
 
 /**
  * The prose fallback.
@@ -74,7 +88,7 @@ export function shapeRequest(
   const dropped: string[] = [];
   const window = shaping.window;
   const domains = shaping.domains ?? [];
-  const cap = DOMAIN_CAP[provider];
+  const cap = domainCap(provider);
 
   const acceptedDomains = domains.slice(0, cap);
   if (domains.length > acceptedDomains.length) {

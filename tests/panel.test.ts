@@ -74,7 +74,15 @@ const provider = (
 const signedIn: CredentialStatus = { state: 'configured-unverified', detail: 'on PATH, signed in', signedIn: true };
 const apiKey: CredentialStatus = { state: 'configured-unverified', detail: 'key present' };
 
-const cli = provider('local', 0, caps({ billedTo: 'subscription' }), signedIn);
+/**
+ * Three signed-in CLIs, because that is the machine this was built for: a
+ * Claude subscription, a Codex one and a Grok one, all paid for, all idle
+ * before the free lane could hold more than one of them.
+ */
+const cli = provider('local-claude', 0, caps({ billedTo: 'subscription' }), signedIn);
+const codexCli = provider('local-codex', 0, caps({ billedTo: 'subscription' }), signedIn);
+const grokCli = provider('local-grok', 0, caps({ billedTo: 'subscription' }), signedIn);
+const clis = [cli, codexCli, grokCli];
 const gemini = provider('gemini', 7, caps({ planReview: true, corpus: 'file-search' }), apiKey);
 const perplexity = provider(
   'perplexity',
@@ -84,7 +92,7 @@ const perplexity = provider(
 );
 const openai = provider('openai', 5, caps({ domainFilter: 100 }), apiKey);
 const xai = provider('xai', 1, caps({ dateFilter: 'range', domainFilter: 5, socialSources: ['x'] }), apiKey);
-const everyone = [gemini, perplexity, openai, xai, cli];
+const everyone = [gemini, perplexity, openai, xai, ...clis];
 
 const input = { tier: 'fast' as const, tools: [] };
 const panelFor = (question: string, over: Record<string, unknown> = {}, set = everyone) =>
@@ -145,22 +153,49 @@ describe('the question profile', () => {
 
 describe('panel assembly', () => {
   it('PANEL-01: screens capability before billing and before the profile', () => {
-    // The CLI is free, signed in and would otherwise anchor the free lane. It
-    // cannot enforce a date window, so it is off a date-bound panel anyway.
+    // The CLIs are free, signed in and would otherwise anchor the free lane.
+    // None can enforce a date window, so all three are off a date-bound panel.
     const panel = panelFor('What shipped in the last 3 months?', { dateWindow: true });
-    expect(ids(panel.free)).not.toContain('local');
-    expect(panel.rejected.find((r) => r.id === 'local')?.why).toMatch(/date window/);
+    expect(panel.free).toHaveLength(0);
+    expect(panel.rejected.find((r) => r.id === 'local-claude')?.why).toMatch(/date window/);
+    expect(panel.rejected.find((r) => r.id === 'local-grok')?.why).toMatch(/date window/);
     expect(ids(panel.members)).toContain('perplexity');
   });
 
   it('PANEL-02: runs on the free lane alone with no API key configured at all', () => {
     const panel = panelFor('Who leads this market?', {}, [cli]);
-    expect(ids(panel.free)).toEqual(['local']);
+    expect(ids(panel.free)).toEqual(['local-claude']);
     expect(panel.paid).toHaveLength(0);
     expect(panel.total.highUsd).toBe(0);
     // Never the word "free" about the money: a quota is being spent that
     // Dossier cannot meter, and saying free would be a claim about a bill.
     expect(panel.free[0]?.reason).toMatch(/cannot meter/i);
+  });
+
+  // PANEL-21. The whole reason the ids were split. Three subscriptions paid for
+  // used to produce one answer, because a single `local` provider picked a
+  // winner by preference order and the other two sat idle on every run.
+  it('PANEL-21: seats every signed-in CLI, strongest first', () => {
+    const panel = panelFor('Who leads this market?', {}, clis);
+    expect(ids(panel.free)).toEqual(['local-claude', 'local-codex', 'local-grok']);
+    expect(panel.total.highUsd).toBe(0);
+    // Order is the offered order at equal cost, not whatever the sort happened
+    // to do, so the strongest CLI leads and reads first in the rendering.
+    expect(ids(panelFor('Who leads this market?', {}, [grokCli, cli, codexCli]).free)).toEqual([
+      'local-grok',
+      'local-claude',
+      'local-codex',
+    ]);
+  });
+
+  it('PANEL-21: a CLI that is installed but not signed in loses its own seat only', () => {
+    const notSignedIn = provider('local-codex', 0, caps({ billedTo: 'subscription' }), {
+      state: 'configured-unverified',
+      detail: 'on PATH, no session file',
+    });
+    const panel = panelFor('Who leads this market?', {}, [cli, notSignedIn, grokCli]);
+    expect(ids(panel.free)).toEqual(['local-claude', 'local-grok']);
+    expect(panel.rejected.find((r) => r.id === 'local-codex')?.why).toMatch(/sign/i);
   });
 
   it('PANEL-03: a paid backend joins only when the question calls for it', () => {
@@ -435,6 +470,86 @@ describe('starting a panel', () => {
     ).rejects.toBeInstanceOf(ConcurrencyExceededError);
     expect(creates).toBe(0);
     expect(await store.listRuns()).toHaveLength(0);
+  });
+
+  /** What a CLI member costs: nothing metered, and a band all the same. */
+  const free = (): CostBand => ({ lowUsd: 0, highUsd: 0, midUsd: 0, basis: 'subscription' });
+  const CLI_PANEL = ['local-claude', 'local-codex', 'local-grok'] as const;
+
+  // PANEL-22. The fingerprint carries the provider, so three CLIs answering one
+  // question are three purchases and not one deduped onto the other two. Worth
+  // asserting rather than assuming: the same brief, shaped the same way, hashes
+  // identically apart from that one field, and this is exactly the collapse that
+  // once made `research_compare` diff a report against itself.
+  it('PANEL-22: three CLIs on one question are three runs, three fingerprints, three ledger lines', async () => {
+    const client = scriptedClient([snapshot({})]);
+    const runner = new Runner(store, config, () => client, undefined, free);
+    const result = await runner.startPanel({ ...PANEL_ARGS, members: [...CLI_PANEL] });
+
+    expect(result.started).toHaveLength(3);
+    expect(result.started.some((s) => s.deduped)).toBe(false);
+    expect(new Set(result.started.map((s) => s.run.fingerprint)).size).toBe(3);
+    expect(client.created).toHaveLength(3);
+
+    // Three lines at $0. The ledger is the record of what ran, not only of what
+    // cost money, so a free member that wrote nothing would be a panel with a
+    // hole in its history.
+    const ledger = await store.readLedger();
+    expect(ledger).toHaveLength(3);
+    expect(ledger.map((e) => e.provider).sort()).toEqual([...CLI_PANEL].sort());
+    for (const e of ledger) expect(e.estimatedCostUsd).toBe(0);
+    expect(result.reservedUsd).toBe(0);
+    expect((await runner.budget()).committedUsd).toBe(0);
+  });
+
+  // PANEL-23. A free lane wide enough on its own to exceed the cap is now the
+  // common shape, not an edge case, so the whole-panel refusal has to hold when
+  // nothing on the panel costs anything. The budget gate cannot catch this one:
+  // at $0 there is nothing to refuse on price.
+  it('PANEL-23: refuses a free panel wider than the concurrency cap, whole', async () => {
+    let creates = 0;
+    const runner = new Runner(
+      store,
+      { ...config, maxConcurrent: 2 },
+      () => scriptedClient([snapshot({})], () => (creates += 1)),
+      undefined,
+      free,
+    );
+    await expect(runner.startPanel({ ...PANEL_ARGS, members: [...CLI_PANEL] })).rejects.toBeInstanceOf(
+      ConcurrencyExceededError,
+    );
+    expect(creates).toBe(0);
+    expect(await store.listRuns()).toHaveLength(0);
+    // Nothing reserved either, so a refused panel does not eat the ceiling.
+    expect((await runner.budget()).committedUsd).toBe(0);
+    await expect(runner.startPanel({ ...PANEL_ARGS, members: [...CLI_PANEL] })).rejects.toThrow(
+      /A panel of 3 needs 3 slots at once/,
+    );
+  });
+
+  // PANEL-24. The ordinary panel on the machine this was built for. It has to
+  // fit under the *shipped* default rather than a number a test picked, so this
+  // deliberately does not override `maxConcurrent`.
+  it('PANEL-24: admits three free members plus two paid ones on the shipped default', async () => {
+    const shipped = loadConfig({ DOSSIER_HERMETIC: '1' });
+    expect(shipped.maxConcurrent, 'the shipped cap has to clear the ordinary panel').toBeGreaterThanOrEqual(5);
+
+    const runner = new Runner(
+      store,
+      { ...shipped, storeDir: dir, budgetUsd: 100 },
+      () => scriptedClient([snapshot({})]),
+      undefined,
+      (p) => (p.startsWith('local-') ? free() : flat()),
+    );
+    const result = await runner.startPanel({
+      ...PANEL_ARGS,
+      members: [...CLI_PANEL, 'gemini', 'perplexity'],
+    });
+
+    expect(result.started).toHaveLength(5);
+    expect(result.failed).toHaveLength(0);
+    // Only the paid half reserves anything, and it reserves at the top of its band.
+    expect(result.reservedUsd).toBe(4);
   });
 
   it('PANEL-14: a member that refuses at create time does not strand the rest', async () => {

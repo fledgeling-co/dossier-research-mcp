@@ -89,7 +89,7 @@ Then ask for research, and Claude does the searching with the web search it alre
 
 Dossier plans the search tasks, holds the registry, freezes it before you draft, and refuses a report that cites anything you never gathered. That's the whole method, and it costs nothing.
 
-With no key at all you get: the local loop, `research_import` for a report you ran on a subscription, outline-first reading, citation dereferencing, claim-to-source checking, adversarial counter-review, evidence profiling, the spend ledger, and all four prompts. That is every tool except the hosted backends themselves. If you have Claude Code, Codex, Cursor or Grok installed, `provider: "local"` runs the research through that instead, still without an API bill.
+With no key at all you get: the local loop, `research_import` for a report you ran on a subscription, outline-first reading, citation dereferencing, claim-to-source checking, adversarial counter-review, evidence profiling, the spend ledger, and all four prompts. That is every tool except the hosted backends themselves. If you have Claude Code, Codex, Cursor or Grok installed, every one of them that is signed in answers the question, still without an API bill. Name one with `provider: "local-codex"` if you want just that one.
 
 ### When a key is worth adding
 

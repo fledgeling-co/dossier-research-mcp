@@ -64,6 +64,12 @@ Then the lanes:
 
 The free lane is the floor. With no API keys at all you still get every capable CLI on the machine.
 
+**Every one of them, not the best one of them.** Each CLI is its own backend with its own id: `local-claude`, `local-codex`, `local-grok`, `local-cursor`, `local-agy`, `local-gemini`. On a machine with Claude Code, Codex and Grok all signed in, the free lane is three members, three runs, three reports and three $0 ledger lines. You are already paying for all three subscriptions, so all three answer. They are ordered strongest first, and a CLI that is installed but not signed in loses its own seat without touching anybody else's.
+
+Name one of those ids as `provider` and you get that CLI alone. `local` on its own still works and still means a CLI; it resolves to the strongest one available, which is what it always did. In `DOSSIER_PROVIDERS`, `local` is an umbrella for every CLI id at once.
+
+`DOSSIER_LOCAL_CLI` **restricts** the free lane. Set it to a CLI id and the lane holds only that CLI, however many others are signed in. Unset, which is the default, every capable signed-in CLI joins.
+
 The paid lane is driven by a **question profile** read off your question: enumeration, a time bound, social, primary literature, named sites, legal or regulatory, breadth. Each signal implies a backend. Signals are additive, so a question that is both time-bound and legal gets both. Gemini and Perplexity lean towards joining when a key exists, because Gemini is the most comprehensive backend available and Perplexity is cheap enough that leaving it out rarely saves anything worth having.
 
 Lane 3 never acts. Mode B browser research stays behind `DOSSIER_BROWSER_PROVIDER` and you drive it yourself; a panel can point at the pages it thinks need reading and that is all it can do.

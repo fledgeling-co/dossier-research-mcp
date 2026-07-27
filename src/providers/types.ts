@@ -1,6 +1,7 @@
 import type { ResearchTier } from '../gemini/types.js';
 import type { DeepResearchClient } from '../gemini/client.js';
 import type { CostBand, DurationEstimate, DurationOptions } from '../gemini/cost.js';
+import { CLI_IDS, type CliId } from '../local/cli.js';
 
 /**
  * The provider layer.
@@ -16,8 +17,42 @@ import type { CostBand, DurationEstimate, DurationOptions } from '../gemini/cost
  * infer: what it can do, whether it is usable, and what it will cost.
  */
 
-export const PROVIDER_IDS = ['gemini', 'perplexity', 'openai', 'xai', 'local'] as const;
+/**
+ * One provider id per coding CLI, derived from `CLI_IDS` rather than written
+ * out again here.
+ *
+ * Each signed-in CLI is a separate seat at the panel: three subscriptions paid
+ * for are three answers, not one chosen by preference order and two left idle.
+ * That needs one id each, because the id is what the run record, the ledger
+ * line and the dedupe fingerprint are all keyed on. Deriving them means adding
+ * a CLI to `CLI_IDS` adds a backend, with no second list to keep in step.
+ */
+export type LocalProviderId = `local-${CliId}`;
+export const LOCAL_PROVIDER_IDS: readonly LocalProviderId[] = CLI_IDS.map((id): LocalProviderId => `local-${id}`);
+
+/**
+ * `local` is retained as a legacy id. It is no longer the id of any provider
+ * instance, but records and ledger lines written before the split carry it, and
+ * `ProviderRegistry.get` still resolves it to the leading local backend so
+ * those runs stay refreshable and cancellable.
+ */
+export const PROVIDER_IDS = [
+  'gemini',
+  'perplexity',
+  'openai',
+  'xai',
+  'local',
+  ...LOCAL_PROVIDER_IDS,
+] as const;
 export type ProviderId = (typeof PROVIDER_IDS)[number];
+
+/** The legacy umbrella id, kept nameable rather than spelled as a literal. */
+export const LEGACY_LOCAL_ID = 'local';
+
+/** Narrowing helper, so callers test membership rather than string-prefix. */
+export function isLocalProviderId(id: string): id is LocalProviderId {
+  return (LOCAL_PROVIDER_IDS as readonly string[]).includes(id);
+}
 
 /** The four artefact shapes a research request can want. */
 export const SHAPES = ['deep', 'wide', 'recent', 'corpus'] as const;

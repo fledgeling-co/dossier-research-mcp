@@ -55,6 +55,8 @@ The ledger is written *before* the interaction, so a crash between the two over-
 
 **Without an explicit `provider`, this starts a panel.** Every capable CLI you already pay for joins free, and an API backend joins when the question calls for what it is distinctively good at. See [how Dossier picks](providers/README.md#how-dossier-picks) for the lanes and the signals.
 
+Every CLI is its own backend, so three signed-in CLIs are three free members rather than one chosen from three. Name `local-claude`, `local-codex`, `local-grok`, `local-cursor`, `local-agy` or `local-gemini` as `provider` to run exactly one of them; `local` still works and resolves to the strongest one available.
+
 A panel runs the same three gates, but over the whole membership at once rather than member by member:
 
 - **Dedupe** is per member. A member with an identical run already inside the TTL is handed that run and is not charged again; the rest still start.

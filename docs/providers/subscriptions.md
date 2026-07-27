@@ -1,7 +1,7 @@
 # Using subscriptions you already pay for
 
 > [!WARNING]
-> **Status: mostly shipped.** The CLI path is implemented: `research_doctor` identifies and verifies the coding CLIs on your machine, and `provider: "local"` runs one as a research backend with no API bill. The share-link path is implemented as `research_import` plus the `gemini-web-session` prompt. What is **not** built is browser automation of the Gemini web app; see [browser sessions](browser-sessions.md) for why that is a prompt rather than a feature.
+> **Status: mostly shipped.** The CLI path is implemented: `research_doctor` identifies and verifies the coding CLIs on your machine, and each of them is its own research backend with no API bill, so all the ones you are signed in to answer rather than one being picked. The share-link path is implemented as `research_import` plus the `gemini-web-session` prompt. What is **not** built is browser automation of the Gemini web app; see [browser sessions](browser-sessions.md) for why that is a prompt rather than a feature.
 
 Most people reading this already pay for at least one AI subscription. This page is about getting research out of those, instead of setting up a second billing relationship for the same work.
 

@@ -7,14 +7,21 @@ import type { CreateRunArgs, DeepResearchClient } from '../gemini/client.js';
 import type { CostBand, DurationOptions } from '../gemini/cost.js';
 import type { InteractionSnapshot } from '../gemini/types.js';
 import {
-  adapterFor,
   CLI_ADAPTERS,
+  CLI_IDS,
   hasSignInFile,
   probeCli,
   resolveOnPath,
   type CliAdapter,
+  type CliId,
 } from '../local/cli.js';
-import type { Capabilities, CredentialStatus, ProviderEstimate, ResearchProvider } from './types.js';
+import type {
+  Capabilities,
+  CredentialStatus,
+  LocalProviderId,
+  ProviderEstimate,
+  ResearchProvider,
+} from './types.js';
 
 /**
  * A coding CLI you already pay for, as a research backend.
@@ -24,6 +31,17 @@ import type { Capabilities, CredentialStatus, ProviderEstimate, ResearchProvider
  * downgrade either — Claude Code driving plain web search scored 97.0% at $1.54
  * on the April 2026 agent bench while a premium deep-research API scored 75.8%
  * at $10.92 on the same questions.
+ *
+ * ## One backend per CLI, not one backend that chooses
+ *
+ * Until 0.6.0 this file exported a single `local` provider that picked the
+ * best CLI on PATH and ignored the rest. On a machine with three subscriptions
+ * signed in that used one of them and wasted two, on every run, which is the
+ * opposite of what a panel is for. There is now one provider instance per CLI,
+ * with its own id (`local-claude`, `local-codex`, ...), its own label, its own
+ * detection and its own transcripts, so the free lane holds every capable
+ * signed-in CLI and a CLI installed without a sign-in is reported unavailable
+ * on its own rather than taking the lane down with it.
  *
  * ## Preferred when it is installed, signed in and capable
  *
@@ -129,17 +147,37 @@ const SidecarSchema = z.object({
 /** A research report is large; a runaway CLI is larger. */
 const MAX_OUTPUT_BYTES = 8 * 1024 * 1024;
 
-/** Preference order when no CLI is named: quality first, then cost, then breadth. */
+/** Preference order: quality first, then cost, then breadth. */
 const PREFERENCE: readonly string[] = ['claude', 'agy', 'codex', 'cursor', 'grok'];
 
-/** The first CLI whose binary resolves, in preference order. */
-export function pickCli(config: Config): CliAdapter | null {
-  if (config.localCli) return adapterFor(config.localCli);
-  for (const id of PREFERENCE) {
-    const adapter = CLI_ADAPTERS.find((a) => a.id === id);
-    if (adapter && resolveOnPath(adapter.bin)) return adapter;
-  }
-  return null;
+/**
+ * Every CLI, strongest first.
+ *
+ * Derived from `CLI_IDS` rather than being a second hand-written list, so a CLI
+ * added to the adapter table gets a backend without an edit here. One not named
+ * in `PREFERENCE` sorts to the end rather than vanishing: an unranked backend
+ * that still runs is a smaller surprise than one silently dropped.
+ */
+export const CLI_ORDER: readonly CliAdapter[] = [...CLI_ADAPTERS].sort((a, b) => rank(a.id) - rank(b.id));
+
+function rank(id: CliId): number {
+  const at = PREFERENCE.indexOf(id);
+  return at === -1 ? PREFERENCE.length + CLI_IDS.indexOf(id) : at;
+}
+
+/**
+ * The backends this config admits, strongest first.
+ *
+ * `DOSSIER_LOCAL_CLI` narrows the list to the one CLI named. That is the whole
+ * of its meaning now: it restricts, it no longer selects, because with one
+ * backend per CLI there is nothing left to select between. An unrecognised
+ * value yields no local backends at all rather than quietly falling back to
+ * every CLI on the machine, since a typo that widens the lane is worse than one
+ * that empties it and says so in `research_doctor`.
+ */
+export function localProviders(config: Config): ResearchProvider[] {
+  const wanted = config.localCli ? CLI_ORDER.filter((a) => a.id === config.localCli) : CLI_ORDER;
+  return wanted.map((adapter) => localProvider(config, adapter));
 }
 
 export function localCost(): CostBand {
@@ -152,8 +190,7 @@ export function localCost(): CostBand {
   };
 }
 
-export function localProvider(config: Config): ResearchProvider {
-  const adapter = pickCli(config);
+export function localProvider(config: Config, adapter: CliAdapter): ResearchProvider {
   const capabilities: Capabilities = {
     // Deep only, deliberately. A CLI agent will happily write a table, but
     // nothing about the shape is enforced and no date or domain filter exists,
@@ -176,10 +213,14 @@ export function localProvider(config: Config): ResearchProvider {
       'Spends your subscription quota rather than an API balance, and Dossier cannot meter that.',
       'No editable plan, no date filter, no domain filter, no follow-up turn.',
       'Runs a third-party binary on this machine, with your brief as an argument.',
-      ...(adapter?.caution ? [adapter.caution] : []),
+      ...(adapter.caution ? [adapter.caution] : []),
     ],
   };
 
+  // Deliberately one flat directory shared by every CLI, keyed by an
+  // interaction id that carries the CLI's name. A per-CLI subdirectory would
+  // strand transcripts written before the split, which `get('local')` still has
+  // to be able to read back.
   const dir = join(config.storeDir, 'local');
   const outPath = (id: string): string => join(dir, `${id}.out`);
   const sidePath = (id: string): string => join(dir, `${id}.exit.json`);
@@ -187,7 +228,6 @@ export function localProvider(config: Config): ResearchProvider {
 
   const client: DeepResearchClient = {
     async createRun(args: CreateRunArgs): Promise<InteractionSnapshot> {
-      if (!adapter) throw new Error('No supported research CLI found on PATH.');
       // Identity is confirmed HERE, not only in `research_doctor`. Detection
       // is sync and can only see that a name resolves; this is the last point
       // before a brief is handed to whatever that name happens to be today,
@@ -209,8 +249,11 @@ export function localProvider(config: Config): ResearchProvider {
 
       mkdirSync(dir, { recursive: true, mode: 0o700 });
       // Millisecond-plus-counter rather than a random id: this is a file name,
-      // not a security boundary, and a sortable one is easier to clean up.
-      const id = `loc_${Date.now().toString(36)}${String(counter++).padStart(3, '0')}`;
+      // not a security boundary, and a sortable one is easier to clean up. The
+      // CLI's name is in it, and the counter is module-level on purpose, so two
+      // backends starting inside the same millisecond cannot mint one name and
+      // write two runs into one transcript.
+      const id = `loc_${adapter.id}_${Date.now().toString(36)}${String(counter++).padStart(3, '0')}`;
       writeFileSync(outPath(id), '', { mode: 0o600 });
 
       const child = spawn(
@@ -345,24 +388,22 @@ export function localProvider(config: Config): ResearchProvider {
     },
   };
 
+  const id: LocalProviderId = `local-${adapter.id}`;
+
   return {
-    id: 'local',
-    label: adapter ? `${adapter.label} (local CLI, no API charge)` : 'Local CLI (none detected)',
+    id,
+    label: `${adapter.label} (local CLI, no API charge)`,
     capabilities,
     detect(): CredentialStatus {
       if (config.hermetic) return { state: 'not-configured', detail: 'hermetic mode: no subprocesses are spawned' };
-      if (!adapter) {
-        return {
-          state: 'not-configured',
-          detail: 'no supported research CLI found on PATH',
-          fix: 'Install one of: claude, agy, codex, cursor-agent, grok. `research_doctor` identifies and verifies what you have.',
-        };
-      }
       if (!resolveOnPath(adapter.bin)) {
+        // Each CLI answers only for itself. One that is not installed says so
+        // and drops out; the others are unaffected, which is the difference
+        // between a lane of two and no lane at all.
         return {
           state: 'not-configured',
-          detail: `DOSSIER_LOCAL_CLI names ${adapter.id}, but \`${adapter.bin}\` is not on PATH`,
-          fix: `Install ${adapter.label}, or unset DOSSIER_LOCAL_CLI to auto-detect`,
+          detail: `\`${adapter.bin}\` is not on PATH`,
+          fix: `Install ${adapter.label}. \`research_doctor\` identifies and verifies what you have.`,
         };
       }
       // Deliberately not `ready`: presence on PATH is not proof of identity,
@@ -382,6 +423,12 @@ export function localProvider(config: Config): ResearchProvider {
         ...(signedIn ? {} : { fix: `Run \`${adapter.bin}\` once and sign in, then re-run \`research_doctor\`` }),
       };
     },
+    modelFor(): string {
+      // The product name, not a model version. Which model the subscription
+      // serves is the CLI's own decision and it does not report it, so naming
+      // one here would be an attribution Dossier cannot support.
+      return adapter.label;
+    },
     estimate(_input: DurationOptions): ProviderEstimate {
       return {
         cost: localCost(),
@@ -396,7 +443,6 @@ export function localProvider(config: Config): ResearchProvider {
       };
     },
     client(): DeepResearchClient {
-      if (!adapter) throw new Error('No supported research CLI found on PATH.');
       return client;
     },
   };
