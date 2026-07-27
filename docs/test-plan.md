@@ -463,6 +463,26 @@ The matrix is task times backend times repetition, and the money is spent one ce
 | **BATCH-17** | A record whose key disagrees with its own coordinates is refused, and two rows for one cell collapse last-wins with the fact reported | unit: `cell-store` | ✓ |
 | **BATCH-18** | The executor binds the cell's own backend and repetition over whatever the caller supplied | unit: `dossier` | ✓ |
 | **BATCH-19** | An unknown or malformed CLI flag is refused rather than ignored, backends are de-duplicated, and a batch without a ceiling will not start | unit: `cli` | ✓ |
+| **DUEWT-01** | A report citing the dissenting URL scores recall even with the distinguishing term absent, and says it was reached by URL | unit: `due-weight` | ✓ |
+| **DUEWT-02** | A report using only a synonym of the distinguishing term scores no recall, and the stated limits say only the literal term and the exact URL count | unit: `due-weight` | ✓ |
+| **DUEWT-03** | The dissenting URL matches through `http`, a `www.` prefix, a trailing slash, a tracking parameter and a fragment; a different path on the same host does not | unit: `due-weight` | ✓ |
+| **DUEWT-04** | A distinguishing term matches case-insensitively, across a line break and through a curly apostrophe, and never inside a longer word | unit: `due-weight-text` | ✓ |
+| **DUEWT-05** | A task recording two dissents of which one is reached scores one half, and the findings name the one that was missed | unit: `due-weight` | ✓ |
+| **DUEWT-06** | Both conflicting figures present under their declared tolerances scores full credit as `both-figures`, matching `1.2 billion`, `1,200,000,000` and `$1.2bn` against one gold value | unit: `due-weight` | ✓ |
+| **DUEWT-07** | Exactly one figure present with no disagreement cue is `one-sided` and scores zero | unit: `due-weight` | ✓ |
+| **DUEWT-08** | Neither figure present is `unaddressed` and scores zero, reported distinctly from `one-sided` | unit: `due-weight` | ✓ |
+| **DUEWT-09** | One figure plus a disagreement cue near the quantity is `flagged-only` at half credit; the same cue beyond the proximity window is not | unit: `due-weight` | ✓ |
+| **DUEWT-10** | A fringe term absent scores one as `not-surfaced`; present with a rejection cue nearby scores one as `surfaced-and-rejected`; present with none scores zero as `surfaced-as-contested` | unit: `due-weight` | ✓ |
+| **DUEWT-11** | A fringe claim recorded with no rejection cues scores zero on any mention and adds a limit naming that task | unit: `due-weight` | ✓ |
+| **DUEWT-12** | A metric the task cannot support is returned unmeasured with a reason, never as zero, and is excluded from that metric's denominator | unit: `due-weight` | ✓ |
+| **DUEWT-13** | A backend that hedges every question scores full dissent recall, full conflict acknowledgement, zero false balance and an overall of zero, while a grounded backend scores one throughout | unit: `due-weight-hedging` | ✓ |
+| **DUEWT-14** | The overall is withheld with a stated reason when no task supplied a fringe claim, and the guard is reported as not applied | unit: `due-weight-hedging` | ✓ |
+| **DUEWT-15** | Aggregating an empty set returns three unmeasured means, no overall, and a reason naming the emptiness | unit: `due-weight` | ✓ |
+| **DUEWT-16** | Numeric mentions do not fire inside an ISO date, a dotted version string, an ordinal or a decade, and `5km` is not five thousand | unit: `due-weight-numbers` | ✓ |
+| **DUEWT-17** | A magnitude word is applied by shifting the decimal point, so `1.07 billion` equals `1070000000` exactly where float multiplication would not | unit: `due-weight-numbers` | ✓ |
+| **DUEWT-18** | Each tolerance arm behaves: exact rejects a neighbour, absolute accepts at its boundary, relative reads its payload as a fraction, significant figures accepts a correctly rounded value | unit: `due-weight-numbers` | ✓ |
+| **DUEWT-19** | Cited URLs are derived from the report text when the caller omits them, and an explicitly supplied list is used unchanged | unit: `due-weight` | ✓ |
+| **DUEWT-20** | The declared unit is reported where it sits near the matched figure and never gates the match | unit: `due-weight` | ✓ |
 
 ### The paid project
 
