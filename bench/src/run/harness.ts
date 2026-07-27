@@ -215,7 +215,18 @@ export async function runBatch(options: RunBatchOptions): Promise<BatchOutcome> 
   // or a rejected `all` hands control back while paid cells are still in
   // flight. The abort flag stops them claiming new work; this waits for the
   // ones already running.
-  await Promise.allSettled(workers);
+  const settled = await Promise.allSettled(workers);
+  // ...but `allSettled` swallows, so every rejection is inspected. Only the
+  // `record` failure sets the abort flag; anything else a worker can throw
+  // (an `onCell` progress callback, most obviously) would otherwise stop that
+  // worker silently, and the batch would report success with
+  // `attempted === queue.length` having executed a fraction of it. A batch that
+  // quietly ran one cell of four thousand and called itself done is worse than
+  // one that failed.
+  if (aborted === null) {
+    const rejection = settled.find((r) => r.status === 'rejected');
+    if (rejection) aborted = rejection.reason;
+  }
   if (aborted !== null) {
     // Rethrown verbatim when it is an Error, so the caller sees the real cause
     // (`ENOSPC`, a permission failure) rather than a paraphrase of it.

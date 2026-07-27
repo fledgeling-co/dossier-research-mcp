@@ -366,6 +366,31 @@ describe('runBatch', () => {
     expect(started).toBeLessThanOrEqual(8);
   });
 
+  // BATCH-16. The defect the abort fix itself introduced, found by the same
+  // out-of-family review a round later: `allSettled` swallows, so a worker that
+  // threw anywhere other than `record` stopped silently and the batch reported
+  // success with `attempted === queue.length` having run a fraction of it. A
+  // batch that quietly ran one cell of thirty and called itself done is worse
+  // than one that failed.
+  it('BATCH-16: a worker that throws outside record still fails the batch', async () => {
+    let executed = 0;
+    await expect(
+      runBatch({
+        queue: queueOf(30),
+        concurrency: 1,
+        execute: async () => {
+          executed += 1;
+          return ok();
+        },
+        record: async () => undefined,
+        onCell: () => {
+          throw new Error('progress callback blew up');
+        },
+      }),
+    ).rejects.toThrow('progress callback blew up');
+    expect(executed).toBe(1);
+  });
+
   it('refuses a nonsensical concurrency rather than running unbounded', async () => {
     await expect(
       runBatch({ queue: queueOf(1), concurrency: 0, execute: async () => ok(), record: async () => undefined }),

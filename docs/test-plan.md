@@ -459,7 +459,7 @@ The matrix is task times backend times repetition, and the money is spent one ce
 | **BATCH-13** | A record the reader would reject is refused at write time, so no cell can be written invisible to resume | unit: `cell-store` | ✓ |
 | **BATCH-14** | Killing a batch mid-run and re-planning from the store queues the cells that never finished, and the cell paid for but not recorded is re-executed rather than lost, which is the at-least-once bound asserted rather than glossed | unit: `harness` | ✓ |
 | **BATCH-15** | A cell re-executed after a lost write returns the run already bought instead of buying a second | unit: `dossier` | ✓ |
-| **BATCH-16** | A persistence failure stops workers claiming new cells and awaits the ones in flight, rather than leaving paid cells running detached | unit: `harness` | ✓ |
+| **BATCH-16** | A persistence failure stops workers claiming new cells and awaits the ones in flight rather than leaving paid cells running detached, and a worker that throws anywhere else still fails the batch instead of silently truncating it | unit: `harness` | ✓ |
 | **BATCH-17** | A record whose key disagrees with its own coordinates is refused, and two rows for one cell collapse last-wins with the fact reported | unit: `cell-store` | ✓ |
 | **BATCH-18** | The executor binds the cell's own backend and repetition over whatever the caller supplied | unit: `dossier` | ✓ |
 | **BATCH-19** | An unknown or malformed CLI flag is refused rather than ignored, backends are de-duplicated, and a batch without a ceiling will not start | unit: `cli` | ✓ |
