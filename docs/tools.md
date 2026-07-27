@@ -176,6 +176,19 @@ Call it with `question` to start, then again with `runIds` once they finish. The
 
 A claim only one backend made is usually a coverage difference rather than an error. It is reported as a gap, and it is not corroboration either way.
 
+### `research_doctor`, free
+
+Audits every backend Dossier knows about: what works, what is configured but unproven, what is broken, and what could be on but is not. Makes no network call and spends nothing.
+
+The "could be on" rows are the point. Without them you cannot tell that a capability is missing, only that you never used it.
+
+| Parameter | Type | Notes |
+|---|---|---|
+| `probeLocal` | `boolean` | Also probe the coding CLIs and browser tooling on this machine. Local, offline and free: it runs `--version` on each binary and checks for a sign-in file by existence, never reading a credential |
+| `probeModels` | `boolean` | Ask each signed-in CLI which model it serves, and cache the answer. **This one costs a short model call per CLI**, billed to that CLI's own subscription. It implies `probeLocal`, since knowing which CLIs are identified and signed in is a prerequisite. Readings are shown with their age, and a reading older than 30 days no longer removes a backend from a panel |
+
+`research_doctor` is annotated `readOnlyHint: false` because of `probeModels`. Annotations are fixed per tool rather than per call, so the tool carries the stronger claim even though the default invocation reads nothing and spends nothing.
+
 ### `research_evidence`, free
 
 Profiles the sources a report actually used. No fetching, no model call, no credentials: it reads the stored report, classifies the cited URLs and does the arithmetic.

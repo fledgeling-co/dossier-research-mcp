@@ -148,7 +148,13 @@ const SidecarSchema = z.object({
 const MAX_OUTPUT_BYTES = 8 * 1024 * 1024;
 
 /** Preference order: quality first, then cost, then breadth. */
-const PREFERENCE: readonly string[] = ['claude', 'agy', 'codex', 'cursor', 'grok'];
+// `grok` sits ahead of `cursor` deliberately. Both can be pointed at Grok 4.5,
+// and when the model dedupe fires it keeps whichever is earlier here. Keeping
+// xAI's own CLI is the better survivor for a Grok model: it is first-party for
+// those weights, so a capability xAI adds later arrives there first. Cursor's
+// default is its own Composer model, so on an ordinary install the two do not
+// collide at all and this order never comes up.
+const PREFERENCE: readonly string[] = ['claude', 'agy', 'codex', 'grok', 'cursor'];
 
 /**
  * Every CLI, strongest first.

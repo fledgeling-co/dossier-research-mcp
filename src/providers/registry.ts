@@ -1,7 +1,12 @@
 import type { Config } from '../config.js';
 import type { DeepResearchClient } from '../gemini/client.js';
 import type { CostBand, DurationOptions } from '../gemini/cost.js';
-import { describeProbeAge, readModelCache, type ProbedModel } from '../local/model-cache.js';
+import {
+  describeProbeAge,
+  isFreshEnoughToDedupe,
+  readModelCache,
+  type ProbedModel,
+} from '../local/model-cache.js';
 import type { ProfileSignal, QuestionProfile } from '../research/profile.js';
 import { geminiProvider } from './gemini.js';
 import { localProviders } from './local.js';
@@ -620,11 +625,17 @@ function dedupeFreeLaneByModel(
   const notes: string[] = [];
   const seen = new Map<string, { member: PanelMember; probe: ProbedModel }>();
   let unprobed = 0;
+  let staleReadings = 0;
 
   for (const member of free) {
     const probe = models?.get(member.provider.id);
-    if (!probe) {
-      unprobed += 1;
+    // A reading past its horizon is treated as no reading at all for the
+    // purpose of removing a backend. A CLI can change model in a release, and
+    // acting on a months-old fact means a backend silently stops running for a
+    // reason nobody rechecked. The reading is still shown elsewhere with its age.
+    if (!probe || !isFreshEnoughToDedupe(probe.probedAt)) {
+      if (probe) staleReadings += 1;
+      else unprobed += 1;
       kept.push(member);
       continue;
     }
@@ -655,6 +666,14 @@ function dedupeFreeLaneByModel(
       `${String(dropped.length)} CLI(s) left the free lane because another CLI already on it serves the same model. ` +
         'Two CLIs on one model read the same web, and counting that as two backends is the overlap this panel exists to avoid. ' +
         'Point them at different models, or name one with the `provider` argument to run it on its own.',
+    );
+  }
+  if (staleReadings > 0) {
+    // A horizon nobody is told about is a backend that quietly stops being
+    // deduped for reasons the operator cannot see.
+    notes.push(
+      `${String(staleReadings)} model reading(s) are older than 30 days, so they were not used to remove anything from the lane. ` +
+        'Re-run `research_doctor` with `probeModels: true` to refresh them.',
     );
   }
   if (free.length > 1 && unprobed > 0) {

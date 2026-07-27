@@ -47,6 +47,22 @@ const CacheSchema = z.object({
   entries: z.record(z.string(), z.unknown()),
 });
 
+/**
+ * How long a probed model reading is trusted for dedupe.
+ *
+ * A CLI can change the model it serves in a release, and dropping a backend on
+ * a reading from months ago means acting on a fact nobody has checked since.
+ * Past this horizon the reading is still shown, with its age, but it no longer
+ * removes anything from a panel: showing a stale label costs a confusing line
+ * of text, while a stale dedupe costs a backend that silently never runs.
+ */
+export const MODEL_READING_TRUSTED_MS = 30 * 24 * 60 * 60 * 1000;
+
+/** Whether a reading is recent enough to remove a backend from a panel. */
+export function isFreshEnoughToDedupe(probedAt: number, now: number = Date.now()): boolean {
+  return now - probedAt <= MODEL_READING_TRUSTED_MS;
+}
+
 export interface ProbedModel {
   /** The model as the CLI named it. */
   readonly model: string;

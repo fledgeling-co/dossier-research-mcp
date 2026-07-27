@@ -415,6 +415,28 @@ describe('panel assembly', () => {
     expect(note).toMatch(/research_doctor/);
   });
 
+  it('PANEL-28: a reading past its horizon stops removing anything, and says so', () => {
+    // A CLI can change the model it serves in a release. Dropping a backend on
+    // a months-old reading acts on a fact nobody rechecked, and the failure is
+    // invisible: the backend simply stops running. Showing a stale label costs
+    // a line of text, which is the cheaper way to be wrong.
+    const twoMonthsAgo = Date.now() - 60 * 24 * 60 * 60 * 1000;
+    const fresh = panelFor(
+      'Who leads this market?',
+      { cliModels: probedAs({ 'local-grok': 'Grok 4.5', 'local-cursor': 'Grok 4.5' }) },
+      [cursorCli, grokCli],
+    );
+    expect(ids(fresh.free)).toHaveLength(1);
+
+    const stale = panelFor(
+      'Who leads this market?',
+      { cliModels: probedAs({ 'local-grok': 'Grok 4.5', 'local-cursor': 'Grok 4.5' }, twoMonthsAgo) },
+      [cursorCli, grokCli],
+    );
+    expect(ids(stale.free)).toHaveLength(2);
+    expect(stale.notes.join(' ')).toMatch(/older than 30 days/);
+  });
+
   it('PANEL-26: a partly probed lane still warns about the members nobody asked', () => {
     const panel = panelFor('Who leads this market?', { cliModels: probedAs({ 'local-claude': 'Claude Opus 4.6' }) }, clis);
     expect(panel.free).toHaveLength(3);

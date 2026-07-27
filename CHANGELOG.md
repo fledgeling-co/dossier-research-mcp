@@ -8,6 +8,11 @@ This project follows [semantic versioning](https://semver.org/). Until 1.0 the m
 
 ## [Unreleased]
 
+### Fixed
+
+- **Three gaps left open by the model-probe change.** The CLI preference order put Cursor ahead of Grok, so a Cursor pointed at Grok 4.5 would have kept its seat and evicted xAI's own CLI; `grok` now sorts first, because it is first-party for those weights and a capability xAI adds later arrives there first. A probed reading is now trusted for 30 days rather than forever: past that it is still shown with its age but no longer removes a backend, since a CLI can change model in a release and a stale dedupe fails invisibly while a stale label costs one line of text. And `research_doctor` is documented in `docs/tools.md` for the first time, including why it is annotated `readOnlyHint: false` when its default invocation reads nothing and spends nothing.
+
+
 ### Changed
 
 - **A cheap backend now joins a panel on measured coverage, not only on the question profile.** A real seven-backend run returned 133 sources across 30 registrable domains at 4% overlap, so the backends were reading substantially different material rather than repeating each other. The original rules assumed the opposite and kept backends out unless the question specifically called for them. At xAI's price, exclusion was the expensive choice.
