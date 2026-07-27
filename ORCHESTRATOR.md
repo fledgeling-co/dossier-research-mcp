@@ -52,7 +52,7 @@ BENCH-09 is hand-authoring work and is the long pole in wall-clock terms. It sta
 | BENCH-02 | The run harness | 01 | **Resumed** | | |
 | BENCH-03 | Citation integrity scorers | 01 | Paused | | |
 | BENCH-04 | Accuracy and relevance scorers | 01 | Paused | | |
-| BENCH-05 | Due weight, viewpoint coverage | 01 | Paused | | |
+| BENCH-05 | Due weight, viewpoint coverage | 01 | **Resumed** | | |
 | BENCH-06 | Calibration and refusal correctness | 01 | **Resumed** | | |
 | BENCH-07 | Source quality and syndication | 01 | Paused | | |
 | BENCH-08 | Reporting and comparison | 02, scorers | Blocked | | |
@@ -113,3 +113,4 @@ Merges are serialized by the orchestrator, one branch at a time, so conflicts in
 Nothing was lost, but the cost was real: four worktrees held uncommitted source and no branch had a single commit, so a restart meant re-deriving work already done. Every resumed runner is now told to **commit early**. An uncommitted worktree is exactly what a capacity error takes.
 
 - **27 Jul, wave 2 died and was resumed in batches** — All seven failed on capacity. Six specs and three plans survived on disk, and four worktrees held uncommitted source. Resumed BENCH-02, 06 and 09 first, being the three furthest along and therefore with the most at risk. BENCH-03, 04, 05 and 07 are paused pending a free batch. BENCH-03 reported before dying that Codex registry probes gave three findings that change its design, which is worth collecting when it resumes.
+- **27 Jul, BENCH-05 resumed** — Four concurrent now rather than three. Its spec, plan and scorers were all untracked in the worktree with zero commits, so a second capacity error would have taken them; told to commit before continuing. The other three had two and three commits each by then, so the commit-early instruction is working.
