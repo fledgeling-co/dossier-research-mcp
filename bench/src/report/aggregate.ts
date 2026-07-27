@@ -1,0 +1,541 @@
+import { TASK_CATEGORIES, type TaskCategory } from '../tasks/schema.js';
+import type { TaskCorpus } from '../tasks/corpus.js';
+import { METRIC_IDS, type MetricId } from './metrics.js';
+import { summarise, type SampleUnit, type SpreadReport } from './spread.js';
+import type { RegistryCounts, ScoredCell } from './harvest.js';
+
+/**
+ * Cells in, an aggregate out. Both refusal rules live here.
+ *
+ * **This file must never import `node:fs`.** See `metrics.ts`.
+ *
+ * Three stages, in this order, taken from FutureSearch's published practice of
+ * averaging first within a task category and then across tasks, which is what
+ * stops a large category dominating a backend's figure:
+ *
+ * 1. **Cell group** — one task on one backend, over its repetitions. The spread
+ *    here is across repetitions and measures the backend's non-determinism.
+ * 2. **Category group** — one backend in one category, over stage 1's medians.
+ *    The spread here is across tasks and measures something else entirely, so
+ *    the two are labelled rather than left to be confused.
+ * 3. **Backend overall** — the median of stage 2's medians, over the *scorable*
+ *    categories only, always carrying the list of the ones excluded and why.
+ *
+ * The refusals are computed here and carried, never recomputed by the renderer.
+ * A renderer that re-derived "is this scorable" would be a second
+ * implementation of the rule this whole slice exists to enforce.
+ */
+
+/**
+ * Five tasks in a category before it is scored at all.
+ *
+ * A floor nobody can defend is a floor somebody will lower, so here is the
+ * derivation. `docs/plan/benchmark.md` sets the per-category target at ten.
+ * Five is half of it, and five is the smallest count at which a median has at
+ * least two values on each side, so no single task can drag it across the
+ * range. Configurable, and printed on every report, so a report generated
+ * against a lower floor says so on its face.
+ *
+ * The BENCH-08 brief calls this "the configured minimum" without naming a
+ * number, which is what makes it a decision recorded here rather than one
+ * inherited.
+ */
+export const MIN_TASKS_PER_CATEGORY = 5;
+
+export type ScorableVerdict =
+  | { readonly scorable: true }
+  | {
+      readonly scorable: false;
+      /**
+       * `under-sampled-corpus` is a property of the suite: too few tasks exist,
+       * and nobody can be scored. `under-sampled-completed` is a property of
+       * this backend's run: enough tasks exist and it finished too few of them.
+       * They have different causes and different fixes, so they are never
+       * flattened into one word.
+       */
+      readonly reason: 'under-sampled-corpus' | 'under-sampled-completed' | 'nothing-completed';
+      readonly why: string;
+    };
+
+export interface CompletionCounts {
+  readonly attempted: number;
+  readonly completed: number;
+  readonly failed: number;
+  /** `completed / attempted`, or null when nothing was attempted. */
+  readonly rate: number | null;
+  /** Failure kinds and their counts, so a rate limit is distinguishable from a bug. */
+  readonly failureKinds: Readonly<Record<string, number>>;
+}
+
+/** Stage 1: one task on one backend. */
+export interface TaskGroup {
+  readonly taskId: string;
+  readonly provider: string;
+  readonly category: TaskCategory;
+  readonly stale: boolean;
+  readonly completion: CompletionCounts;
+  /** Across repetitions. Null when nothing measured this metric. */
+  readonly metrics: Readonly<Record<MetricId, SpreadReport | null>>;
+  readonly costUsd: SpreadReport | null;
+  readonly wallClockMs: SpreadReport | null;
+  readonly registry: RegistryCounts;
+}
+
+/** Stage 2: one backend in one category. */
+export interface CategoryGroup {
+  readonly provider: string;
+  readonly category: TaskCategory;
+  /** Tasks in the corpus for this category, regardless of who ran them. */
+  readonly tasksInCorpus: number;
+  /** Tasks this backend completed at least one repetition of. */
+  readonly tasksCompleted: number;
+  readonly staleTasks: number;
+  readonly completion: CompletionCounts;
+  readonly verdict: ScorableVerdict;
+  /** Across tasks. Populated even when the verdict withholds, so JSON keeps it. */
+  readonly metrics: Readonly<Record<MetricId, SpreadReport | null>>;
+  readonly costUsd: SpreadReport | null;
+  readonly wallClockMs: SpreadReport | null;
+  readonly totalCostUsd: number;
+  readonly registry: RegistryCounts;
+}
+
+/** Stage 3: one backend, over the categories it may be scored in. */
+export interface BackendSummary {
+  readonly provider: string;
+  readonly completion: CompletionCounts;
+  readonly scorableCategories: readonly TaskCategory[];
+  readonly excludedCategories: readonly { readonly category: TaskCategory; readonly why: string }[];
+  readonly metrics: Readonly<Record<MetricId, SpreadReport | null>>;
+  readonly costUsd: SpreadReport | null;
+  readonly wallClockMs: SpreadReport | null;
+  readonly totalCostUsd: number;
+  readonly registry: RegistryCounts;
+}
+
+export interface CorpusFacts {
+  readonly tasks: number;
+  readonly staleTasks: number;
+  /** `staleTasks / tasks`, or null on an empty corpus. */
+  readonly staleShare: number | null;
+  readonly staleAfterDays: number;
+  readonly staleIds: readonly string[];
+  readonly evaluatedAt: string;
+  /** Tasks per category, from the corpus rather than from what ran. */
+  readonly tasksByCategory: Readonly<Record<TaskCategory, number>>;
+}
+
+export interface BenchAggregate {
+  readonly corpus: CorpusFacts;
+  readonly minTasksPerCategory: number;
+  readonly providers: readonly string[];
+  readonly taskGroups: readonly TaskGroup[];
+  readonly categoryGroups: readonly CategoryGroup[];
+  readonly backends: readonly BackendSummary[];
+  /** Categories no backend may be scored in, with the corpus count that decided it. */
+  readonly underSampledCategories: readonly {
+    readonly category: TaskCategory;
+    readonly tasksInCorpus: number;
+  }[];
+  readonly overall: CompletionCounts;
+  readonly registry: RegistryCounts;
+  /** Cells whose stored report or snapshot was missing. Ours, not a backend's. */
+  readonly pipelineGaps: readonly string[];
+  /** Cells naming a task that is not in the corpus. Counted, never silently dropped. */
+  readonly orphanCells: readonly string[];
+}
+
+export interface AggregateInput {
+  readonly cells: readonly ScoredCell[];
+  readonly corpus: TaskCorpus;
+  readonly minTasksPerCategory?: number | undefined;
+}
+
+const EMPTY_REGISTRY: RegistryCounts = { present: 0, absent: 0, unchecked: 0, invalid: 0 };
+
+function addRegistry(a: RegistryCounts, b: RegistryCounts): RegistryCounts {
+  return {
+    present: a.present + b.present,
+    absent: a.absent + b.absent,
+    unchecked: a.unchecked + b.unchecked,
+    invalid: a.invalid + b.invalid,
+  };
+}
+
+/** The unchecked share of every identifier that was looked at. Null when none was. */
+export function uncheckedShare(counts: RegistryCounts): number | null {
+  const total = counts.present + counts.absent + counts.unchecked + counts.invalid;
+  return total === 0 ? null : counts.unchecked / total;
+}
+
+function completion(cells: readonly ScoredCell[]): CompletionCounts {
+  const failureKinds: Record<string, number> = {};
+  let completed = 0;
+  for (const cell of cells) {
+    if (cell.outcome === 'ok') {
+      completed += 1;
+      continue;
+    }
+    const kind = cell.failureKind ?? 'unclassified';
+    failureKinds[kind] = (failureKinds[kind] ?? 0) + 1;
+  }
+  return {
+    attempted: cells.length,
+    completed,
+    failed: cells.length - completed,
+    rate: cells.length === 0 ? null : completed / cells.length,
+    failureKinds,
+  };
+}
+
+function mergeCompletion(parts: readonly CompletionCounts[]): CompletionCounts {
+  const failureKinds: Record<string, number> = {};
+  let attempted = 0;
+  let completed = 0;
+  for (const part of parts) {
+    attempted += part.attempted;
+    completed += part.completed;
+    for (const [kind, count] of Object.entries(part.failureKinds)) {
+      failureKinds[kind] = (failureKinds[kind] ?? 0) + count;
+    }
+  }
+  return {
+    attempted,
+    completed,
+    failed: attempted - completed,
+    rate: attempted === 0 ? null : completed / attempted,
+    failureKinds,
+  };
+}
+
+/**
+ * Summarise one metric over a set of values, dropping the ones never measured.
+ *
+ * `completed` is passed separately and is what the spread floor is judged on.
+ * A metric five completed cells could have measured and only two did has two
+ * values and five completions, and quoting a five-sample spread from it would
+ * be the same fabrication as counting a deduped run five times.
+ */
+function metricOver(
+  values: readonly (number | null)[],
+  completed: number,
+  unit: SampleUnit,
+): SpreadReport | null {
+  const measured = values.filter((v): v is number => v !== null);
+  return summarise(measured, completed, unit);
+}
+
+function emptyMetrics(): Record<MetricId, SpreadReport | null> {
+  const out = {} as Record<MetricId, SpreadReport | null>;
+  for (const id of METRIC_IDS) out[id] = null;
+  return out;
+}
+
+function groupBy<T>(items: readonly T[], key: (item: T) => string): Map<string, T[]> {
+  const map = new Map<string, T[]>();
+  for (const item of items) {
+    const k = key(item);
+    const bucket = map.get(k);
+    if (bucket === undefined) map.set(k, [item]);
+    else bucket.push(item);
+  }
+  return map;
+}
+
+/**
+ * Stage 1: one task on one backend, over its repetitions.
+ */
+function buildTaskGroups(cells: readonly ScoredCell[]): TaskGroup[] {
+  const groups: TaskGroup[] = [];
+  for (const bucket of groupBy(cells, (c) => `${c.taskId} ${c.provider}`).values()) {
+    const first = bucket[0];
+    if (first === undefined) continue;
+    const counts = completion(bucket);
+    const ok = bucket.filter((c) => c.outcome === 'ok');
+
+    const metrics = emptyMetrics();
+    for (const id of METRIC_IDS) {
+      metrics[id] = metricOver(
+        ok.map((c) => c.metrics[id]),
+        counts.completed,
+        'repetition',
+      );
+    }
+
+    let registry = EMPTY_REGISTRY;
+    for (const cell of bucket) registry = addRegistry(registry, cell.registry);
+
+    groups.push({
+      taskId: first.taskId,
+      provider: first.provider,
+      category: first.category,
+      stale: first.stale,
+      completion: counts,
+      metrics,
+      // Cost and wall clock are taken over the cells that completed. A cell
+      // that failed at the provider still cost wall clock and may have cost
+      // money, but a median that mixed a 4-second refusal with a 20-minute
+      // report would describe neither.
+      costUsd: summarise(
+        ok.map((c) => c.estimatedCostUsd),
+        counts.completed,
+        'repetition',
+      ),
+      wallClockMs: summarise(
+        ok.map((c) => c.wallClockMs),
+        counts.completed,
+        'repetition',
+      ),
+      registry,
+    });
+  }
+  groups.sort((a, b) => a.taskId.localeCompare(b.taskId) || a.provider.localeCompare(b.provider));
+  return groups;
+}
+
+function verdictFor(
+  tasksInCorpus: number,
+  tasksCompleted: number,
+  minTasks: number,
+  provider: string,
+  category: TaskCategory,
+): ScorableVerdict {
+  if (tasksInCorpus < minTasks) {
+    return {
+      scorable: false,
+      reason: 'under-sampled-corpus',
+      why:
+        `the corpus holds ${String(tasksInCorpus)} ${category} task${tasksInCorpus === 1 ? '' : 's'}, ` +
+        `below the floor of ${String(minTasks)}. No backend is scored in this category; the fix is authoring tasks, not re-running.`,
+    };
+  }
+  if (tasksCompleted === 0) {
+    return {
+      scorable: false,
+      reason: 'nothing-completed',
+      why: `${provider} completed no ${category} task, so there is nothing to score.`,
+    };
+  }
+  if (tasksCompleted < minTasks) {
+    return {
+      scorable: false,
+      reason: 'under-sampled-completed',
+      why:
+        `${provider} completed ${String(tasksCompleted)} of the ${String(tasksInCorpus)} ${category} tasks, ` +
+        `below the floor of ${String(minTasks)}. Scoring it here would grade it on whichever tasks it happened to finish; the fix is re-running the failed cells.`,
+    };
+  }
+  return { scorable: true };
+}
+
+/**
+ * Stage 2: one backend in one category, over stage 1's medians.
+ */
+function buildCategoryGroups(
+  taskGroups: readonly TaskGroup[],
+  providers: readonly string[],
+  tasksByCategory: Readonly<Record<TaskCategory, number>>,
+  staleByCategory: Readonly<Record<TaskCategory, number>>,
+  minTasks: number,
+): CategoryGroup[] {
+  const byKey = groupBy(taskGroups, (g) => `${g.provider} ${g.category}`);
+  const groups: CategoryGroup[] = [];
+
+  // Every provider is crossed with every category that exists in the corpus,
+  // rather than only with the ones it has cells for. A category a backend never
+  // touched must appear as untouched; dropping it would make a backend that
+  // skipped a whole category look identical to one that never faced it.
+  for (const provider of providers) {
+    for (const category of TASK_CATEGORIES) {
+      const tasksInCorpus = tasksByCategory[category];
+      if (tasksInCorpus === 0) continue;
+      const bucket = byKey.get(`${provider} ${category}`) ?? [];
+      const counts = mergeCompletion(bucket.map((g) => g.completion));
+      const scored = bucket.filter((g) => g.completion.completed > 0);
+      const tasksCompleted = scored.length;
+
+      const metrics = emptyMetrics();
+      for (const id of METRIC_IDS) {
+        metrics[id] = metricOver(
+          scored.map((g) => g.metrics[id]?.median ?? null),
+          tasksCompleted,
+          'task',
+        );
+      }
+
+      let registry = EMPTY_REGISTRY;
+      let totalCostUsd = 0;
+      for (const group of bucket) {
+        registry = addRegistry(registry, group.registry);
+        totalCostUsd += (group.costUsd?.median ?? 0) * group.completion.completed;
+      }
+
+      groups.push({
+        provider,
+        category,
+        tasksInCorpus,
+        tasksCompleted,
+        staleTasks: staleByCategory[category],
+        completion: counts,
+        verdict: verdictFor(tasksInCorpus, tasksCompleted, minTasks, provider, category),
+        metrics,
+        costUsd: metricOver(
+          scored.map((g) => g.costUsd?.median ?? null),
+          tasksCompleted,
+          'task',
+        ),
+        wallClockMs: metricOver(
+          scored.map((g) => g.wallClockMs?.median ?? null),
+          tasksCompleted,
+          'task',
+        ),
+        totalCostUsd: Number(totalCostUsd.toFixed(4)),
+        registry,
+      });
+    }
+  }
+  return groups;
+}
+
+/**
+ * Stage 3: one backend, over the categories it may be scored in.
+ *
+ * Only the scorable ones contribute, and the excluded ones are named on the
+ * result. An overall figure that quietly folded in an under-sampled category
+ * would be the under-sample rule enforced in one table and abandoned in the
+ * next one down the page.
+ */
+function buildBackends(
+  categoryGroups: readonly CategoryGroup[],
+  providers: readonly string[],
+): BackendSummary[] {
+  return providers.map((provider) => {
+    const mine = categoryGroups.filter((g) => g.provider === provider);
+    const scorable = mine.filter((g) => g.verdict.scorable);
+    const excluded = mine
+      .filter((g) => !g.verdict.scorable)
+      .map((g) => ({ category: g.category, why: g.verdict.scorable ? '' : g.verdict.why }));
+
+    const metrics = emptyMetrics();
+    for (const id of METRIC_IDS) {
+      metrics[id] = metricOver(
+        scorable.map((g) => g.metrics[id]?.median ?? null),
+        scorable.length,
+        'category',
+      );
+    }
+
+    let registry = EMPTY_REGISTRY;
+    let totalCostUsd = 0;
+    for (const group of mine) {
+      registry = addRegistry(registry, group.registry);
+      totalCostUsd += group.totalCostUsd;
+    }
+
+    return {
+      provider,
+      completion: mergeCompletion(mine.map((g) => g.completion)),
+      scorableCategories: scorable.map((g) => g.category),
+      excludedCategories: excluded,
+      metrics,
+      // Cost and wall clock are taken over EVERY category, not only the
+      // scorable ones. A price is a fact about what was spent; withholding it
+      // because a category is under-sampled would hide the money actually paid.
+      costUsd: metricOver(
+        mine.map((g) => g.costUsd?.median ?? null),
+        mine.filter((g) => g.completion.completed > 0).length,
+        'category',
+      ),
+      wallClockMs: metricOver(
+        mine.map((g) => g.wallClockMs?.median ?? null),
+        mine.filter((g) => g.completion.completed > 0).length,
+        'category',
+      ),
+      totalCostUsd: Number(totalCostUsd.toFixed(4)),
+      registry,
+    };
+  });
+}
+
+/**
+ * Everything a report needs, computed once.
+ *
+ * Deterministic in ordering as well as in value: providers, categories and
+ * tasks all sort, so two runs over the same store render byte-identically.
+ */
+export function aggregate(input: AggregateInput): BenchAggregate {
+  const minTasksPerCategory = input.minTasksPerCategory ?? MIN_TASKS_PER_CATEGORY;
+  if (!Number.isInteger(minTasksPerCategory) || minTasksPerCategory < 1) {
+    throw new TypeError(
+      `the minimum tasks per category must be a positive integer; received ${String(minTasksPerCategory)}`,
+    );
+  }
+
+  const tasksByCategory = {} as Record<TaskCategory, number>;
+  const staleByCategory = {} as Record<TaskCategory, number>;
+  for (const category of TASK_CATEGORIES) {
+    tasksByCategory[category] = 0;
+    staleByCategory[category] = 0;
+  }
+  const knownTasks = new Set<string>();
+  for (const task of input.corpus.tasks) {
+    knownTasks.add(task.id);
+    tasksByCategory[task.category] += 1;
+    if (task.stale) staleByCategory[task.category] += 1;
+  }
+
+  // A cell naming a task the corpus does not hold is counted and named rather
+  // than dropped. It means the corpus moved under a stored result, and a
+  // silently narrower denominator is the exact failure the loader already
+  // refuses at the other end of the pipeline.
+  const orphanCells = input.cells
+    .filter((c) => !knownTasks.has(c.taskId))
+    .map((c) => c.key)
+    .sort((a, b) => a.localeCompare(b));
+  const cells = input.cells.filter((c) => knownTasks.has(c.taskId));
+
+  const providers = [...new Set(cells.map((c) => c.provider))].sort((a, b) => a.localeCompare(b));
+  const taskGroups = buildTaskGroups(cells);
+  const categoryGroups = buildCategoryGroups(
+    taskGroups,
+    providers,
+    tasksByCategory,
+    staleByCategory,
+    minTasksPerCategory,
+  );
+  const backends = buildBackends(categoryGroups, providers);
+
+  let registry = EMPTY_REGISTRY;
+  for (const cell of cells) registry = addRegistry(registry, cell.registry);
+
+  const underSampledCategories = TASK_CATEGORIES.filter(
+    (c) => tasksByCategory[c] > 0 && tasksByCategory[c] < minTasksPerCategory,
+  ).map((category) => ({ category, tasksInCorpus: tasksByCategory[category] }));
+
+  const pipelineGaps = [...new Set(cells.flatMap((c) => c.gaps))].sort((a, b) => a.localeCompare(b));
+
+  return {
+    corpus: {
+      tasks: input.corpus.tasks.length,
+      staleTasks: input.corpus.staleCount,
+      staleShare:
+        input.corpus.tasks.length === 0
+          ? null
+          : input.corpus.staleCount / input.corpus.tasks.length,
+      staleAfterDays: input.corpus.staleAfterDays,
+      staleIds: input.corpus.staleIds,
+      evaluatedAt: input.corpus.evaluatedAt,
+      tasksByCategory,
+    },
+    minTasksPerCategory,
+    providers,
+    taskGroups,
+    categoryGroups,
+    backends,
+    underSampledCategories,
+    overall: completion(cells),
+    registry,
+    pipelineGaps,
+    orphanCells,
+  };
+}
