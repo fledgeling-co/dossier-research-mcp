@@ -1,7 +1,7 @@
 # BENCH-01: Task format, gold-set schema and loader
 
 **ID:** BENCH-01
-**Status:** In Progress
+**Status:** In Review
 **Created:** 2026-07-27
 **Last updated:** 2026-07-27
 **Brief:** [BENCH-01](../features-to-triage/BENCH-01-task-format.md) · **Design of record:** [benchmark.md](../plan/benchmark.md)
@@ -140,3 +140,43 @@ A fresh reviewer, not the one that wrote the assumptions, checked every default 
 ## Plan — 2026-07-27
 
 Implementation plan: [`docs/plans/plan-BENCH-01.md`](../plans/plan-BENCH-01.md) (Plan size: Standard).
+
+## Progress — 2026-07-27
+
+**Implementation Complete (local branch, not merged, not pushed)**
+
+**Summary:** `bench/` now exists as a second source tree holding the benchmark's task format: a Zod schema for one hand-authored YAML task, a pure synchronous loader over file contents, and a thin synchronous filesystem adapter. Nothing scores anything and nothing touches the network.
+
+**Branch:** `ai/bench-01` (local, based on `main`, **not rebased and not merged by instruction**; worktree `.worktrees/BENCH-01`). Two commits: `0a5237a` the implementation, `66eef71` the defects the cross-family critic found.
+
+**Built by slice:**
+- Gate wiring: `tsconfig.json`, `vitest.config.ts`, `scripts/check-source-hygiene.mjs`, `package.json` (adds `yaml` as a **dev** dependency; `build` now clears `dist/` first).
+- `bench/src/tasks/schema.ts`: the ten categories, the gold-fact and tolerance and refusal unions, the source shape, the grid, and nine cross-field rules.
+- `bench/src/tasks/corpus.ts`: the pure loader, `TaskCorpusError`, staleness, derived metric applicability. Imports no filesystem.
+- `bench/src/tasks/files.ts`: the only disk reader. Explicit sorted walk, symlinks never followed.
+- `bench/src/tasks/index.ts`: the barrel wave 2 imports.
+- Tests: 130 across three files, traced to `TASKFMT-01` through `TASKFMT-38` in `docs/test-plan.md`.
+- Docs: `docs/bench/task-format.md`, plus the `bench/` entry in `CLAUDE.md` and a CHANGELOG entry.
+
+**Rebase:** deliberately **not** performed. `main` advanced by four commits while this ran (`fb3e018`, `0d8544b`, `9e0312b`, `936f0db`), including an amendment to `docs/plan/benchmark.md` and to the BENCH-02, BENCH-03 and BENCH-09 briefs. The orchestrator serialises merges, so the reconciliation is its call, not this runner's. One amendment was acted on here rather than deferred: see the `topic` field below.
+
+**Reachability:** BENCH-01 adds **no MCP surface and no user-facing capability**, so there is no UI hop to trace. Its in-product consumers are the nine items it blocks, none of which exists yet. The exported surface is declared **producer-less by design** rather than counted as delivered. What is wired today: `schema.ts` into `corpus.ts` into `files.ts`, each exercised by a test that runs the real code, plus a real-Node out-of-transform run through the barrel.
+
+**Clause coverage:** every plan acceptance criterion is ticked in `docs/plans/plan-BENCH-01.md` and carries a named test. The three partials declared mid-review (rejection cues untested, the window field untested, only a sample of caps tested) were closed, not deferred.
+
+**Acceptance review:** the Codex `gpt-5.6-sol` critic at `max` effort, read-only, returned 5 seeded items over the audit; every one was investigated and 4 became confirmed defects, all fixed in `66eef71`. Two were real holes in the format (a conflicting figure could carry a grid cell tag that no rule checked; an untagged answer on a grid task was silently accepted). Two more were found by exercising rather than reading (the directory walk followed symlinks out of the corpus, verified by building one; an Invalid Date reference silently disabled the future-date rule). The fifth, that the no-filesystem check was a regex weak enough to pass after a dynamic import was added, was also real and is fixed. No Critical, High or Medium finding remains open.
+
+**Implementation assumptions:**
+- The integration branch is **local `main`**, not `origin/main`, which is ten commits behind it. Branching from `origin/main` would have cut this work off from the fleet's own setup commits.
+- The spec, plan and ledger are committed **on the branch** rather than left uncommitted in the main tree, because this repo tracks them and an external commit swept a mid-progress copy of them onto `main` while this ran. The branch therefore carries the authoritative versions.
+- `bench/tasks/` ships holding only `.gitkeep`. Authoring the corpus is BENCH-09 and doing it here would pre-empt it.
+
+**Dropped or changed vs spec/plan:** none dropped. One field added beyond the plan: `topic`, an optional clustering slug, added because `docs/plan/benchmark.md` was amended after this branch was cut to require clustered standard errors, and the cluster key has no other home. Recorded here rather than folded in silently.
+
+**Gates (actually run, on the final tree):**
+- `npm run gate` exit 0, **twice consecutively**: typecheck, lint, lint:source, lint:docs, test:all, build. 32 test files, 801 passed, 2 skipped, identical both runs.
+- `npm pack --dry-run`: zero `bench/` and zero `dist/bench/` entries.
+- Real-Node out-of-transform run via `tsx` through the barrel: loads a corpus, keeps `asOf` a string, computes staleness, reports the symlink as ignored without reading it, refuses an invalid reference date, and names the file on a malformed task.
+- stdio smoke against `dist/index.js`: initialize ok, `tools/list` returns 36 tools, zero non-JSON lines on stdout. A regression check, since this item adds no MCP surface.
+
+**Codex lane:** spec review (R1, `max`, read-only): MATERIAL DEFECTS, 19 findings, 9 accepted and folded into the format, 3 accepted as belonging to other items, 7 rejected with reasons. Plan review (R1, `max`): MATERIAL DEFECTS, 14 findings, all 14 accepted. Completeness critic (R2, `max`): 5 seed items, 4 confirmed as defects and fixed. No downgrade: the lane was available for all three.

@@ -145,23 +145,23 @@ One new top-level tree, `bench/src/tasks/`, split three ways so the purity requi
 
 ## Acceptance criteria
 
-- [ ] A corpus containing two malformed files throws once, and the thrown error names **both** files and the failing field path within each; no task is skipped.
-- [ ] A directory holding one oversized file and one malformed file names **both** in a single throw, so an adapter failure cannot mask a loader failure.
-- [ ] A `goldFact` of `kind: number` written without `tolerance`, or without `unit`, fails to parse, and the message names the missing field; each tolerance arm parses, and `relative` outside 0..1 and `significantFigures` outside 1..15 are rejected.
-- [ ] An unknown or misspelt top-level field is rejected rather than ignored, and so is a field on a gold-fact arm that does not define it.
-- [ ] Staleness is correct at the boundary: with `reverifiedAt` 182, 183 and 184 UTC days before `now`, `stale` is `false`, `true`, `true`, and the answer does not change when `now` is at midnight, noon or 23:59:59. `staleCount` and `staleIds` on the returned corpus match.
-- [ ] `reverifiedAt` after `now` is rejected; `asOf` after `now` is accepted.
-- [ ] `loadCorpus` is driven end to end from inline YAML strings in a test that imports nothing from `node:fs`, and `bench/src/tasks/corpus.ts` contains no `node:fs` import.
-- [ ] Calling `loadCorpus` twice with the same entries and the same `now` returns identical results, and loading the same directory twice returns the same order.
-- [ ] Two files declaring the same `id`, and two gold facts sharing an `id` within one task (including one nested under `conflictingFigures`), each fail the load naming what collided.
-- [ ] A task without an `enumeration` block is capped at ten gold facts; one with a block may carry more; and an `enumeration` task with a cell that is neither a `cell`-tagged fact nor declared unknown, a duplicate cell, a cell naming an undeclared axis, or a duplicate entity or field label, each fail to parse naming the offending cell or label.
-- [ ] `expectedRefusal` on any category other than `false-premise` or `obscure-entity` is rejected; a `false-premise` task missing `fabricatedTerms` or `acknowledgementTerms`, and a `no-public-footprint` task missing `acknowledgementTerms`, are rejected.
-- [ ] A `contested` task with neither `knownDissent` nor `conflictingFigures`, and a `settled-with-fringe` task with no `fringeClaims`, both fail to parse; a `conflictingFigures` entry carrying a non-numeric value is rejected.
-- [ ] `applicableMetrics` reports `accuracy` and `calibration` false and `refusal` true for a refusal task, and `enumerationCompleteness` true only for a task with a grid.
-- [ ] An empty corpus directory loads as an empty corpus with `staleCount: 0`; `readTaskEntries` finds a task in a subdirectory and reports a non-YAML file in `ignoredFiles` rather than omitting it.
-- [ ] An unquoted `1.20` and an unquoted `0755` in a string-valued field are rejected with a readable message; an unquoted date and `NO` / `ON` / `yes` remain strings.
-- [ ] `npm run gate` passes, and `npm run test:all` is green on two consecutive runs.
-- [ ] `npm pack --dry-run` lists no `bench/` and no `dist/bench/` entry.
+- [x] A corpus containing two malformed files throws once, and the thrown error names **both** files and the failing field path within each; no task is skipped.
+- [x] A directory holding one oversized file and one malformed file names **both** in a single throw, so an adapter failure cannot mask a loader failure.
+- [x] A `goldFact` of `kind: number` written without `tolerance`, or without `unit`, fails to parse, and the message names the missing field; each tolerance arm parses, and `relative` outside 0..1 and `significantFigures` outside 1..15 are rejected.
+- [x] An unknown or misspelt top-level field is rejected rather than ignored, and so is a field on a gold-fact arm that does not define it.
+- [x] Staleness is correct at the boundary: with `reverifiedAt` 182, 183 and 184 UTC days before `now`, `stale` is `false`, `true`, `true`, and the answer does not change when `now` is at midnight, noon or 23:59:59. `staleCount` and `staleIds` on the returned corpus match.
+- [x] `reverifiedAt` after `now` is rejected; `asOf` after `now` is accepted.
+- [x] `loadCorpus` is driven end to end from inline YAML strings in a test that imports nothing from `node:fs`, and `bench/src/tasks/corpus.ts` contains no `node:fs` import.
+- [x] Calling `loadCorpus` twice with the same entries and the same `now` returns identical results, and loading the same directory twice returns the same order.
+- [x] Two files declaring the same `id`, and two gold facts sharing an `id` within one task (including one nested under `conflictingFigures`), each fail the load naming what collided.
+- [x] A task without an `enumeration` block is capped at ten gold facts; one with a block may carry more; and an `enumeration` task with a cell that is neither a `cell`-tagged fact nor declared unknown, a duplicate cell, a cell naming an undeclared axis, or a duplicate entity or field label, each fail to parse naming the offending cell or label.
+- [x] `expectedRefusal` on any category other than `false-premise` or `obscure-entity` is rejected; a `false-premise` task missing `fabricatedTerms` or `acknowledgementTerms`, and a `no-public-footprint` task missing `acknowledgementTerms`, are rejected.
+- [x] A `contested` task with neither `knownDissent` nor `conflictingFigures`, and a `settled-with-fringe` task with no `fringeClaims`, both fail to parse; a `conflictingFigures` entry carrying a non-numeric value is rejected.
+- [x] `applicableMetrics` reports `accuracy` and `calibration` false and `refusal` true for a refusal task, and `enumerationCompleteness` true only for a task with a grid.
+- [x] An empty corpus directory loads as an empty corpus with `staleCount: 0`; `readTaskEntries` finds a task in a subdirectory and reports a non-YAML file in `ignoredFiles` rather than omitting it.
+- [x] An unquoted `1.20` and an unquoted `0755` in a string-valued field are rejected with a readable message; an unquoted date and `NO` / `ON` / `yes` remain strings.
+- [x] `npm run gate` passes, and `npm run test:all` is green on two consecutive runs.
+- [x] `npm pack --dry-run` lists no `bench/` and no `dist/bench/` entry.
 
 ## Verify
 

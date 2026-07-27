@@ -12,7 +12,7 @@ serially, through the orchestrator.
 
 | ID | Title | Brief | Status | Spec | Plan |
 |---|---|---|---|---|---|
-| BENCH-01 | Task format, gold-set schema and loader | [brief](BENCH-01-task-format.md) | In Progress | [spec](../specs/spec-BENCH-01.md) | [plan](../plans/plan-BENCH-01.md) |
+| BENCH-01 | Task format, gold-set schema and loader | [brief](BENCH-01-task-format.md) | In Review | [spec](../specs/spec-BENCH-01.md) | [plan](../plans/plan-BENCH-01.md) |
 | BENCH-02 | The run harness | [brief](BENCH-02-run-harness.md) | Untriaged | | |
 | BENCH-03 | Citation integrity scorers | [brief](BENCH-03-citation-integrity.md) | Untriaged | | |
 | BENCH-04 | Accuracy and relevance scorers | [brief](BENCH-04-accuracy-relevance.md) | Untriaged | | |
