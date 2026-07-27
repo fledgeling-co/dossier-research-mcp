@@ -99,6 +99,7 @@ docs/                   the documentation set; README is the approachable entry 
   bench/scoring.md      what the scorers measure, and what each number cannot mean
   bench/run-harness.md  the matrix, the spend refusal, resume, and why the
                         harness is built rather than adopted from promptfoo
+  bench/due-weight.md   the viewpoint-coverage scorers, and every limit they carry
   releasing.md          the tag-triggered publish flow
   deep-research-api-vs-agent.md   which Gemini surface fits which job
   providers/            per-provider guides (Gemini, Perplexity, OpenAI, xAI,
@@ -143,6 +144,9 @@ bench/                  the benchmark. NOT compiled into dist/ and NOT published
   src/run/store.ts      the append-only JSONL cell store
   src/run/dossier.ts    the only part that can spend; goes through Runner.start
   src/run/cli.ts        the entry point. --ceiling is required
+  src/score/due-weight/ the viewpoint-coverage scorers. Pure functions over one
+                        task and one report; the aggregate is what makes the
+                        false-balance guard bite. docs/bench/due-weight.md
 ```
 
 **Boundary rule:** `gemini/client.ts` and `gemini/agents.ts` are the only files that touch the Gemini SDK. Everything downstream takes a `DeepResearchClient` by injection, which is what makes the whole runner/tool layer testable without a network or a key.

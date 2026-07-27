@@ -147,7 +147,7 @@ conflictingFigures:
       - { id: press-figure,  kind: number, value: 1150000000, unit: USD, tolerance: { kind: exact }, source: { url: https://example.com/b } }
 ```
 
-`distinguishingTerm` is matched literally. A report that reaches the same position in its own words does not score recall, and the scorer says so rather than hiding it.
+`distinguishingTerm` is matched literally. A report that reaches the same position in its own words does not score recall, and the scorer says so rather than hiding it. What the scorer does with these fields, and every limit it carries, is [`docs/bench/due-weight.md`](due-weight.md).
 
 Conflicting values are numeric only, because the check is finding both numbers in the report. Each carries its own source, because a disagreement is only interesting if both sides are attributable. Their ids share the task's namespace with the gold facts, so nothing a report might state is ambiguous, but they do not count toward the answer ceiling.
 
