@@ -798,3 +798,10 @@ The one slice whose acceptance is a *negative*: it must cost nothing and reach n
 | **COMB-30** | A frontier is produced per category and overall, and a category winner may differ from the overall one | unit: `evaluate` | ✓ |
 | **COMB-31** | A member absent from one scope contributes nothing there rather than being dropped from the lattice | unit: `evaluate` | ✓ |
 | **COMB-32** | The union semantics ride on every merged object, naming which direction each score family is bounded in | unit: `merge` | ✓ |
+| **COMB-33** | The score axis is a named measure with a declared direction; an unnamed one is refused and a lower-is-better one is inverted once | unit: `frontier` | ✓ |
+| **COMB-34** | Two combinations whose score spreads overlap are tied, so neither dominates on a difference the sample cannot establish | unit: `frontier` | ✓ |
+| **COMB-35** | The separability claim rides on every frontier, naming whether spreads were consulted or the result is a point estimate | unit: `frontier` | ✓ |
+| **COMB-36** | Merging refuses two members sharing a run, because that double-counts evidence and cost | unit: `member` | ✓ |
+| **COMB-37** | A failed run contributes no text and no sources, and still counts in the completion rate | unit: `merge` | ✓ |
+| **COMB-38** | A subscription run is counted and never costed, so it cannot sit at the cheap end of the frontier for free | unit: `merge` | ✓ |
+| **COMB-39** | The overlap identity folds `http` onto `https`, and matches the due-weight scorer's answer | unit: `overlap` | ✓ |
