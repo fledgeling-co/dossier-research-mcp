@@ -49,14 +49,14 @@ BENCH-09 is hand-authoring work and is the long pole in wall-clock terms. It sta
 | ID | Title | Deps | Status | Branch | Outcome |
 |---|---|---|---|---|---|
 | BENCH-01 | Task format, gold-set schema and loader | none | **Merged** | `ai/bench-01` | 853 tests green; found 4 cross-brief defects |
-| BENCH-02 | The run harness | 01 | Blocked | | |
-| BENCH-03 | Citation integrity scorers | 01 | Blocked | | |
-| BENCH-04 | Accuracy and relevance scorers | 01 | Blocked | | |
-| BENCH-05 | Due weight, viewpoint coverage | 01 | Blocked | | |
-| BENCH-06 | Calibration and refusal correctness | 01 | Blocked | | |
-| BENCH-07 | Source quality and syndication | 01 | Blocked | | |
+| BENCH-02 | The run harness | 01 | **Running** | | |
+| BENCH-03 | Citation integrity scorers | 01 | **Running** | | |
+| BENCH-04 | Accuracy and relevance scorers | 01 | **Running** | | |
+| BENCH-05 | Due weight, viewpoint coverage | 01 | **Running** | | |
+| BENCH-06 | Calibration and refusal correctness | 01 | **Running** | | |
+| BENCH-07 | Source quality and syndication | 01 | **Running** | | |
 | BENCH-08 | Reporting and comparison | 02, scorers | Blocked | | |
-| BENCH-09 | The seed task corpus | 01 | Blocked | | |
+| BENCH-09 | The seed task corpus | 01 | **Running** | | |
 | BENCH-10 | Self-eval of Dossier's own checking | 01, 03 | Blocked | | |
 | BENCH-11 | Which combination is best | 02, scorers | Blocked | | |
 | BENCH-12 | A finished report is an input to the next one | none | Queued | | |
@@ -100,3 +100,6 @@ Merges are serialized by the orchestrator, one branch at a time, so conflicts in
 
   It also verified four defects outside its own scope, now recorded in the owning briefs: repetition dedupe collapses `n=5` onto one paid run and would silently make every spread a single sample (BENCH-02); BENCH-07 named the wrong function for domain counting; recency is a scored dimension nobody owns and the rule it assumes does not exist (BENCH-06); and `benchmark.md` and BENCH-01 contradict each other on whether a stale task is scored.
 - **27 Jul, Codex and spend fixes merged** — `local-codex` was 0-for-3 on an invalid `--search` flag, and two OpenAI runs cost $18 to fail on 429s that asked to be retried in about a second. Both fixed. `research_doctor` now argv-tests every adapter on the default path, since the check that finds this bug class was worthless behind a flag nobody sets.
+- **27 Jul, wave 2 dispatched** — Seven runners: BENCH-02, 03, 04, 05, 06, 07 and 09, all unblocked by the BENCH-01 merge. Each carries the defects BENCH-01 verified in its area, so nobody rediscovers them: 02 fixes the repetition dedupe and settles the stale-task contradiction, 06 inherits recency as an orphan whose assumed rule does not exist, 07 gets the corrected function name.
+
+  Merges stay serialized here. All seven will touch `docs/test-plan.md` and `CHANGELOG.md`, which is expected and is why they append rather than rewrite; conflicts are resolved at merge, one branch at a time, not raced in the worktrees.
