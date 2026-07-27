@@ -114,7 +114,19 @@ export interface CombinationReport {
   readonly exhaustive: boolean;
 }
 
-/** Sorted, joined member ids. The stable identity of a combination. */
+/**
+ * Sorted, joined member ids. The stable identity of a combination.
+ *
+ * The separator is a printable `+`, deliberately. Two other runners in this
+ * fleet reached for a NUL byte as a composite map-key separator on the same day
+ * and `npm run lint:source` caught both: a NUL compiles, lints and passes every
+ * test while making git treat the file as binary and grep skip it silently,
+ * which is the v0.2.1 defect that lint exists for. A member id is a caller's
+ * label rather than a slug, so a `+` inside one would collide; that is why
+ * duplicate ids are refused in `member.ts` and why a combination requested
+ * twice is refused below, rather than being made impossible by an exotic
+ * separator nobody can see.
+ */
 export function combinationId(memberIds: readonly string[]): string {
   return [...memberIds].sort().join('+');
 }
