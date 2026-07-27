@@ -93,7 +93,7 @@ Without it, the metric rewards indiscriminate hedging. A backend that presents e
 - *Medium, Engineering Readiness.* Scaling a magnitude word (`1.2 billion`) by multiplying floats can land one unit-in-the-last-place away from the gold value and fail an `exact` tolerance. The scaling is done by shifting the decimal point in the digit string, not by multiplication.
 - *Medium, Operational.* The harmonic mean returns exactly zero when any metric mean is zero, which loses resolution between a perfect hedger and a backend that found nothing at all. Accepted: every component is reported beside the overall, so nothing is hidden, and the overall's job is to refuse to rank a hedger above an honest backend rather than to rank two failures against each other.
 
-**Codex cross-family spec review — 2026-07-27**
+**Codex cross-family review — 2026-07-27**
 
 Reviewer: `gpt-5.6-sol` (codex-cli 0.145.0) at `max` effort, read-only, grounded in the repository. Verdict and dispositions are recorded in the Progress section below, because the review ran against the spec and the plan together once both existed.
 
@@ -103,4 +103,47 @@ Implementation plan: [`docs/plans/plan-BENCH-05.md`](../plans/plan-BENCH-05.md) 
 
 ## Progress — 2026-07-27
 
-*(Filled in at the end of the run.)*
+**Implementation Complete (local branch, not rebased, not merged, not pushed, by instruction)**
+
+**Summary:** `bench/src/score/due-weight/` scores three viewpoint-coverage metrics over one task and one report, and aggregates them across a suite. No model is called at any point; every answer comes from a string or number comparison against fields BENCH-01 already records. Nothing touches the network.
+
+**Branch:** `ai/bench-05` (local, based on `main` at `a2b625e`; worktree `.worktrees/BENCH-05`). Seven commits.
+
+**Built:**
+- `bench/src/score/due-weight/text.ts` — normalisation and literal, boundary-respecting term matching, plus the proximity primitives.
+- `bench/src/score/due-weight/numbers.ts` — numeric-mention extraction and tolerance comparison.
+- `bench/src/score/due-weight/index.ts` — the three metrics, the per-task result, and the suite aggregate.
+- Four test files, 89 tests, traced to `DUEWT-01` through `DUEWT-25` in `docs/test-plan.md`.
+- `docs/bench/due-weight.md`, plus the CHANGELOG entry, the ledger row, and the two new paths in `CLAUDE.md`.
+
+**The acceptance criteria, and how each is discharged:**
+
+1. *A report citing the dissenting URL scores recall; one merely using a synonym does not, and that limit is stated in the output rather than hidden.* Both directions are tested. The limits are exported constants, attached to every result whose metric applied, and asserted on by the tests rather than described in prose.
+2. *A backend that hedges everything scores well on dissent recall and badly overall, provable by a fixture.* `hedging.test.ts` writes two backends as functions of the task and runs them over a mixed corpus. Measured: the hedger scores 1.00 dissent recall and 1.00 conflict acknowledgement, **equal to the honest backend on both**, 0.00 on the guard, and **0 overall**. A partial hedger lands at 0.75, so the guard grades rather than gates.
+
+**The design decision that makes the second criterion true**, recorded because it is the whole item: the overall is a suite-level **harmonic** mean of the three metric means, each metric counting once regardless of how many tasks fed it. Both halves are load-bearing and both are pinned by a test. Averaging over tasks lets ninety contested tasks outvote ten fringe ones. And the *arithmetic* mean of the hedger's own three numbers is 0.667, which is a passing grade for a backend that calls every settled question open; a test computes exactly that and contrasts it with the harmonic 0, so the choice is defended by measurement rather than by a comment. When no task recorded a fringe claim the overall is **withheld** rather than caveated, and a further test shows why: on such a corpus the hedger and the honest backend are identical on both remaining metrics.
+
+**Codex cross-family review — MATERIAL DEFECTS, five findings, every one reproduced before being accepted.** Four fixed, one accepted with a measurement:
+
+1. *High, and it defeated this item's own acceptance criterion.* The guard averaged over every fringe claim a task records, so claims nobody mentioned paid for one framed as live. Twenty recorded claims with one presented as contested scored 19/20, giving a suite overall near 0.98 for a backend doing exactly what the guard exists to catch. The denominator is now the claims the report actually raised. **The original fixture could not see this because it used one claim per task**, which is the more useful half of the finding and is why the new tests use multi-claim tasks.
+2. *High.* Numeric extraction invented evidence: `July 27, 2026` yielded 27 and 2026, `COVID-19` yielded 19, `1/3` yielded 1, `F-16` yielded 16. Any of them could satisfy a conflicting-figure gold value and credit a report for disclosing a disagreement it never mentioned. Written-out dates are now masked whole; a hyphen after a letter marks a hyphenated token while a hyphen after a digit still marks a range; a fraction tail is rejected.
+3. *Medium.* A leading-dot decimal was skipped. Fixed. The other half of the finding, an accounting negative in parentheses, is documented rather than guessed: nothing local separates a loss in a filing from an aside in prose.
+4. *Medium.* Word boundaries indexed UTF-16 code units, so a lone surrogate read as a non-letter and a term matched inside a word joined by a supplementary-plane character. Boundaries are now whole code points.
+5. *Low, accepted with a measurement rather than churn.* Repeated full-report scans. Measured: a 256k-character report, which is about the size this product returns, normalises in 15ms, yields 2,000 numeric mentions in 3ms, and takes under 1ms for the cue sweep.
+
+**Two defects found before the reviewer, by asking what a degenerate input scores.** A single stated number could satisfy two gold values whose tolerances overlap, scoring a one-sided report as having disclosed a disagreement it never mentioned; assignment is now a maximum bipartite matching, and the guard test was checked in both directions, failing against the greedy implementation and passing against the matching one. And a guard score of 1.0 turned out to be ambiguous, because a report that says nothing at all earns it; the summary now reports `guardExercised` and says so in words when the guard passed without anything putting it to the question.
+
+**One change was tried and reverted on evidence.** Attributing each rejection cue to the single nearest claim closes a narrow hole where one cue credits two claims. It also breaks the common case: a report dismissing four claims in sequence has each cue sitting nearer the *next* claim's mention than its own, so three of four score as false balance. Trading a narrow false negative for a broad false positive against honest reports is the wrong way round. The leniency stays, is stated in the output, and is pinned by a test so it cannot change unnoticed.
+
+**Three claims corrected against measurement rather than left standing.** `canonicaliseUrl` preserves the URL scheme, which the spec had assumed it folded, so the `http`/`https` fold is this scorer's own layer and is documented as such rather than changing product behaviour to make the benchmark's numbers nicer. The plan's floating-point example was wrong: `1.2 * 1e9` is exact and `1.07 * 1e9` is not. And the plan's local date-rejection rule could not work, because a date and a numeric range are the same shape at the hyphen.
+
+**Gates (actually run, on the final tree):**
+- `npm run gate` exit 0, **twice consecutively**: typecheck, lint, lint:source, lint:docs, test:all, build. 36 test files, 942 passed, 2 skipped, identical both runs.
+- stdio smoke against `dist/index.js`: initialize ok, `tools/list` returns 36 tools, zero non-JSON lines on stdout. A regression check, since this item adds no MCP surface.
+- Real-Node out-of-transform run via `tsx` across the `bench/` to `src/` import edge: the hedger scores 1/0/0, the honest backend 1/1/1, the guard-less corpus withholds its overall, and the synonym limit is present in the output.
+- `npm pack --dry-run`: zero `bench/` and zero `dist/bench/` entries.
+- Performance measured on a 256k-character report, reported above.
+
+**A pre-existing flake, proven not to be this item's.** `tests/concurrency.test.ts > FileLock > holds exclusivity under heavy contention` failed several times mid-run. It reproduces with this item's test files removed, it passes 6 of 6 in isolation either way, and its own comment plus `CLAUDE.md` already document it as contention-sensitive. The machine was running roughly two dozen concurrent Codex processes from other fleet runners at the time. Both final gate runs were clean.
+
+**Not done, and flagged for the orchestrator.** `main` advanced while this ran: BENCH-06 has landed `docs/bench/scoring.md` plus four modules under `bench/src/score/`, and added them to the `CLAUDE.md` layout tree. This branch adds `docs/bench/due-weight.md` and its own `CLAUDE.md` lines, so **`CLAUDE.md` will conflict at merge** and the two scoring docs overlap in purpose enough to be worth a deliberate decision rather than a mechanical resolution. No rebase or merge was attempted, by instruction.

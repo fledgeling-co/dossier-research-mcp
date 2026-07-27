@@ -116,27 +116,27 @@ None. No new dependency. `bench/` is already wired into `tsconfig.json`, the vit
 
 ## Acceptance criteria
 
-- [ ] A report citing the dissenting URL scores recall even when the distinguishing term is absent, and `reachedBy` is `url`.
-- [ ] A report using a synonym of the distinguishing term, and not citing the URL, scores 0 recall, and the returned `limits` states that only the literal term and the exact URL count.
-- [ ] The dissenting URL is matched after canonicalisation, so `http://`, a `www.` prefix, a trailing slash, a `?utm_source=…` parameter and a fragment all still score recall; a different path on the same host, and a non-tracking query parameter, do not. Measured rather than assumed: `canonicaliseUrl` preserves the scheme, so the `http`/`https` fold is this scorer's own layer on top of it and is documented as such.
-- [ ] A distinguishing term is matched case-insensitively, across a line break, and through a curly apostrophe; it is **not** matched when it appears inside a longer word.
-- [ ] A task recording two dissents of which the report reaches one scores 0.5, and the findings name which one was missed.
-- [ ] A report containing both conflicting figures under their declared tolerances scores full credit and is reported `both-figures`; the magnitude forms `1.2 billion`, `1,200,000,000` and `$1.2bn` all match a gold value of `1200000000` under an `exact` tolerance.
-- [ ] A report containing exactly one of the two figures and no disagreement cue is reported `one-sided` and scores 0.
-- [ ] A report containing neither figure and no cue is reported `unaddressed` and scores 0, distinguished in the output from `one-sided`.
-- [ ] A report containing one figure plus a disagreement cue within `PROXIMITY_CHARS` of the quantity is reported `flagged-only` and scores `FLAGGED_ONLY_CREDIT`; the same cue beyond the window does not.
-- [ ] A fringe term absent from the report scores 1 and is reported `not-surfaced`; present with a recorded rejection cue nearby scores 1 and is reported `surfaced-and-rejected`; present with no cue nearby scores 0 and is reported `surfaced-as-contested`.
-- [ ] A fringe claim recorded with an empty `rejectionCues` list scores 0 on any mention **and** adds a limit naming that task.
-- [ ] A metric a task cannot support is returned `measured: false` with a reason, never as a zero, and `aggregateDueWeight` excludes it from that metric's denominator.
-- [ ] **The hedging fixture.** Over a mixed corpus, a backend that hedges every question scores 1.0 dissent recall, 1.0 conflict acknowledgement, 0.0 false balance and `overall: 0`; a grounded backend scores 1.0 on all three and `overall: 1`. The hedger's recall is **equal** to the grounded backend's and its overall is strictly lower.
-- [ ] `overall` is `null` with a stated reason when the corpus contains no fringe task, and `guardApplied` is false.
-- [ ] `aggregateDueWeight([])` returns three unmeasured means, `overall: null` and a reason.
-- [ ] Numeric mentions do not fire inside an ISO date or a dotted version string, and `1.07 billion` compared to `1070000000` under an `exact` tolerance matches, which float multiplication would fail (`1.07 * 1e9` is `1070000000.0000001`).
-- [ ] Each tolerance arm behaves: `exact` rejects a neighbouring value, `absolute` accepts at the boundary and rejects beyond it, `relative` treats its payload as a fraction and not a percentage, `significantFigures` accepts a correctly-rounded value.
-- [ ] `citedUrls` is derived from the report text when the caller omits it, and an explicitly supplied list is used unchanged.
-- [ ] `npm run gate` passes, and `npm run test:all` is green on two consecutive runs.
-- [ ] A protocol-level stdio smoke against `dist/index.js` still initializes and lists tools with no stdout noise.
-- [ ] `npm pack --dry-run` lists no `bench/` and no `dist/bench/` entry.
+- [x] A report citing the dissenting URL scores recall even when the distinguishing term is absent, and `reachedBy` is `url`.
+- [x] A report using a synonym of the distinguishing term, and not citing the URL, scores 0 recall, and the returned `limits` states that only the literal term and the exact URL count.
+- [x] The dissenting URL is matched after canonicalisation, so `http://`, a `www.` prefix, a trailing slash, a `?utm_source=…` parameter and a fragment all still score recall; a different path on the same host, and a non-tracking query parameter, do not. Measured rather than assumed: `canonicaliseUrl` preserves the scheme, so the `http`/`https` fold is this scorer's own layer on top of it and is documented as such.
+- [x] A distinguishing term is matched case-insensitively, across a line break, and through a curly apostrophe; it is **not** matched when it appears inside a longer word.
+- [x] A task recording two dissents of which the report reaches one scores 0.5, and the findings name which one was missed.
+- [x] A report containing both conflicting figures under their declared tolerances scores full credit and is reported `both-figures`; the magnitude forms `1.2 billion`, `1,200,000,000` and `$1.2bn` all match a gold value of `1200000000` under an `exact` tolerance.
+- [x] A report containing exactly one of the two figures and no disagreement cue is reported `one-sided` and scores 0.
+- [x] A report containing neither figure and no cue is reported `unaddressed` and scores 0, distinguished in the output from `one-sided`.
+- [x] A report containing one figure plus a disagreement cue within `PROXIMITY_CHARS` of the quantity is reported `flagged-only` and scores `FLAGGED_ONLY_CREDIT`; the same cue beyond the window does not.
+- [x] A fringe term absent from the report scores 1 and is reported `not-surfaced`; present with a recorded rejection cue nearby scores 1 and is reported `surfaced-and-rejected`; present with no cue nearby scores 0 and is reported `surfaced-as-contested`.
+- [x] A fringe claim recorded with an empty `rejectionCues` list scores 0 on any mention **and** adds a limit naming that task.
+- [x] A metric a task cannot support is returned `measured: false` with a reason, never as a zero, and `aggregateDueWeight` excludes it from that metric's denominator.
+- [x] **The hedging fixture.** Over a mixed corpus, a backend that hedges every question scores 1.0 dissent recall, 1.0 conflict acknowledgement, 0.0 false balance and `overall: 0`; a grounded backend scores 1.0 on all three and `overall: 1`. The hedger's recall is **equal** to the grounded backend's and its overall is strictly lower.
+- [x] `overall` is `null` with a stated reason when the corpus contains no fringe task, and `guardApplied` is false.
+- [x] `aggregateDueWeight([])` returns three unmeasured means, `overall: null` and a reason.
+- [x] Numeric mentions do not fire inside an ISO date or a dotted version string, and `1.07 billion` compared to `1070000000` under an `exact` tolerance matches, which float multiplication would fail (`1.07 * 1e9` is `1070000000.0000001`).
+- [x] Each tolerance arm behaves: `exact` rejects a neighbouring value, `absolute` accepts at the boundary and rejects beyond it, `relative` treats its payload as a fraction and not a percentage, `significantFigures` accepts a correctly-rounded value.
+- [x] `citedUrls` is derived from the report text when the caller omits it, and an explicitly supplied list is used unchanged.
+- [x] `npm run gate` passes, and `npm run test:all` is green on two consecutive runs.
+- [x] A protocol-level stdio smoke against `dist/index.js` still initializes and lists tools with no stdout noise.
+- [x] `npm pack --dry-run` lists no `bench/` and no `dist/bench/` entry.
 
 ## Verify
 
@@ -155,6 +155,21 @@ None. No new dependency. `bench/` is already wired into `tsconfig.json`, the vit
 - Authoring corpus tasks (BENCH-09). Fixtures here are inline in tests.
 - Unifying the numeric-tolerance primitive with BENCH-04's. Recorded as known debt; both items are in flight on disjoint files and racing a shared file is the worse trade.
 
+## Deviations from this plan, and why
+
+The steps above are left as written on the day rather than edited to match what shipped. Four things changed during implementation, each for a reason found by measuring:
+
+- **`normaliseForMatch` returns a string, not `{ text, offsets }`.** The offset map existed to translate normalised positions back to the original text. Extracting numeric mentions from the *normalised* text instead puts every position in one coordinate system, which removes the translation rather than implementing it, and removes with it the class of bug where an offset from one system is compared against an offset from another. `findTermOffsets` became `findTermPositions` for the same reason.
+- **Dates are masked as whole shapes before scanning, rather than rejected by a rule about the character after a number.** The local rule cannot work: `2026-07-27` and `50-60%` have the same shape at the hyphen, so any rule sharp enough to drop the date also drops the range, and a range is exactly how a report writes two figures that disagree.
+- **A figure is assigned to a gold value by maximum matching, not first-come.** Greedy claiming stops one number satisfying two values, and introduces the opposite error: a loose value takes the mention a tighter value uniquely needed, and a report that stated both figures is reported one-sided.
+- **The false-balance denominator counts only the fringe claims a report actually raised.** Averaging over every recorded claim lets one nobody mentioned pay for one framed as live. Found by the cross-family review, and the reason it was invisible until then is recorded in the spec's Progress section.
+
 ## Plan review gate — 2026-07-27
 
-*(Filled in below once the cross-family review has run.)*
+**Mechanical path check: PASS.** Every backtick-quoted path in this plan either exists or is explicitly marked to be created. `src/research/corroborate.js` and `src/research/report.js` are the NodeNext import specifiers for the corresponding `.ts` files, which this repo's module resolution requires.
+
+**Cross-family review: Codex `gpt-5.6-sol`, read-only, grounded in the repository. Verdict as returned: MATERIAL DEFECTS**, five findings. Every one was reproduced by running it before being accepted; four are fixed and one is accepted with a measurement. The dispositions are in the spec's Progress section.
+
+The lane was not available on the first two attempts. Roughly two dozen concurrent Codex processes from other fleet runners saturated the machine and the account, and two invocations produced no output at all over about fifty minutes. A third, narrower invocation completed. That is recorded rather than smoothed over, because a review that silently did not run is the failure mode the gate exists to prevent, and because the first finding it returned was the one that defeated the item's own acceptance criterion.
+
+**Two plan claims were corrected against measurement rather than left standing.** The float example was wrong as written: `1.2 * 1e9` does land on `1200000000` exactly, and `1.07 * 1e9` and `2.01 * 1e3` do not, so the example was replaced with one that is actually true. And `canonicaliseUrl` preserves the URL scheme, which this plan had assumed it folded, so the `http`/`https` fold is implemented as this scorer's own layer and the acceptance criterion says so.
