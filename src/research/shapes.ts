@@ -154,6 +154,11 @@ export function validateWide(
  * declared gap: parse and render have to agree, or a rendered table read back
  * gains a row of cells whose value is the words "not found".
  */
+// The em dash is matched deliberately: a table cell containing one is how a
+// model most often writes "no value here", and treating it as a declared gap
+// rather than as content is the difference between an honest empty cell and a
+// silent hole. It is data being parsed, not prose being written, so the
+// no-em-dash writing rule does not apply to it.
 const DECLARED_GAP = /^(n\/a|na|unknown|unclear|_?not found_?|none|—|–|-{1,2})$/i;
 
 export function parseWideTable(spec: WideSpec, markdown: string): WideRow[] {

@@ -770,7 +770,7 @@ export class Runner {
     await this.store.appendJournal(
       id,
       'created',
-      `Imported from ${args.source} — ${String(markdown.length)} chars, ${String(record.sourceCount)} cited sources. Nothing was charged.`,
+      `Imported from ${args.source}, ${String(markdown.length)} chars, ${String(record.sourceCount)} cited sources. Nothing was charged.`,
     );
 
     // Deliberately NOT titled by the model.
@@ -860,7 +860,7 @@ export class Runner {
     await this.store.appendJournal(
       runId,
       'completed',
-      `Local-loop report accepted — ${String(report.length)} chars, ${String(completed.sourceCount)} cited sources, all from the frozen registry.`,
+      `Local-loop report accepted: ${String(report.length)} chars, ${String(completed.sourceCount)} cited sources, all from the frozen registry.`,
     );
     // Same rule as `importRun`: a path that advertises itself as free does not
     // quietly buy a title.
@@ -926,7 +926,7 @@ export class Runner {
           await this.store.appendJournal(
             run.id,
             'plan',
-            'Research plan proposed — approve it with `research_approve_plan` to spend the run.',
+            'Research plan proposed, approve it with `research_approve_plan` to spend the run.',
           );
           progressed = true;
           break;
@@ -945,7 +945,7 @@ export class Runner {
         await this.store.appendJournal(
           run.id,
           'completed',
-          `Report ready — ${markdown.length} chars, ${next.sourceCount} cited sources.`,
+          `Report ready: ${markdown.length} chars, ${next.sourceCount} cited sources.`,
         );
         // An authoritative figure beside our estimate, when the provider gives
         // one. It is the only way to tell whether the reserved bands are
@@ -1394,7 +1394,7 @@ export function describeRun(run: RunRecord): string {
 export function stateHint(state: RunState): string {
   switch (state) {
     case 'planning':
-      return 'Awaiting plan approval — call `research_approve_plan`.';
+      return 'Awaiting plan approval, call `research_approve_plan`.';
     case 'running':
       return 'In flight. Poll with `research_status`, or replay progress with `research_tail`.';
     case 'stalled':

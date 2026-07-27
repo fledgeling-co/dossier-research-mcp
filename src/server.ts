@@ -160,12 +160,12 @@ const TierSchema = z.enum(RESEARCH_TIERS).describe(
 );
 
 const ArchetypeSchema = z.enum(ARCHETYPE_NAMES).describe(
-  'Research archetype. Omit to auto-select from the question. Exactly one is applied — mixing two is a decomposition trigger, not a prompt expansion.',
+  'Research archetype. Omit to auto-select from the question. Exactly one is applied, mixing two is a decomposition trigger, not a prompt expansion.',
 );
 
 const ScopeSchema = z
   .object({
-    jurisdiction: z.string().max(300).optional().describe('Jurisdiction or geography — load-bearing for regulatory and market work.'),
+    jurisdiction: z.string().max(300).optional().describe('Jurisdiction or geography, load-bearing for regulatory and market work.'),
     timeHorizon: z.string().max(300).optional().describe('e.g. "January 2024 to present, with a 12-month forward outlook".'),
     decisionContext: z.string().max(600).optional().describe('What you will DO with the findings. Drives the analysis lens; this is the single highest-value field here.'),
     analysisLenses: z.array(z.string().max(300)).max(6).optional().describe('Extra analytical frames on top of the archetype defaults.'),
@@ -192,7 +192,7 @@ const CorpusSchema = z
  * confirmed one.
  */
 export const FOLLOWUP_CAVEAT =
-  '---\n\n_**synthesised** — this is inference over one existing report, not new research. It inherits that report’s errors and cannot raise a claim’s confidence: a finding that was single-source there is still single-source here, however confidently it is restated._';
+  '---\n\n_**synthesised**, this is inference over one existing report, not new research. It inherits that report’s errors and cannot raise a claim’s confidence: a finding that was single-source there is still single-source here, however confidently it is restated._';
 
 /**
  * The context a follow-up answers from: the report, plus the frozen registry.
@@ -403,15 +403,15 @@ export function createServer(deps: ServerDeps): FastMCP {
       'Google Gemini Deep Research, wrapped so it is safe for an agent to drive.',
       '',
       'The shape that matters:',
-      '1. `research_plan` — free. Returns the engineered prompt, a cost band, and a contract fingerprint.',
-      '2. `research_start` — spends money. Returns a HANDLE immediately; the run continues for 4-60 minutes with or without you.',
-      '3. `research_status` / `research_tail` — check on it. Runs survive your disconnect and this server restarting.',
-      '4. `research_read` — read the report by OUTLINE first, then by section. It never returns a ~60k-token report inline.',
-      '5. `research_verify_citations` — dereference every cited URL before anyone acts on the findings.',
+      '1. `research_plan`, free. Returns the engineered prompt, a cost band, and a contract fingerprint.',
+      '2. `research_start`, spends money. Returns a HANDLE immediately; the run continues for 4-60 minutes with or without you.',
+      '3. `research_status` / `research_tail`, check on it. Runs survive your disconnect and this server restarting.',
+      '4. `research_read`, read the report by OUTLINE first, then by section. It never returns a ~60k-token report inline.',
+      '5. `research_verify_citations`, dereference every cited URL before anyone acts on the findings.',
       '',
       'Costs are real: roughly $1-3 per fast run and $3-7 per max run, charged whether or not you read the result. There is a budget gate and identical requests de-duplicate onto one run.',
       '',
-      'If you already have an engineered Deep Research brief (from the bundled deep-research-prompt-creator skill, say), pass it as `question` — it is detected and sent verbatim rather than re-wrapped.',
+      'If you already have an engineered Deep Research brief (from the bundled deep-research-prompt-creator skill, say), pass it as `question`, it is detected and sent verbatim rather than re-wrapped.',
     ].join('\n'),
     health: { enabled: true, path: '/health' },
   });
@@ -420,7 +420,7 @@ export function createServer(deps: ServerDeps): FastMCP {
   server.addTool({
     name: 'research_plan',
     description:
-      'Plan a Deep Research run WITHOUT spending anything. Returns the fully engineered prompt, the selected archetype, a cost and duration band, and a contract fingerprint you pass to `research_start`. Always call this first for anything non-trivial — it is free, and it is where you catch a badly-scoped question before it costs $7.',
+      'Plan a Deep Research run WITHOUT spending anything. Returns the fully engineered prompt, the selected archetype, a cost and duration band, and a contract fingerprint you pass to `research_start`. Always call this first for anything non-trivial, it is free, and it is where you catch a badly-scoped question before it costs $7.',
     annotations: { title: 'Plan a research run', readOnlyHint: true, openWorldHint: false },
     parameters: z.object({
       question: z
@@ -527,16 +527,16 @@ export function createServer(deps: ServerDeps): FastMCP {
       return [
         `## Research plan (nothing spent)`,
         '',
-        `- **Archetype**: ${resolved.archetype}${resolved.preEngineered ? ' (your brief was already engineered — it will be sent verbatim)' : ''}`,
+        `- **Archetype**: ${resolved.archetype}${resolved.preEngineered ? ' (your brief was already engineered, it will be sent verbatim)' : ''}`,
         `- **Tier**: ${args.tier} (\`${AGENT_BY_TIER[args.tier]}\`)`,
-        `- **Estimated cost**: ${formatCostBand(band)} — ${band.basis}. This is a guardrail estimate, not a quote.`,
+        `- **Estimated cost**: ${formatCostBand(band)}, ${band.basis}. This is a guardrail estimate, not a quote.`,
         `- **Estimated duration**: ${formatDuration(duration)}.`,
         `- **Sources it will consult**: ${duration.sources.join(' · ')}`,
         `- **What drives that estimate**: ${duration.factors.join('; ')}`,
         `- **Tools**: ${tools.map((t) => t.type).join(', ')}`,
-        `- **Plan review**: ${args.collaborativePlanning ? 'ON — you will approve a plan before the run executes' : 'OFF — the run executes autonomously'}`,
+        `- **Plan review**: ${args.collaborativePlanning ? 'ON, you will approve a plan before the run executes' : 'OFF, the run executes autonomously'}`,
         `- **Budget**: $${budget.committedUsd.toFixed(2)} committed of $${budget.budgetUsd.toFixed(2)} in the last ${budget.windowHours}h; $${budget.remainingUsd.toFixed(2)} remaining.`,
-        `- **Backend**: ${overridden && args.provider ? `${deps.providers.get(args.provider)?.label ?? args.provider} — you asked for this one, so routing was not consulted` : routing.provider ? `${routing.provider.label} — ${routing.reason}` : 'none available'}`,
+        `- **Backend**: ${overridden && args.provider ? `${deps.providers.get(args.provider)?.label ?? args.provider}, you asked for this one, so routing was not consulted` : routing.provider ? `${routing.provider.label}, ${routing.reason}` : 'none available'}`,
         ...(overridden || !routing.runnerUp ? [] : [`- **Runner-up**: ${routing.runnerUp.label}`]),
         ...(!overridden && routing.rejected.length > 0
           ? [`- **Not eligible**: ${routing.rejected.map((r) => `${r.id} (${r.why})`).join('; ')}`]
@@ -550,7 +550,7 @@ export function createServer(deps: ServerDeps): FastMCP {
         '',
         existing
           ? `⚠ **An identical run already exists** (${describeRun(existing)}). Calling \`research_start\` with this fingerprint returns that run instead of paying again.`
-          : `Start it with \`research_start { question, tier: "${args.tier}", contractFingerprint: "${fp}" }\` — pass the same question, tier, scope and corpusStores or the fingerprint will not match.`,
+          : `Start it with \`research_start { question, tier: "${args.tier}", contractFingerprint: "${fp}" }\`, pass the same question, tier, scope and corpusStores or the fingerprint will not match.`,
         '',
         '### Operator notes',
         ...notes.map((n) => `- ${n}`),
@@ -567,7 +567,7 @@ export function createServer(deps: ServerDeps): FastMCP {
   server.addTool({
     name: 'research_start',
     description:
-      'Start a Deep Research run. THIS SPENDS MONEY (~$1-3 fast, ~$3-7 max) and cannot be undone once the agent begins searching. Returns a run handle immediately — the run then proceeds in the background for 4-60 minutes and survives your disconnect. Identical requests inside the dedupe window return the existing run instead of paying twice. Without an explicit `provider` this assembles a PANEL: every capable CLI you already pay for, plus any API backend whose distinctive strength the question calls for. The whole panel is reserved before any member starts, `research_plan` prints it member by member with a cost each, and each member is its own run handle. Name a `provider` to run exactly one backend.',
+      'Start a Deep Research run. THIS SPENDS MONEY (~$1-3 fast, ~$3-7 max) and cannot be undone once the agent begins searching. Returns a run handle immediately, the run then proceeds in the background for 4-60 minutes and survives your disconnect. Identical requests inside the dedupe window return the existing run instead of paying twice. Without an explicit `provider` this assembles a PANEL: every capable CLI you already pay for, plus any API backend whose distinctive strength the question calls for. The whole panel is reserved before any member starts, `research_plan` prints it member by member with a cost each, and each member is its own run handle. Name a `provider` to run exactly one backend.',
     annotations: {
       title: 'Start a research run (spends money)',
       readOnlyHint: false,
@@ -664,7 +664,7 @@ export function createServer(deps: ServerDeps): FastMCP {
       }
       if (args.contractFingerprint && !fingerprintMatches(args.contractFingerprint, expected)) {
         throw new UserError(
-          `Contract mismatch — the arguments changed since \`research_plan\`. Expected ${expected}, got ${args.contractFingerprint}. Re-plan, or drop contractFingerprint to start from these arguments.`,
+          `Contract mismatch, the arguments changed since \`research_plan\`. Expected ${expected}, got ${args.contractFingerprint}. Re-plan, or drop contractFingerprint to start from these arguments.`,
         );
       }
 
@@ -769,7 +769,7 @@ export function createServer(deps: ServerDeps): FastMCP {
 
       if (deduped) {
         return [
-          `**De-duplicated onto an existing run — nothing new was charged.**`,
+          `**De-duplicated onto an existing run, nothing new was charged.**`,
           '',
           `- Handle: \`${run.id}\``,
           `- ${describeRun(run)}`,
@@ -780,10 +780,10 @@ export function createServer(deps: ServerDeps): FastMCP {
       return [
         `**Run started.** Handle: \`${run.id}\``,
         '',
-        `- State: ${run.state} — ${stateHint(run.state)}`,
+        `- State: ${run.state}, ${stateHint(run.state)}`,
         `- Backend: ${backend?.label ?? chosen}`,
         `- Tier: ${run.tier} · archetype: ${run.archetype}`,
-        `- **Estimated cost**: ${formatCostBand(band)} — ${band.basis}. Reserved at the top of that band against your daily ceiling; an estimate, never a quote.`,
+        `- **Estimated cost**: ${formatCostBand(band)}, ${band.basis}. Reserved at the top of that band against your daily ceiling; an estimate, never a quote.`,
         `- **Budget after this run**: $${budgetAfter.remainingUsd.toFixed(2)} of $${budgetAfter.budgetUsd.toFixed(2)} left in the next ${budgetAfter.windowHours}h.`,
         `- **Estimated duration**: ${formatDuration(duration)}.`,
         `- Consulting: ${duration.sources.join(' · ')}`,
@@ -798,7 +798,7 @@ export function createServer(deps: ServerDeps): FastMCP {
   server.addTool({
     name: 'research_approve_plan',
     description:
-      'Approve (optionally amending) the research plan a collaborative-planning run proposed, releasing it to execute. Editing the plan here — pruning tangential branches, injecting missing angles, narrowing broad definitions — is the highest-leverage intervention available on a Deep Research run.',
+      'Approve (optionally amending) the research plan a collaborative-planning run proposed, releasing it to execute. Editing the plan here, pruning tangential branches, injecting missing angles, narrowing broad definitions, is the highest-leverage intervention available on a Deep Research run.',
     annotations: { title: 'Approve a research plan', readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     parameters: z.object({
       runId: z.string().max(64),
@@ -830,7 +830,7 @@ export function createServer(deps: ServerDeps): FastMCP {
   server.addTool({
     name: 'research_status',
     description:
-      'Check one run, or all in-flight runs. Reports liveness separately from status: a run with no forward progress inside the watchdog window is marked `stalled`, which is a state you can branch on — `in_progress` alone cannot distinguish a thinking run from a dead one.',
+      'Check one run, or all in-flight runs. Reports liveness separately from status: a run with no forward progress inside the watchdog window is marked `stalled`, which is a state you can branch on, `in_progress` alone cannot distinguish a thinking run from a dead one.',
     annotations: { title: 'Check research status', readOnlyHint: true, openWorldHint: true },
     parameters: z.object({
       runId: z.string().max(64).optional().describe('Omit to report every non-terminal run.'),
@@ -844,7 +844,7 @@ export function createServer(deps: ServerDeps): FastMCP {
           : await requireRun(deps, args.runId);
         const idleMinutes = Math.round((Date.now() - Date.parse(run.lastProgressAt)) / 60_000);
         const lines = [
-          `### \`${run.id}\` — ${run.state}`,
+          `### \`${run.id}\`, ${run.state}`,
           '',
           `- ${stateHint(run.state)}`,
           `- Tier ${run.tier} · archetype ${run.archetype} · started ${run.createdAt}`,
@@ -874,7 +874,7 @@ export function createServer(deps: ServerDeps): FastMCP {
           lines.push(
             '',
             `Report: ${run.reportChars} chars (~${Math.ceil(run.reportChars / 4)} estimated tokens) · ${run.sourceCount} cited sources.`,
-            'Read it with `research_read { runId }` — outline first; it is far too large to return inline.',
+            'Read it with `research_read { runId }`, outline first; it is far too large to return inline.',
           );
         }
         if (run.error) lines.push('', `**Error:** ${run.error}`);
@@ -890,7 +890,7 @@ export function createServer(deps: ServerDeps): FastMCP {
       return [
         `${active.length} run(s) in flight (max ${budget.maxConcurrent}):`,
         '',
-        ...active.map((r) => `- ${describeRun(r)}${r.label ? ` — ${r.label}` : ''}`),
+        ...active.map((r) => `- ${describeRun(r)}${r.label ? `, ${r.label}` : ''}`),
         '',
         `Budget: $${budget.committedUsd.toFixed(2)} of $${budget.budgetUsd.toFixed(2)} committed in the last ${budget.windowHours}h.`,
       ].join('\n');
@@ -901,7 +901,7 @@ export function createServer(deps: ServerDeps): FastMCP {
   server.addTool({
     name: 'research_tail',
     description:
-      'Replay a run’s durable progress journal from a cursor — pass the returned cursor next time to get only what is new. A client that disconnected at minute 3 of a 45-minute run loses nothing. Note the timing: while a run is in flight the API reports no intermediate steps, so mid-run you see lifecycle events only (created, plan, progress, stalled); the researcher’s reasoning summaries all land in one batch when it completes. For reasoning as it happens you would need the SSE stream, which this server does not yet consume.',
+      'Replay a run’s durable progress journal from a cursor: pass the returned cursor next time to get only what is new. A client that disconnected at minute 3 of a 45-minute run loses nothing. Note the timing: while a run is in flight the API reports no intermediate steps, so mid-run you see lifecycle events only (created, plan, progress, stalled); the researcher’s reasoning summaries all land in one batch when it completes. For reasoning as it happens you would need the SSE stream, which this server does not yet consume.',
     annotations: { title: 'Tail research progress', readOnlyHint: true, openWorldHint: true },
     parameters: z.object({
       runId: z.string().max(64),
@@ -920,9 +920,9 @@ export function createServer(deps: ServerDeps): FastMCP {
       }
       const cursor = page.at(-1)?.seq ?? args.sinceSeq;
       return [
-        `### \`${args.runId}\` — ${run.state} · ${page.length} event(s)`,
+        `### \`${args.runId}\`, ${run.state} · ${page.length} event(s)`,
         '',
-        ...page.map((e) => `**[${e.seq}] ${e.at} ${e.kind}** — ${e.message.slice(0, 2000)}`),
+        ...page.map((e) => `**[${e.seq}] ${e.at} ${e.kind}**, ${e.message.slice(0, 2000)}`),
         '',
         `Next cursor: \`sinceSeq: ${cursor}\`${events.length > page.length ? ` (${events.length - page.length} more buffered)` : ''}`,
       ].join('\n');
@@ -933,7 +933,7 @@ export function createServer(deps: ServerDeps): FastMCP {
   server.addTool({
     name: 'research_read',
     description:
-      'Read a completed report WITHOUT blowing up your context. Defaults to an outline with per-section token estimates; pull individual sections by index or title, grep for a term, or take the full text under an explicit token budget. A Deep Research report is ~60k tokens — returning one inline is how a session dies.',
+      'Read a completed report WITHOUT blowing up your context. Defaults to an outline with per-section token estimates; pull individual sections by index or title, grep for a term, or take the full text under an explicit token budget. A Deep Research report is ~60k tokens, returning one inline is how a session dies.',
     annotations: { title: 'Read a research report', readOnlyHint: true, openWorldHint: false },
     parameters: z.object({
       runId: z.string().max(64),
@@ -997,7 +997,7 @@ export function createServer(deps: ServerDeps): FastMCP {
           return [
             `${hits.length} match(es) for "${args.pattern}":`,
             '',
-            ...hits.map((h) => `- **L${h.line}** _(${h.section})_ — ${h.text}`),
+            ...hits.map((h) => `- **L${h.line}** _(${h.section})_: ${h.text}`),
             '',
             'Read a whole section with `research_read { mode: "section", section: "<heading>" }`.',
             '',
@@ -1145,7 +1145,7 @@ export function createServer(deps: ServerDeps): FastMCP {
               `${args.onlyProblems ? 'Citations that did not resolve' : 'All citations'}:`,
               '',
               ...shown.map(
-                (v) => `- **${v.verdict}**${v.httpStatus ? ` (${v.httpStatus})` : ''} — ${v.url}${v.note ? ` _(${v.note})_` : ''}`,
+                (v) => `- **${v.verdict}**${v.httpStatus ? ` (${v.httpStatus})` : ''}, ${v.url}${v.note ? ` _(${v.note})_` : ''}`,
               ),
             ].join('\n'),
       ]
@@ -1158,7 +1158,7 @@ export function createServer(deps: ServerDeps): FastMCP {
   server.addTool({
     name: 'research_followup',
     description:
-      'Ask a follow-up question against a completed report. Runs as a cheap single model turn continuing the original interaction — it does NOT start a new research run and does not re-search the web. Use it instead of re-reading a whole report into context.',
+      'Ask a follow-up question against a completed report. Runs as a cheap single model turn continuing the original interaction, it does NOT start a new research run and does not re-search the web. Use it instead of re-reading a whole report into context.',
     // Not read-only: a follow-up invokes the utility model, which bills.
     annotations: { title: 'Ask a follow-up', readOnlyHint: false, openWorldHint: true },
     parameters: z.object({
@@ -1234,7 +1234,7 @@ export function createServer(deps: ServerDeps): FastMCP {
   server.addTool({
     name: 'research_claims',
     description:
-      'Extract the report’s load-bearing claims as portable cards — claim, confidence qualifier, source URL. Small enough to pass between agents or into a downstream tool, where a whole report is not. Confidence is copied from the report, never re-assessed.',
+      'Extract the report’s load-bearing claims as portable cards, claim, confidence qualifier, source URL. Small enough to pass between agents or into a downstream tool, where a whole report is not. Confidence is copied from the report, never re-assessed.',
     // Not read-only: this invokes the utility model, which bills. The old
     // `readOnlyHint: true` told callers a paid call was free to retry.
     annotations: { title: 'Extract claim cards', readOnlyHint: false, openWorldHint: true },
@@ -1267,7 +1267,7 @@ export function createServer(deps: ServerDeps): FastMCP {
       const extracted = await deps.utility.extractClaims(markdown, args.limit);
       if (!extracted.ok) {
         throw new UserError(
-          `Claim extraction failed: ${extracted.error}. The report is unaffected — read its Evidence Table instead: \`research_read { mode: "section", section: "Evidence Table" }\`.`,
+          `Claim extraction failed: ${extracted.error}. The report is unaffected, read its Evidence Table instead: \`research_read { mode: "section", section: "Evidence Table" }\`.`,
         );
       }
       return {
@@ -1281,7 +1281,7 @@ export function createServer(deps: ServerDeps): FastMCP {
   // ─────────────────────────────────────────────────────── list / cancel ────
   server.addTool({
     name: 'research_list',
-    description: 'List research runs, newest first, with state, tier, cost and title. Cheap — it reads the local store, not the API.',
+    description: 'List research runs, newest first, with state, tier, cost and title. Cheap, it reads the local store, not the API.',
     annotations: { title: 'List research runs', readOnlyHint: true, openWorldHint: false },
     parameters: z.object({
       state: z.enum(RUN_STATES).optional().describe('Filter by state.'),
@@ -1309,7 +1309,7 @@ export function createServer(deps: ServerDeps): FastMCP {
 
   server.addTool({
     name: 'research_cancel',
-    description: 'Cancel an in-flight run. The estimated cost already committed to the ledger is not refunded — Google bills for work already done.',
+    description: 'Cancel an in-flight run. The estimated cost already committed to the ledger is not refunded, Google bills for work already done.',
     annotations: { title: 'Cancel a research run', readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     parameters: z.object({ runId: z.string().max(64) }),
     execute: async (args) => {
@@ -1332,7 +1332,7 @@ export function createServer(deps: ServerDeps): FastMCP {
   server.addTool({
     name: 'research_budget',
     description:
-      'Report the spend position: committed dollars in the rolling window, remaining headroom, runs in flight, and the top spenders. Read this before starting an expensive run — the gate refuses a run that would cross the ceiling, and this is how you see the wall before you hit it.',
+      'Report the spend position: committed dollars in the rolling window, remaining headroom, runs in flight, and the top spenders. Read this before starting an expensive run, the gate refuses a run that would cross the ceiling, and this is how you see the wall before you hit it.',
     annotations: { title: 'Check the research budget', readOnlyHint: true, openWorldHint: false },
     parameters: z.object({}),
     execute: async () => {
@@ -1349,9 +1349,9 @@ export function createServer(deps: ServerDeps): FastMCP {
         snapshot.budgetUsd === 0 ? '- ⚠ The budget gate is DISABLED (DOSSIER_BUDGET_USD=0).' : '',
         '',
         top.length > 0 ? '**Largest commitments:**' : '',
-        ...top.map((e) => `- $${e.estimatedCostUsd.toFixed(2)} · ${e.tier} · \`${e.runId}\`${e.label ? ` — ${e.label}` : ''}`),
+        ...top.map((e) => `- $${e.estimatedCostUsd.toFixed(2)} · ${e.tier} · \`${e.runId}\`${e.label ? `, ${e.label}` : ''}`),
         '',
-        '_Costs are Google’s published per-task estimate bands, committed at start. They are a spend guardrail, not an invoice — reconcile against your Google billing for actuals._',
+        '_Costs are Google’s published per-task estimate bands, committed at start. They are a spend guardrail, not an invoice, reconcile against your Google billing for actuals._',
       ]
         .filter(Boolean)
         .join('\n');
@@ -1452,11 +1452,11 @@ function registerShapeTools(server: FastMCP, deps: ServerDeps): void {
       runId: run.id,
       text: [
         deduped
-          ? `**De-duplicated onto an existing run — nothing new was charged.** Handle: \`${run.id}\``
+          ? `**De-duplicated onto an existing run, nothing new was charged.** Handle: \`${run.id}\``
           : `**Run started.** Handle: \`${run.id}\``,
         '',
-        `- Backend: **${chosen.label}** — ${args.provider ? 'you named it explicitly' : routing.reason}`,
-        `- Estimated cost: ${formatCostBand(estimate.cost)} — ${estimate.cost.basis}. A guardrail estimate, never a quote.`,
+        `- Backend: **${chosen.label}**, ${args.provider ? 'you named it explicitly' : routing.reason}`,
+        `- Estimated cost: ${formatCostBand(estimate.cost)}, ${estimate.cost.basis}. A guardrail estimate, never a quote.`,
         `- Estimated duration: ${formatDuration(estimate.duration)}`,
         ...describeShaping(shaped).map((l) => `- ${l}`),
         schemaEnforced
@@ -1471,7 +1471,7 @@ function registerShapeTools(server: FastMCP, deps: ServerDeps): void {
   server.addTool({
     name: 'research_wide',
     description:
-      'Research a MATRIX rather than a narrative: N entities across M fields, every cell filled, cited, or explicitly marked uncertain. THIS SPENDS MONEY. Use this when the answer is a table — "which of these tools support X, and what do they claim about Y" — because asking a deep-research backend for a table in prose is how you get five pages of essay and no table. Call it again with `runId` once the run completes to validate the returned matrix against what you asked for.',
+      'Research a MATRIX rather than a narrative: N entities across M fields, every cell filled, cited, or explicitly marked uncertain. THIS SPENDS MONEY. Use this when the answer is a table, "which of these tools support X, and what do they claim about Y", because asking a deep-research backend for a table in prose is how you get five pages of essay and no table. Call it again with `runId` once the run completes to validate the returned matrix against what you asked for.',
     annotations: {
       title: 'Wide research: entities × fields (spends money)',
       readOnlyHint: false,
@@ -1574,7 +1574,7 @@ function registerShapeTools(server: FastMCP, deps: ServerDeps): void {
               ].join('\n')
             : '',
           rows.length === 0
-            ? '_No table was found in the report. Read it directly with `research_read` — the backend answered in prose, which is exactly the failure mode wide research exists to avoid._'
+            ? '_No table was found in the report. Read it directly with `research_read`, the backend answered in prose, which is exactly the failure mode wide research exists to avoid._'
             : `_Parsed ${String(rows.length)} row(s) from the report’s first markdown table. Read the full report with \`research_read { runId: "${run.id}" }\`._`,
         ].join('\n');
       }
@@ -1654,7 +1654,7 @@ function registerShapeTools(server: FastMCP, deps: ServerDeps): void {
   server.addTool({
     name: 'research_compare',
     description:
-      'Run the SAME brief on two or more backends and diff what they claim. THIS SPENDS MONEY ONCE PER BACKEND — two providers is two full research runs. Worth it when a number is load-bearing: the disagreements are the output, and they are the one thing a single-provider tool can never show you. Call it again with `runIds` once the runs finish to get the diff.',
+      'Run the SAME brief on two or more backends and diff what they claim. THIS SPENDS MONEY ONCE PER BACKEND, two providers is two full research runs. Worth it when a number is load-bearing: the disagreements are the output, and they are the one thing a single-provider tool can never show you. Call it again with `runIds` once the runs finish to get the diff.',
     annotations: {
       title: 'Compare backends on one brief (spends money per backend)',
       readOnlyHint: false,
@@ -1719,7 +1719,7 @@ function registerShapeTools(server: FastMCP, deps: ServerDeps): void {
           '',
           `- Claims more than one backend made: **${String(shared.length)}**`,
           `- Of those, backed by 3+ independent domains: **${String(corroborated.length)}**`,
-          `- Of those, agreeing while citing ONE domain: **${String(sameSource.length)}** — agreement here is not evidence.`,
+          `- Of those, agreeing while citing ONE domain: **${String(sameSource.length)}**, agreement here is not evidence.`,
           '',
           '### Agreed claims',
           '',
@@ -1729,7 +1729,7 @@ function registerShapeTools(server: FastMCP, deps: ServerDeps): void {
                 .slice(0, 40)
                 .map(
                   (s) =>
-                    `- **${s.support}** (${String(s.independentDomains)} domain(s)) — ${s.claim}${s.note ? `\n    _${s.note}_` : ''}`,
+                    `- **${s.support}** (${String(s.independentDomains)} domain(s)), ${s.claim}${s.note ? `\n    _${s.note}_` : ''}`,
                 )
                 .join('\n'),
           '',
@@ -1785,7 +1785,7 @@ function registerShapeTools(server: FastMCP, deps: ServerDeps): void {
         return [
           `**Started ${String(started.length)} of ${String(usable.length)} run(s), which is not enough to compare.**`,
           ...started.map((id) => `- \`${id}\` is running and IS being billed. Cancel it with \`research_cancel\` if you do not want it.`),
-          ...failed.map((f) => `- failed to start — ${f}`),
+          ...failed.map((f) => `- failed to start: ${f}`),
         ].join('\n');
       }
 
@@ -1793,7 +1793,7 @@ function registerShapeTools(server: FastMCP, deps: ServerDeps): void {
         `**Comparison started: ${String(started.length)} independent runs, each billed separately.**`,
         '',
         ...started.map((id) => `- \`${id}\``),
-        ...failed.map((f) => `- ⚠ did not start — ${f}`),
+        ...failed.map((f) => `- ⚠ did not start: ${f}`),
         '',
         `Poll them with \`research_status\`. When they have all completed, diff them with:`,
         '```',
@@ -1864,7 +1864,7 @@ function registerEvidenceTools(server: FastMCP, deps: ServerDeps): void {
   server.addTool({
     name: 'research_synthesise',
     description:
-      'Merge several completed runs into ONE evidence base and distil a single comprehensive report. Different from `research_compare`, which diffs what backends claim and leaves you two reports: this produces one, with every claim carrying the backend(s) behind it. Free — it merges reports you have already paid for, and makes no research call. Pass `runIds` of 2+ completed runs. The merge is deterministic (deduplicate by canonical URL, count INDEPENDENT DOMAINS, profile the sources); the distillation is done by a model if one is configured, otherwise handed to you with the frozen registry to write yourself. To fan out in the first place, use `research_compare { question }`, which starts one run per backend and bills each.',
+      'Merge several completed runs into ONE evidence base and distil a single comprehensive report. Different from `research_compare`, which diffs what backends claim and leaves you two reports: this produces one, with every claim carrying the backend(s) behind it. Free, it merges reports you have already paid for, and makes no research call. Pass `runIds` of 2+ completed runs. The merge is deterministic (deduplicate by canonical URL, count INDEPENDENT DOMAINS, profile the sources); the distillation is done by a model if one is configured, otherwise handed to you with the frozen registry to write yourself. To fan out in the first place, use `research_compare { question }`, which starts one run per backend and bills each.',
     annotations: {
       title: 'Merge several runs into one report',
       readOnlyHint: false,
@@ -1888,12 +1888,12 @@ function registerEvidenceTools(server: FastMCP, deps: ServerDeps): void {
       for (const id of args.runIds) {
         const run = await store.getRun(id);
         if (!run) {
-          missing.push(`\`${id}\` — no such run`);
+          missing.push(`\`${id}\`, no such run`);
           continue;
         }
         const markdown = await store.readReport(id);
         if (!markdown) {
-          missing.push(`\`${id}\` — no report (state: ${run.state})`);
+          missing.push(`\`${id}\`, no report (state: ${run.state})`);
           continue;
         }
         runs.push({ runId: id, provider: run.provider, model: run.model, markdown });
@@ -1915,7 +1915,7 @@ function registerEvidenceTools(server: FastMCP, deps: ServerDeps): void {
         `## Merged evidence from ${String(runs.length)} run(s)`,
         '',
         ...merged.runs.map(
-          (r) => `- \`${r.runId}\` — **${r.provider}**${r.model ? ` (\`${r.model}\`)` : ''}, ${String(r.sourceCount)} cited source(s)`,
+          (r) => `- \`${r.runId}\`, **${r.provider}**${r.model ? ` (\`${r.model}\`)` : ''}, ${String(r.sourceCount)} cited source(s)`,
         ),
         ...missing.map((m) => `- ⚠ skipped: ${m}`),
         '',
@@ -1933,7 +1933,7 @@ function registerEvidenceTools(server: FastMCP, deps: ServerDeps): void {
           '',
           '## Now write the merged report',
           '',
-          'The evidence is merged; the synthesis is yours. Read each source report with `research_read { runId, mode: "section" }` — the full text of each is on disk, and the paths are in that tool\'s output.',
+          'The evidence is merged; the synthesis is yours. Read each source report with `research_read { runId, mode: "section" }`, the full text of each is on disk, and the paths are in that tool\'s output.',
           '',
           '**The rules that make a merged report worth more than the reports it came from:**',
           '',
@@ -1975,7 +1975,7 @@ function registerEvidenceTools(server: FastMCP, deps: ServerDeps): void {
         '',
         ...checked.shared.map((v) => {
           const icon = v.support === 'corroborated' ? '✅' : v.support === 'weakly-supported' ? '🟡' : '⚠️';
-          return `- ${icon} **${v.support}** (${String(v.independentDomains)} independent domain(s)) — ${v.claim.slice(0, 300)}`;
+          return `- ${icon} **${v.support}** (${String(v.independentDomains)} independent domain(s)), ${v.claim.slice(0, 300)}`;
         }),
         '',
         '## Claims only one backend made',
@@ -2152,7 +2152,7 @@ function registerEvidenceTools(server: FastMCP, deps: ServerDeps): void {
         } catch (e: unknown) {
           tally.fetch_failed += 1;
           results.push(
-            `- ⚫ **could not fetch** — ${claim.claim.slice(0, 200)}\n    ${url}\n    _${e instanceof Error ? e.message.slice(0, 200) : 'fetch failed'}_`,
+            `- ⚫ **could not fetch**, ${claim.claim.slice(0, 200)}\n    ${url}\n    _${e instanceof Error ? e.message.slice(0, 200) : 'fetch failed'}_`,
           );
           continue;
         }
@@ -2160,7 +2160,7 @@ function registerEvidenceTools(server: FastMCP, deps: ServerDeps): void {
         const judged = await utility.judgeSupport(claim.claim, text);
         if (!judged.ok) {
           tally.fetch_failed += 1;
-          results.push(`- ⚫ **could not judge** — ${claim.claim.slice(0, 200)}\n    _${judged.error.slice(0, 200)}_`);
+          results.push(`- ⚫ **could not judge**, ${claim.claim.slice(0, 200)}\n    _${judged.error.slice(0, 200)}_`);
           continue;
         }
         const v = judged.value;
@@ -2168,7 +2168,7 @@ function registerEvidenceTools(server: FastMCP, deps: ServerDeps): void {
         const icon = { supports: '✅', partially_supports: '🟡', contradicts: '❌', not_addressed: '⚠️', unreadable: '⚫' }[v.verdict];
         results.push(
           [
-            `- ${icon} **${v.verdict}** — ${claim.claim.slice(0, 300)}`,
+            `- ${icon} **${v.verdict}**, ${claim.claim.slice(0, 300)}`,
             `    ${url}`,
             v.quote ? `    > ${v.quote.slice(0, 300)}` : '',
             v.note ? `    _${v.note.slice(0, 250)}_` : '',
@@ -2194,7 +2194,7 @@ function registerEvidenceTools(server: FastMCP, deps: ServerDeps): void {
         ...results,
         '',
         '> [!IMPORTANT]',
-        '> This is a sample, judged by a model reading one page. It catches a source that does not contain the claim attached to it, which link-checking cannot. It does not catch a report whose facts are each correct and whose conclusion does not follow — for that, read the reasoning yourself, or run `research_counter_review`.',
+        '> This is a sample, judged by a model reading one page. It catches a source that does not contain the claim attached to it, which link-checking cannot. It does not catch a report whose facts are each correct and whose conclusion does not follow, for that, read the reasoning yourself, or run `research_counter_review`.',
       ].join('\n');
     },
   });
@@ -2300,7 +2300,7 @@ function registerEvidenceTools(server: FastMCP, deps: ServerDeps): void {
   server.addTool({
     name: 'research_evidence',
     description:
-      'Profile the sources a report actually used: what kind they are, how concentrated they are, and how they measure against advisory quality floors. Free — it reads the stored report and classifies URLs, with no fetching and no model call. Also returns the numbered citation registry, which is the list a follow-up should cite from rather than from the report’s prose.',
+      'Profile the sources a report actually used: what kind they are, how concentrated they are, and how they measure against advisory quality floors. Free, it reads the stored report and classifies URLs, with no fetching and no model call. Also returns the numbered citation registry, which is the list a follow-up should cite from rather than from the report’s prose.',
     annotations: { title: 'Profile a report’s evidence', readOnlyHint: true, openWorldHint: false },
     parameters: z.object({
       runId: z.string().max(64),
@@ -2401,7 +2401,7 @@ function renderClaimVerdicts(
     ] ?? '·';
     lines.push(
       [
-        `- ${icon} **${v.verdict}** — ${claim.claim.slice(0, 300)}`,
+        `- ${icon} **${v.verdict}**, ${claim.claim.slice(0, 300)}`,
         `    ${claim.url}`,
         v.quote ? `    > ${v.quote.slice(0, 300)}` : '',
         v.note ? `    _${v.note.slice(0, 250)}_` : '',
@@ -2469,7 +2469,7 @@ function renderCounterReview(runId: string, results: readonly LensResult[], expe
             ? '_Nothing found on this lens._'
             : [...(r.issues ?? [])]
                 .sort((a, b) => severityRank(a.severity) - severityRank(b.severity))
-                .map((x) => `- **${x.severity}** · ${x.where} — ${x.problem}`)
+                .map((x) => `- **${x.severity}** · ${x.where}, ${x.problem}`)
                 .join('\n'),
         ].join('\n'),
   );
@@ -2927,7 +2927,7 @@ function registerLoopTools(server: FastMCP, deps: ServerDeps): void {
         '',
         renderDeepNotes(frozen.session),
         '',
-        '## The registry — cite ONLY from this',
+        '## The registry, cite ONLY from this',
         '',
         renderRegistry(frozen.session),
         '',
@@ -2965,7 +2965,7 @@ function registerLoopTools(server: FastMCP, deps: ServerDeps): void {
       const session = await requireSession(args.runId);
       if (!session.frozenAt) {
         throw new UserError(
-          `The registry for \`${args.runId}\` has not been frozen. Call \`research_local_draft\` first — a draft checked against a registry that was still growing is not checked at all.`,
+          `The registry for \`${args.runId}\` has not been frozen. Call \`research_local_draft\` first, a draft checked against a registry that was still growing is not checked at all.`,
         );
       }
       const verdict = validateDraft(session, args.markdown);
@@ -2994,9 +2994,9 @@ function registerLoopTools(server: FastMCP, deps: ServerDeps): void {
           : '- ⚠ Nothing in the draft is marked as inference. If it draws any conclusion the sources do not state outright, mark it: a synthesised claim reads exactly like a sourced one, and that is how a wrong conclusion built from correct facts survives review.',
         '',
         'Next, and it is not optional on anything you will act on:',
-        `- \`research_counter_review { runId: "${record.id}" }\` — four adversarial lenses`,
-        `- \`research_verify_citations { runId: "${record.id}" }\` — dereference every URL`,
-        `- \`research_evidence { runId: "${record.id}" }\` — the source profile`,
+        `- \`research_counter_review { runId: "${record.id}" }\`, four adversarial lenses`,
+        `- \`research_verify_citations { runId: "${record.id}" }\`, dereference every URL`,
+        `- \`research_evidence { runId: "${record.id}" }\`, the source profile`,
       ].join('\n');
     },
   });
@@ -3024,8 +3024,8 @@ function registerLocalCorpusTools(server: FastMCP, deps: ServerDeps): void {
         '',
         ...rows.map((r) =>
           r.exists
-            ? `- \`${r.root}\` — ${String(r.files)} readable file(s)`
-            : `- \`${r.root}\` — ⚠ missing or not a directory`,
+            ? `- \`${r.root}\`, ${String(r.files)} readable file(s)`
+            : `- \`${r.root}\`, ⚠ missing or not a directory`,
         ),
         '',
         'Search them with `corpus_local_search`. Nothing here is sent anywhere.',
@@ -3096,7 +3096,7 @@ function registerCorpusTools(server: FastMCP, deps: ServerDeps): void {
         '',
         ...stores.map(
           (s) =>
-            `- \`${s.name}\`${s.displayName ? ` — ${s.displayName}` : ''} · ${s.activeDocuments ?? 0} active${s.pendingDocuments ? `, ${s.pendingDocuments} pending` : ''}`,
+            `- \`${s.name}\`${s.displayName ? `, ${s.displayName}` : ''} · ${s.activeDocuments ?? 0} active${s.pendingDocuments ? `, ${s.pendingDocuments} pending` : ''}`,
         ),
         '',
         'Pass a store name in `corpusStores` on `research_plan` / `research_start` to ground a run in it.',
@@ -3118,7 +3118,7 @@ function registerCorpusTools(server: FastMCP, deps: ServerDeps): void {
   server.addTool({
     name: 'corpus_add_file',
     description:
-      'UPLOAD a local file to a File Search store so research runs can search it. This sends the file’s contents to Google — it leaves your machine. Only add documents you are willing to disclose to a third-party API.',
+      'UPLOAD a local file to a File Search store so research runs can search it. This sends the file’s contents to Google, it leaves your machine. Only add documents you are willing to disclose to a third-party API.',
     annotations: { title: 'Upload a document to a corpus (sends data to Google)', readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     parameters: z.object({
       storeName: z.string().max(300).describe('fileSearchStores/… from `corpus_list`.'),
@@ -3163,7 +3163,7 @@ function registerAgentTools(server: FastMCP, deps: ServerDeps): void {
   server.addTool({
     name: 'agent_create',
     description:
-      'Create a PERSISTED custom research agent (the Managed Agents API — the other Gemini research surface). Unlike a Deep Research run, this gives you a reusable agent with a Linux sandbox that can run code, write files, and carry your house methodology across every run. Constraint worth knowing: at preview the only base agent is Antigravity — you cannot derive a custom agent from deep-research-*. See docs/deep-research-api-vs-agent.md for which surface fits your job.',
+      'Create a PERSISTED custom research agent (the Managed Agents API, the other Gemini research surface). Unlike a Deep Research run, this gives you a reusable agent with a Linux sandbox that can run code, write files, and carry your house methodology across every run. Constraint worth knowing: at preview the only base agent is Antigravity, you cannot derive a custom agent from deep-research-*. See docs/deep-research-api-vs-agent.md for which surface fits your job.',
     annotations: { title: 'Create a managed research agent', readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     parameters: z.object({
       id: z.string().min(1).max(63).describe('Lowercase id, unique in your project. Cannot start with a Google-reserved prefix (gemini-, google-, antigravity-, …).'),
@@ -3178,7 +3178,7 @@ function registerAgentTools(server: FastMCP, deps: ServerDeps): void {
         .string()
         .max(20_000)
         .optional()
-        .describe('Contents mounted at .agents/AGENTS.md — additive with systemInstruction.'),
+        .describe('Contents mounted at .agents/AGENTS.md, additive with systemInstruction.'),
       skillsRepository: z
         .string()
         .max(500)
@@ -3226,7 +3226,7 @@ function registerAgentTools(server: FastMCP, deps: ServerDeps): void {
     execute: async () => {
       const agents = await requireAgents().list();
       if (agents.length === 0) return 'No managed agents. Create one with `agent_create`.';
-      return [`${agents.length} managed agent(s):`, '', ...agents.map((a) => `- \`${a.id}\`${a.description ? ` — ${a.description}` : ''}`)].join('\n');
+      return [`${agents.length} managed agent(s):`, '', ...agents.map((a) => `- \`${a.id}\`${a.description ? `, ${a.description}` : ''}`)].join('\n');
     },
   });
 
@@ -3262,7 +3262,7 @@ function registerAgentTools(server: FastMCP, deps: ServerDeps): void {
         result.outputText || '(the agent returned no text output)',
         '',
         '---',
-        `_interactionId: \`${result.interactionId}\` · environmentId: \`${result.environmentId}\` — pass either back to continue._`,
+        `_interactionId: \`${result.interactionId}\` · environmentId: \`${result.environmentId}\`, pass either back to continue._`,
       ].join('\n');
     },
   });
@@ -3388,7 +3388,7 @@ function registerResources(server: FastMCP, deps: ServerDeps): void {
   server.addTool({
     name: 'research_import',
     description:
-      'Import a research report that was produced somewhere else — a Gemini or ChatGPT share link, or markdown you paste in — and store it as a normal Dossier run. Spends nothing on research. This is how you use a SUBSCRIPTION you already pay for instead of an API balance: you run the report in the web app yourself, share it, and paste the link here. Once imported it reads, greps, profiles and citation-verifies exactly like an API-sourced run.',
+      'Import a research report that was produced somewhere else, a Gemini or ChatGPT share link, or markdown you paste in, and store it as a normal Dossier run. Spends nothing on research. This is how you use a SUBSCRIPTION you already pay for instead of an API balance: you run the report in the web app yourself, share it, and paste the link here. Once imported it reads, greps, profiles and citation-verifies exactly like an API-sourced run.',
     annotations: {
       title: 'Import a report from elsewhere',
       readOnlyHint: false,
@@ -3426,7 +3426,7 @@ function registerResources(server: FastMCP, deps: ServerDeps): void {
         const fetched = await safeFetch(args.url, { method: 'GET', timeoutMs: 20_000, maxBytes: 4 * 1024 * 1024 }).catch(
           (e: unknown) => {
             throw new UserError(
-              `Could not fetch that link: ${e instanceof Error ? e.message : String(e)}. If it needs your login it cannot be fetched from here — open it yourself and paste the text as \`markdown\`.`,
+              `Could not fetch that link: ${e instanceof Error ? e.message : String(e)}. If it needs your login it cannot be fetched from here, open it yourself and paste the text as \`markdown\`.`,
             );
           },
         );
@@ -3673,16 +3673,16 @@ function registerPrompts(server: FastMCP): void {
   server.addPrompt({
     name: 'research-red-team',
     description:
-      'Adversarially audit a completed report. Secondary-model validation catches the failure modes the producing model cannot see in itself — stripped sources, aggregator reliance, confidence inflation.',
+      'Adversarially audit a completed report. Secondary-model validation catches the failure modes the producing model cannot see in itself, stripped sources, aggregator reliance, confidence inflation.',
     arguments: [{ name: 'runId', description: 'The completed run handle', required: true }],
     load: async (args) => {
       return [
         `Red-team the report from run \`${args.runId}\`.`,
         '',
-        'Work in this order, and do not summarise the report — audit it:',
+        'Work in this order, and do not summarise the report, audit it:',
         '',
         '1. `research_verify_citations { runId, onlyProblems: true }`. Any `not_found` or `invalid_url` verdict on a citation attached to a quantitative claim invalidates that claim until it is re-sourced.',
-        '2. `research_read { runId, mode: "section", section: "Evidence Table" }`. Every major claim should appear here with a specific source and date. Claims in the prose that are absent from the table are unsupported — list them.',
+        '2. `research_read { runId, mode: "section", section: "Evidence Table" }`. Every major claim should appear here with a specific source and date. Claims in the prose that are absent from the table are unsupported, list them.',
         '3. `research_read { runId, mode: "grep", pattern: "High Confidence" }`. For each, ask whether the cited evidence actually supports that confidence level, or whether a single secondary source has been dressed up as consensus.',
         '4. `research_read { runId, mode: "section", section: "Knowledge Gaps" }`. A report with no acknowledged gaps has hidden them, not avoided them. Name what is missing that the gaps section does not.',
         '5. Check for aggregator reliance: `research_read { runId, mode: "grep", pattern: "SECONDARY" }` and scan cited domains for listicles, content farms, and vendor comparison pages presented as evidence. `research_evidence { runId }` does the domain-concentration arithmetic for you and costs nothing.',
@@ -3792,7 +3792,7 @@ function registerPrompts(server: FastMCP): void {
         '# Driving the Gemini web app directly',
         '',
         '> [!CAUTION]',
-        '> **Read this before automating anything.** `gemini.google.com/robots.txt` disallows `/app/` and `/chat/`, and Google\'s Terms of Service prohibit "using automated means to access content from any of our services" where that violates machine-readable instructions on their pages — naming robots.txt as the example. The Gemini web app is at `/app`. On a plain reading, driving that UI with an agent is the thing the clause describes, and the practical exposure is **suspension of your Google account**, not a policy footnote.',
+        '> **Read this before automating anything.** `gemini.google.com/robots.txt` disallows `/app/` and `/chat/`, and Google\'s Terms of Service prohibit "using automated means to access content from any of our services" where that violates machine-readable instructions on their pages, naming robots.txt as the example. The Gemini web app is at `/app`. On a plain reading, driving that UI with an agent is the thing the clause describes, and the practical exposure is **suspension of your Google account**, not a policy footnote.',
         '>',
         '> The honest counterweight: robots.txt is a crawler convention, and an agent acting inside your own signed-in session at your direction is arguably not crawling. Google has published no carve-out and there is no enforcement precedent either way. It is untested rather than settled, and the text is broad enough to cover it. That is your call to make, which is why this prompt states it rather than deciding for you.',
         '>',
@@ -3820,7 +3820,7 @@ function registerPrompts(server: FastMCP): void {
 
   server.addPrompt({
     name: 'research-triage',
-    description: 'Decide whether a question warrants a Deep Research run at all, and at which tier — before spending $1-7 and up to an hour.',
+    description: 'Decide whether a question warrants a Deep Research run at all, and at which tier, before spending $1-7 and up to an hour.',
     arguments: [{ name: 'question', description: 'The question you are considering researching', required: true }],
     load: async (args) => {
       const question = args.question ?? '';
@@ -3829,11 +3829,11 @@ function registerPrompts(server: FastMCP): void {
         '',
         'Deep Research costs $1-7 and takes 4-60 minutes. Answer these in order and state the verdict plainly:',
         '',
-        '1. **Would a single model call answer it?** Definitions, known APIs, settled facts, anything in your training data — answer it directly and stop. Most questions land here.',
-        '2. **Would one web search answer it?** A current price, a version number, a single document — search, do not research.',
+        '1. **Would a single model call answer it?** Definitions, known APIs, settled facts, anything in your training data, answer it directly and stop. Most questions land here.',
+        '2. **Would one web search answer it?** A current price, a version number, a single document, search, do not research.',
         '3. **Does it need synthesis across many sources, with citations someone will act on?** That is the actual case for Deep Research.',
         '4. **Tier**: `fast` for a scoped question with a handful of sub-questions. `max` only when breadth genuinely warrants roughly double the searches and double the cost.',
-        '5. **Scope check**: is this one archetype (technical / competitive / regulatory / academic / forecasting), or two? Two is a decomposition trigger — split it into separate runs rather than widening one prompt.',
+        '5. **Scope check**: is this one archetype (technical / competitive / regulatory / academic / forecasting), or two? Two is a decomposition trigger, split it into separate runs rather than widening one prompt.',
         '',
         `Then either answer directly, or call \`research_plan { question: "${question.slice(0, 200).replace(/"/g, "'")}" }\` and review the cost band before starting.`,
       ].join('\n');

@@ -232,20 +232,20 @@ export interface BrowserDriver {
 export const BROWSER_DRIVERS: readonly BrowserDriver[] = [
   {
     id: 'claude-in-chrome',
-    label: 'Claude in Chrome — uses the Chrome you are already signed into',
+    label: 'Claude in Chrome, uses the Chrome you are already signed into',
     install: 'claude --chrome',
     note: 'Needs the Claude Chrome extension. The simplest of the three if you already use Claude Code.',
   },
   {
     id: 'chrome-devtools',
-    label: 'Chrome DevTools MCP — attaches to your signed-in Chrome',
+    label: 'Chrome DevTools MCP, attaches to your signed-in Chrome',
     install: 'claude mcp add chrome-devtools --scope user -- npx chrome-devtools-mcp@latest --autoConnect',
     note: 'Chrome 144 or later. You approve the connection once at chrome://inspect.',
     detectAs: 'chrome-devtools-mcp',
   },
   {
     id: 'playwright',
-    label: 'Playwright MCP — attaches through a browser extension',
+    label: 'Playwright MCP, attaches through a browser extension',
     install: 'claude mcp add playwright --scope user -- npx @playwright/mcp@latest --extension',
     note: 'Needs the Playwright extension installed, and you pick which tab it may use.',
     detectAs: 'playwright-mcp',

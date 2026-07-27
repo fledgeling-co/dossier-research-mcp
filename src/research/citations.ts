@@ -45,7 +45,7 @@ async function verifyOne(url: string, timeoutMs: number): Promise<CitationVerdic
         verdict: 'blocked',
         httpStatus: result.status,
         checkedAt,
-        note: 'Paywalled, login-gated, or bot-blocked — existence is plausible but unconfirmed.',
+        note: 'Paywalled, login-gated, or bot-blocked, existence is plausible but unconfirmed.',
       };
     }
     return {
@@ -67,7 +67,7 @@ async function verifyOne(url: string, timeoutMs: number): Promise<CitationVerdic
           url,
           verdict: 'blocked',
           checkedAt,
-          note: `${e.message} — the source is probably fine; open it in a browser to confirm.`,
+          note: `${e.message}, the source is probably fine; open it in a browser to confirm.`,
         };
       }
       return { url, verdict: 'invalid_url', checkedAt, note: e.message.slice(0, 300) };
@@ -155,10 +155,10 @@ export function renderScorecard(card: CitationScorecard): string {
   if (card.total === 0) return 'No citations found in this report.';
   const pct = (n: number): string => `${Math.round((n / card.total) * 100)}%`;
   return [
-    `Citation scorecard: ${card.badge.toUpperCase()} — ${card.live}/${card.total} resolved (${pct(card.live)}).`,
+    `Citation scorecard: ${card.badge.toUpperCase()}, ${card.live}/${card.total} resolved (${pct(card.live)}).`,
     `  live ${card.live} · not_found ${card.notFound} · blocked ${card.blocked} · unreachable ${card.unreachable} · invalid ${card.invalid} · unverified ${card.unverified}`,
     card.badge === 'suspect'
       ? '  ⚠ A high share of citations do not resolve. Treat quantitative claims in this report as unconfirmed until checked by hand.'
-      : '  Note: "live" means the URL resolves — it does not mean the source supports the claim it is attached to.',
+      : '  Note: "live" means the URL resolves, it does not mean the source supports the claim it is attached to.',
   ].join('\n');
 }

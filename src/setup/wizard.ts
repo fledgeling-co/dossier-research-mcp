@@ -101,9 +101,9 @@ async function reportExisting(): Promise<CliStatus[]> {
   const ambiguous = found.filter((c) => c.state === 'ambiguous');
 
   const lines: string[] = [];
-  for (const c of ready) lines.push(`✓ ${c.label} — installed and signed in`);
-  for (const c of unauthed) lines.push(`• ${c.label} — installed, but not signed in yet`);
-  for (const c of ambiguous) lines.push(`? ${c.label} — ${c.detail}`);
+  for (const c of ready) lines.push(`✓ ${c.label}, installed and signed in`);
+  for (const c of unauthed) lines.push(`• ${c.label}, installed, but not signed in yet`);
+  for (const c of ambiguous) lines.push(`? ${c.label}, ${c.detail}`);
   if (lines.length === 0) lines.push('Nothing found yet. That is fine, we will sort it out.');
 
   p.note(lines.join('\n'), 'On this machine');
@@ -119,7 +119,7 @@ async function chooseClis(found: readonly CliStatus[]): Promise<string[] | null>
       '',
       'Pick any you already subscribe to. You can pick none.',
     ].join('\n'),
-    'Step 1 of 4 — subscriptions you already have',
+    'Step 1 of 4, subscriptions you already have',
   );
 
   const options = CLI_GUIDE.map((c) => {
@@ -191,8 +191,8 @@ async function setUpClis(ids: readonly string[], found: readonly CliStatus[]): P
   const notReady = after.filter((c) => ids.includes(c.id) && c.state !== 'ready');
   p.note(
     [
-      ...ready.map((c) => `✓ ${c.label} — ready`),
-      ...notReady.map((c) => `• ${c.label} — ${c.detail}`),
+      ...ready.map((c) => `✓ ${c.label}, ready`),
+      ...notReady.map((c) => `• ${c.label}, ${c.detail}`),
     ].join('\n') || 'Nothing to confirm.',
     'Where those got to',
   );
@@ -206,7 +206,7 @@ async function chooseProviders(): Promise<string[] | null> {
       {
         value: 'one',
         label: 'One paid backend, plus whatever subscriptions you just set up',
-        hint: 'recommended — cheapest useful setup',
+        hint: 'recommended, cheapest useful setup',
       },
       { value: 'none', label: 'Nothing at all', hint: 'subscriptions and page-reading only; no API bill, ever' },
       { value: 'all', label: 'Every backend I can, for the widest coverage', hint: 'most expensive; each run bills separately' },
@@ -244,7 +244,7 @@ async function chooseProviders(): Promise<string[] | null> {
       message: 'Which one?',
       options: PROVIDER_GUIDE.map((g) => ({
         value: g.id,
-        label: `${g.label} — ${g.costPerRun}`,
+        label: `${g.label}, ${g.costPerRun}`,
         hint: g.onlyThisOne,
       })),
       initialValue: 'gemini',
@@ -257,7 +257,7 @@ async function chooseProviders(): Promise<string[] | null> {
     message: 'Which backends? Each one you add is a separate account and a separate bill.',
     options: PROVIDER_GUIDE.map((g) => ({
       value: g.id,
-      label: `${g.label} — ${g.costPerRun}`,
+      label: `${g.label}, ${g.costPerRun}`,
       hint: g.onlyThisOne,
     })),
     initialValues: ['gemini'],
@@ -357,7 +357,7 @@ async function chooseBrowser(): Promise<string | null | undefined> {
             'drives nothing unless DOSSIER_BROWSER_PROVIDER is set.',
           ]),
     ].join('\n'),
-    'Optional — pages behind a login',
+    'Optional, pages behind a login',
   );
 
   const want = await p.confirm({ message: 'Set one of these up?', initialValue: false });
@@ -389,7 +389,7 @@ function costSummary(answers: Answers): string {
     lines.push('Subscriptions you already pay for:');
     for (const id of answers.clis) {
       const g = CLI_GUIDE.find((c) => c.id === id);
-      if (g) lines.push(`  ${g.headline} — no extra cost per run`);
+      if (g) lines.push(`  ${g.headline}, no extra cost per run`);
     }
     lines.push('');
   }
@@ -399,7 +399,7 @@ function costSummary(answers: Answers): string {
     lines.push('Paid backends: none. Nothing here can bill you.');
   } else {
     lines.push('Paid backends, per research run:');
-    for (const g of paid) lines.push(`  ${g.label} — ${g.costPerRun}`);
+    for (const g of paid) lines.push(`  ${g.label}, ${g.costPerRun}`);
     lines.push('');
     lines.push(`Daily ceiling across all of them: $${answers.settings['DOSSIER_BUDGET_USD'] ?? '100'}.`);
     lines.push('Runs reserve their worst case before starting, so the ceiling refuses early.');
@@ -463,7 +463,7 @@ export async function runWizard(): Promise<number> {
     Object.defineProperty(process.stdout, 'columns', { value: 80, configurable: true });
   }
 
-  p.intro('Dossier — research setup');
+  p.intro('Dossier, research setup');
   p.log.message(
     [
       'This sets up proper research for your AI assistant.',

@@ -295,3 +295,26 @@ describe('a wide cell that asserts a fact without a source', () => {
     expect(strict.some((p) => p.includes('asserts a fact with no source'))).toBe(true);
   });
 });
+
+describe('a declared gap is recognised however it is written', () => {
+  // The em dash in DECLARED_GAP is data being parsed, not prose being written.
+  // A blanket no-em-dash sweep replaced it with a comma once, quietly turning
+  // "the model said there is nothing here" into "the model wrote a comma", and
+  // the whole suite stayed green. This is the test that would have caught it.
+  const spec = { topic: 't', entities: ['E'], fields: [{ name: 'f' }] };
+
+  it.each(['—', '–', '-', '--', 'n/a', 'N/A', 'none', 'unknown', 'not found', '_not found_'])(
+    'treats %j as a declared gap rather than as a value',
+    (cell) => {
+      const rows = parseWideTable(spec, `| entity | f |\n|---|---|\n| E | ${cell} |`);
+      expect(rows[0]?.uncertain, cell).toContain('f');
+      expect(rows[0]?.cells['f'], cell).toBeUndefined();
+    },
+  );
+
+  it('does not mistake a real value for a gap', () => {
+    const rows = parseWideTable(spec, `| entity | f |\n|---|---|\n| E | 1.2 GB |`);
+    expect(rows[0]?.cells['f']?.value).toBe('1.2 GB');
+    expect(rows[0]?.uncertain).not.toContain('f');
+  });
+});

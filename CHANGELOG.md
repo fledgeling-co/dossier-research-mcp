@@ -8,6 +8,13 @@ This project follows [semantic versioning](https://semver.org/). Until 1.0 the m
 
 ## [Unreleased]
 
+### Fixed
+
+- **Em dashes are gone from every string a user can see.** 146 of them across 13 files, in tool output, error messages and prompts. The 67 in code comments are left alone, because rewriting internal prose mechanically risks mangling meaning for no reader's benefit.
+
+  The sweep broke something on the way through, which is worth recording. `DECLARED_GAP` in `src/research/shapes.ts` matches an em dash on purpose: a table cell containing one is how a model most often writes "there is nothing here", and treating it as a declared gap rather than as content is the difference between an honest empty cell and a silent hole. A blanket replacement turned it into a comma, and all 631 tests stayed green. It is restored, the regex now says in a comment that it is data being parsed rather than prose being written, and there is a test over every gap spelling that would have caught it.
+
+
 ### Added
 
 - **`research_start` without a `provider` now assembles a panel instead of picking one backend.** One brief goes to every backend that belongs on the question, in three lanes. Lane 1 is free: every coding CLI that is installed, signed in and capable of the shape you asked for. It is the floor, and it runs with no API keys configured at all. Lane 2 is paid, and an API backend joins only when a key exists *and* the question calls for what that backend is distinctively good at. Lane 3 is a crawl, and the panel can only ever recommend one: Mode B stays behind `DOSSIER_BROWSER_PROVIDER` and Dossier drives no browser.

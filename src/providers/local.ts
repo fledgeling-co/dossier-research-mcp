@@ -186,7 +186,7 @@ export function localCost(): CostBand {
     highUsd: 0,
     midUsd: 0,
     basis:
-      'no API charge: the run draws on your CLI subscription. It is not free in every sense — it consumes that subscription’s quota, which Dossier cannot see or meter',
+      'no API charge: the run draws on your CLI subscription. It is not free in every sense, it consumes that subscription’s quota, which Dossier cannot see or meter',
   };
 }
 

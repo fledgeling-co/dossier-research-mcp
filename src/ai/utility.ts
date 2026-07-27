@@ -142,13 +142,13 @@ function failure(e: unknown): { ok: false; error: string } {
     // validation failure) in `cause`; the outer message alone is often generic.
     const cause: unknown = (e as { cause?: unknown }).cause;
     const causeText = cause instanceof Error
-      ? ` — ${cause.message}`
+      ? `, ${cause.message}`
       : typeof cause === 'string'
-        ? ` — ${cause}`
+        ? `, ${cause}`
         // Anything else stringifies to "[object Object]", which is worse than
         // saying nothing — JSON at least carries the provider's payload.
         : cause != null
-          ? ` — ${JSON.stringify(cause).slice(0, 300)}`
+          ? `, ${JSON.stringify(cause).slice(0, 300)}`
           : '';
     return { ok: false, error: `${e.name}: ${e.message}${causeText}`.slice(0, 800) };
   }
@@ -190,7 +190,7 @@ export function createUtilityModel(config: Config): UtilityModel | null {
           model,
           output: Output.object({ schema: ClaimsSchema }),
           system:
-            'You extract load-bearing claims from research reports into portable cards. Copy the claim and its confidence qualifier from the report — do not re-assess, re-word into something stronger, or add claims the report does not make. Attach the citation URL the report gives for each claim, when it gives one. Keep each claim to one sentence where the report allows it.',
+            'You extract load-bearing claims from research reports into portable cards. Copy the claim and its confidence qualifier from the report, do not re-assess, re-word into something stronger, or add claims the report does not make. Attach the citation URL the report gives for each claim, when it gives one. Keep each claim to one sentence where the report allows it.',
           prompt: `Extract at most ${limit} load-bearing claims from this report.\n\n${head(markdown, 40_000)}`,
         });
         return { ok: true, value: output };
@@ -206,7 +206,7 @@ export function createUtilityModel(config: Config): UtilityModel | null {
           output: Output.object({ schema: SupportSchema }),
           system:
             'You check whether a source supports a claim. Judge ONLY from the page text supplied; your own knowledge of the topic is irrelevant and using it defeats the point of the check. ' +
-            'A page that is about the right topic but does not contain the specific claim is `not_addressed`, not `supports` — that is the most common failure and the one this check exists to catch. ' +
+            'A page that is about the right topic but does not contain the specific claim is `not_addressed`, not `supports`, that is the most common failure and the one this check exists to catch. ' +
             'A page whose text is a cookie banner, a login wall or empty is `unreadable`, not `not_addressed`. Quote the deciding sentence verbatim when there is one.',
           prompt: `Claim:\n${claim.slice(0, 2000)}\n\n---\n\nPage text:\n\n${head(sourceText, 30_000)}`,
         });
@@ -224,7 +224,7 @@ export function createUtilityModel(config: Config): UtilityModel | null {
           system:
             `You are reviewing a research report through one lens only: ${lens.name}. Your job is to REFUTE, not to summarise or to agree. ` +
             'Fluent prose reads as correct; unprompted reviewers agree with it, which is why this pass is adversarial by instruction. ' +
-            'Report what you checked whether or not you found anything — "checked, found nothing" is a real answer and is better than an invented objection. Never pad the issue list to look thorough.',
+            'Report what you checked whether or not you found anything, "checked, found nothing" is a real answer and is better than an invented objection. Never pad the issue list to look thorough.',
           prompt: `${lens.question}\n\n${lens.instruction}\n\n---\n\nReport:\n\n${head(markdown, 40_000)}`,
         });
         return { ok: true, value: output };
@@ -238,7 +238,7 @@ export function createUtilityModel(config: Config): UtilityModel | null {
         const { text } = await generateText({
           model,
           system:
-            'You answer questions strictly from the supplied research report. If the report does not contain the answer, say exactly that and name what is missing — never fill the gap from your own knowledge. Preserve the report’s confidence qualifiers when you quote its findings.',
+            'You answer questions strictly from the supplied research report. If the report does not contain the answer, say exactly that and name what is missing, never fill the gap from your own knowledge. Preserve the report’s confidence qualifiers when you quote its findings.',
           prompt: `Report:\n\n${head(context, 60_000)}\n\n---\n\nQuestion: ${question}`,
         });
         return { ok: true, value: text };

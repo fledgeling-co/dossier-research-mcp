@@ -256,7 +256,7 @@ export async function probeCli(adapter: CliAdapter, timeoutMs = 4_000): Promise<
       detail:
         adapter.authPaths.length === 0
           ? `installed (${version}); this tool has no local sign-in to detect`
-          : `installed (${version}) but no sign-in state found — run \`${adapter.bin}\` once and sign in`,
+          : `installed (${version}) but no sign-in state found: run \`${adapter.bin}\` once and sign in`,
     };
   }
 

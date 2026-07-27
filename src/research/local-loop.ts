@@ -585,6 +585,6 @@ export function validateDraft(session: Session, markdown: string): DraftVerdict 
 export function renderRegistry(session: Session): string {
   if (session.registry.length === 0) return '_The registry is empty. There is nothing to draft from._';
   return session.registry
-    .map((e) => `${String(e.n)}. ${e.url}${e.published ? ` (${e.published})` : ''} — ${e.claims[0] ?? ''}`)
+    .map((e) => `${String(e.n)}. ${e.url}${e.published ? ` (${e.published})` : ''}, ${e.claims[0] ?? ''}`)
     .join('\n');
 }

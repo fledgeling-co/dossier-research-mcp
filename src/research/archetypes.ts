@@ -43,7 +43,7 @@ export const ARCHETYPE_OVERRIDES: Record<Archetype, ArchetypeOverrides> = {
     ],
     lens: ['Build-vs-buy and operational trade-offs for the stated team size and constraints.'],
     output: [
-      'Include a comparison table with columns such as Parameter Count / Context Window / Latency / Cost / License — technical reality lives in tables, prose buries it.',
+      'Include a comparison table with columns such as Parameter Count / Context Window / Latency / Cost / License, technical reality lives in tables, prose buries it.',
     ],
   },
   competitive: {
@@ -53,13 +53,13 @@ export const ARCHETYPE_OVERRIDES: Record<Archetype, ArchetypeOverrides> = {
       'Filed financials (10-K, 10-Q, 20-F, exchange filings), competitor pricing pages read in the context of customer-forum sentiment, and organic sentiment platforms (Reddit, Hacker News, industry forums, app-store and review-site ratings).',
     ],
     deprioritise: [
-      'Vendor press releases as evidence of competitive advantage — sanitised corporate communications fail the criteria-match validator.',
+      'Vendor press releases as evidence of competitive advantage, sanitised corporate communications fail the criteria-match validator.',
     ],
     depth: [
       'Pain-point mining: query organic platforms for direct customer quotes, contrast them with the vendor’s official positioning, and name the gap explicitly.',
     ],
     lens: [
-      'Identify at least two underserved gaps — capabilities customers explicitly want that no vendor in the set currently provides.',
+      'Identify at least two underserved gaps, capabilities customers explicitly want that no vendor in the set currently provides.',
     ],
     output: [
       'A competitor comparison table (offer / pricing / channel / sentiment) alongside the prose.',
@@ -94,7 +94,7 @@ export const ARCHETYPE_OVERRIDES: Record<Archetype, ArchetypeOverrides> = {
       'Popular-science summaries and news coverage as primary evidence for scientific claims.',
     ],
     depth: [
-      'For each cited study extract the experimental methodology, sample size, statistical significance (p-values, confidence intervals, effect sizes where reported), and stated limitations — do not summarise only the abstract.',
+      'For each cited study extract the experimental methodology, sample size, statistical significance (p-values, confidence intervals, effect sizes where reported), and stated limitations, do not summarise only the abstract.',
     ],
     lens: [
       'Explicitly distinguish points of scholarly consensus from points of active debate; do not equate preliminary preprints with peer-reviewed longitudinal data.',
@@ -119,7 +119,7 @@ export const ARCHETYPE_OVERRIDES: Record<Archetype, ArchetypeOverrides> = {
       'Resist linear extrapolation; identify precedents, reversals, and non-linear inflection points in the historical record.',
     ],
     output: [
-      'Divergent scenarios are required — an Optimistic trajectory (named catalysts plus current evidence), a Conservative trajectory (named frictions plus current evidence), and Break conditions (observable events that would invalidate either).',
+      'Divergent scenarios are required, an Optimistic trajectory (named catalysts plus current evidence), a Conservative trajectory (named frictions plus current evidence), and Break conditions (observable events that would invalidate either).',
     ],
   },
 };

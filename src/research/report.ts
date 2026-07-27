@@ -83,7 +83,7 @@ export function renderOutline(markdown: string): string {
     return `${String(s.index).padStart(3)}. ${indent}${s.title}  (~${s.estimatedTokens} tok)`;
   });
   return [
-    `Report outline — ${sections.length} sections, ~${total} estimated tokens total.`,
+    `Report outline: ${sections.length} sections, ~${total} estimated tokens total.`,
     'Read one with `research_read { mode: "section", section: <index or title> }`.',
     '',
     ...lines,
@@ -320,7 +320,7 @@ export function clampToTokens(text: string, maxTokens: number): { text: string; 
   const body = lastBreak > maxChars * 0.5 ? cut.slice(0, lastBreak) : cut;
   const remaining = estimateTokens(text) - estimateTokens(body);
   return {
-    text: `${body}\n\n[... truncated at the requested token budget — ~${remaining} estimated tokens remain. Read on with mode "section", or raise maxTokens.]`,
+    text: `${body}\n\n[... truncated at the requested token budget, ~${remaining} estimated tokens remain. Read on with mode "section", or raise maxTokens.]`,
     truncated: true,
   };
 }

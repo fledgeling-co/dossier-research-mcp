@@ -80,7 +80,7 @@ export const CORPUS_GROUNDING_BLOCK = `A private document corpus is attached via
 Hierarchy of truth: where the attached internal documents conflict with public web sources on a matter of internal fact (our own numbers, decisions, product behaviour, commitments), the internal documents are authoritative. Public sources remain authoritative for external facts.`;
 
 export const CORPUS_OUTPUT_REQUIREMENT =
-  '## Contradictions with the attached corpus — every material point where the public evidence contradicts, supersedes, or postdates the internal documents. For each: the internal claim, the external evidence with its citation, and which one is current. If there are genuinely none, write "No contradictions found" under the heading rather than omitting it.';
+  '## Contradictions with the attached corpus, every material point where the public evidence contradicts, supersedes, or postdates the internal documents. For each: the internal claim, the external evidence with its citation, and which one is current. If there are genuinely none, write "No contradictions found" under the heading rather than omitting it.';
 
 /**
  * Markers of an already-engineered brief. `<core_directive>` is the strongest
@@ -207,7 +207,7 @@ export function buildPrompt(args: BuildPromptArgs): BuiltPrompt {
     ),
     block(
       'context',
-      `This investigation supports a concrete decision. Keep this context tight — context bloat degrades long-running agentic output; domain knowledge belongs in the analysis lens below.${
+      `This investigation supports a concrete decision. Keep this context tight, context bloat degrades long-running agentic output; domain knowledge belongs in the analysis lens below.${
         jurisdiction ? ` Jurisdiction and geography: ${jurisdiction}.` : ''
       }`,
     ),
@@ -272,7 +272,7 @@ export function buildPrompt(args: BuildPromptArgs): BuiltPrompt {
     ),
     block(
       'analysis_lens',
-      `Apply these analytical frames where relevant — they tell you how to think about the findings, not only what to find:\n${list(lenses)}`,
+      `Apply these analytical frames where relevant, they tell you how to think about the findings, not only what to find:\n${list(lenses)}`,
     ),
     block(
       'epistemic_bounding',
@@ -283,23 +283,23 @@ export function buildPrompt(args: BuildPromptArgs): BuiltPrompt {
           '`<INSUFFICIENT_EVIDENCE>[claim that could not be corroborated, and why]</INSUFFICIENT_EVIDENCE>`',
           '`<CONFLICTING_EVIDENCE>[the positions, their sources, the nature of the disagreement]</CONFLICTING_EVIDENCE>`',
           '`<CONFIDENCE:LOW>[the claim]</CONFIDENCE:LOW>` for weakly-supported but load-bearing estimates',
-          '`<INFERENCE from="[the cited claims it rests on]">[claim derived by reasoning; show the chain]</INFERENCE>` — this tag is required for every statement you assembled rather than read. A conclusion drawn from three sourced facts is an inference even when all three are correct, and naming which facts it rests on is what lets a reader check the step you took between them.',
+          '`<INFERENCE from="[the cited claims it rests on]">[claim derived by reasoning; show the chain]</INFERENCE>`, this tag is required for every statement you assembled rather than read. A conclusion drawn from three sourced facts is an inference even when all three are correct, and naming which facts it rests on is what lets a reader check the step you took between them.',
         ]),
         'Do not present extrapolated or synthesised numbers as empirical findings.',
       ].join('\n')}`,
     ),
     block(
       'citation_protocol',
-      'Append an inline `<cite url="...">` to every quantitative claim, every attributed statement, and every regulatory or legal reference, at the point of the claim itself. Do not aggregate citations at the end of a paragraph or into a bibliography — that is where source attribution is lost. If a URL is not verifiable at synthesis time, use `<cite url="UNVERIFIED" note="[what was sought]">` rather than omitting or inventing one.',
+      'Append an inline `<cite url="...">` to every quantitative claim, every attributed statement, and every regulatory or legal reference, at the point of the claim itself. Do not aggregate citations at the end of a paragraph or into a bibliography, that is where source attribution is lost. If a URL is not verifiable at synthesis time, use `<cite url="UNVERIFIED" note="[what was sought]">` rather than omitting or inventing one.',
     ),
     block(
       'output_format',
       `Structure the report exactly as follows:\n${list([
-        '## Executive Summary — 5-8 bullets, each led by a `(High Confidence)` / `(Medium Confidence)` / `(Low Confidence)` qualifier; usable as a standalone briefing.',
-        '## Detailed Findings — one section per research question, using the question as the heading; narrative prose with inline citations, tables for comparative data.',
-        '## Evidence Table — | Claim | Primary Source | Publication Date | Evidence Type | URL |, mapping every major claim to a verifiable source.',
-        '## Knowledge Gaps — what could not be answered, categorised by cause.',
-        '## Recommended Next Steps — 3-5 follow-up investigations, each with a stated rationale.',
+        '## Executive Summary, 5-8 bullets, each led by a `(High Confidence)` / `(Medium Confidence)` / `(Low Confidence)` qualifier; usable as a standalone briefing.',
+        '## Detailed Findings, one section per research question, using the question as the heading; narrative prose with inline citations, tables for comparative data.',
+        '## Evidence Table, | Claim | Primary Source | Publication Date | Evidence Type | URL |, mapping every major claim to a verifiable source.',
+        '## Knowledge Gaps, what could not be answered, categorised by cause.',
+        '## Recommended Next Steps, 3-5 follow-up investigations, each with a stated rationale.',
         ...(corpus ? [CORPUS_OUTPUT_REQUIREMENT] : []),
         ...o.output,
       ])}`,
@@ -308,7 +308,7 @@ export function buildPrompt(args: BuildPromptArgs): BuiltPrompt {
       'constraints',
       list([
         'Do not fabricate citations, URLs, authors, or dates; use the unverified citation form when a source cannot be verified.',
-        'Where data conflicts, present both positions with their evidence — do not silently pick one.',
+        'Where data conflicts, present both positions with their evidence, do not silently pick one.',
         'Keep prose dense but readable; avoid filler phrases.',
         'Cite inline at the point of the claim, never aggregated at the end.',
       ]),
@@ -339,11 +339,11 @@ export function operatorNotes(args: {
 
   if (args.collaborativePlanning) {
     notes.push(
-      'Plan Review is ON. When `research_plan` returns Gemini’s proposed plan, edit it before approving — prune tangential branches, inject missing angles, narrow broad definitions. This is the single highest-leverage intervention available on a Deep Research run; zero-shot autonomous execution is the wrong default for anything decision-critical.',
+      'Plan Review is ON. When `research_plan` returns Gemini’s proposed plan, edit it before approving, prune tangential branches, inject missing angles, narrow broad definitions. This is the single highest-leverage intervention available on a Deep Research run; zero-shot autonomous execution is the wrong default for anything decision-critical.',
     );
   } else {
     notes.push(
-      'Plan Review is OFF — the run executes autonomously. For a decision-critical question, re-run with `collaborativePlanning: true` and edit the plan before approving.',
+      'Plan Review is OFF, the run executes autonomously. For a decision-critical question, re-run with `collaborativePlanning: true` and edit the plan before approving.',
     );
   }
 
@@ -358,7 +358,7 @@ export function operatorNotes(args: {
   }
 
   notes.push(
-    'Adversarial audit: run `research_verify_citations` when it completes, then hand the report to a different strong model prompted as a red-team analyst — verify citations, flag unsupported claims, stress-test the confidence qualifiers. Secondary-model validation catches failure modes the producing model cannot see in itself.',
+    'Adversarial audit: run `research_verify_citations` when it completes, then hand the report to a different strong model prompted as a red-team analyst, verify citations, flag unsupported claims, stress-test the confidence qualifiers. Secondary-model validation catches failure modes the producing model cannot see in itself.',
   );
 
   notes.push(
@@ -367,7 +367,7 @@ export function operatorNotes(args: {
 
   if (args.hasCorpus) {
     notes.push(
-      'Hierarchy of truth: your corpus is attached. State explicitly in the prompt that when the internal documents conflict with public web sources, the internal documents are authoritative — otherwise high-fidelity internal data gets silently overwritten by lower-fidelity public data.',
+      'Hierarchy of truth: your corpus is attached. State explicitly in the prompt that when the internal documents conflict with public web sources, the internal documents are authoritative, otherwise high-fidelity internal data gets silently overwritten by lower-fidelity public data.',
     );
   }
 

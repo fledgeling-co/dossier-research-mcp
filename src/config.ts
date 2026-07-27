@@ -174,7 +174,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     const detail = parsed.error.issues
       .map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`)
       .join('; ');
-    throw new Error(`Invalid environment configuration — ${detail}`);
+    throw new Error(`Invalid environment configuration: ${detail}`);
   }
   const e = parsed.data;
 
@@ -255,7 +255,7 @@ function assertStrongTokens(tokens: readonly string[]): readonly string[] {
   const weak = tokens.filter((t) => t.length < MIN_TOKEN_LENGTH);
   if (weak.length > 0) {
     throw new Error(
-      `Invalid environment configuration — DOSSIER_HTTP_TOKENS contains ${String(weak.length)} token(s) shorter than ${String(MIN_TOKEN_LENGTH)} characters. ` +
+      `Invalid environment configuration: DOSSIER_HTTP_TOKENS contains ${String(weak.length)} token(s) shorter than ${String(MIN_TOKEN_LENGTH)} characters. ` +
         'This token authenticates a surface that can spend money; generate one with `openssl rand -base64 32`.',
     );
   }
@@ -280,7 +280,7 @@ export function describeAuth(config: Config): string {
     case 'vertex':
       return `Vertex AI (project ${config.auth.project}, location ${config.auth.location})`;
     case 'none':
-      return 'unconfigured — set GEMINI_API_KEY or VERTEX_PROJECT';
+      return 'unconfigured: set GEMINI_API_KEY or VERTEX_PROJECT';
     default: {
       const _exhaustive: never = config.auth;
       return _exhaustive;
