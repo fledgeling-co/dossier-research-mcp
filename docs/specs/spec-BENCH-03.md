@@ -1,7 +1,7 @@
 # BENCH-03: Citation integrity scorers
 
 **ID:** BENCH-03
-**Status:** Ready for Plan
+**Status:** Ready for Work
 **Created:** 2026-07-27
 **Last updated:** 2026-07-27
 **Brief:** [BENCH-03](../features-to-triage/BENCH-03-citation-integrity.md) · **Design of record:** [benchmark.md](../plan/benchmark.md) · **Prior art:** [benchmark-prior-art.md](../deep-research/benchmark-prior-art.md)
@@ -128,3 +128,7 @@ Two halves, and the split is the point.
 - **A scorer** that is pure and synchronous, in the same tree as its three sibling scorers, over the report text and that snapshot. Same inputs, same numbers, on any machine, in six months, with the network unplugged.
 
 That separation is what makes a metric added in three months applicable to runs already paid for, which is the design of record's own reason for storing raw reports in the first place.
+
+## Plan
+
+[plan-BENCH-03.md](../plans/plan-BENCH-03.md) — Standard tier, 12 steps, 41 acceptance criteria.
