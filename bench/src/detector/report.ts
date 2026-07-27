@@ -146,6 +146,14 @@ export function scoreSupport(corpus: DetectorCorpus): SupportReport {
       ),
       judgements: linkCheckSoundnessJudgements(cases),
     }),
+    scoreArm({
+      labels: SOUNDNESS_LABELS,
+      capability: SOUNDNESS_CAPABILITY(
+        'always-supports',
+        'the degenerate strategy again, carried into the binary view so the balance requirement is asserted in both places rather than in whichever one happens to flatter the corpus.',
+      ),
+      judgements: toSoundness(degenerate),
+    }),
   ];
 
   const containmentArm = arms[0];
