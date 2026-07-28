@@ -175,6 +175,50 @@ describe('CALIB-03 subject matching', () => {
   });
 });
 
+describe('CONF-U1 the boundary is read in code points, not code units', () => {
+  /**
+   * A supplementary-plane letter that survives NFKC.
+   *
+   * The mathematical alphanumerics would be the commoner case in a pasted report
+   * and NFKC folds them to ASCII before this check runs, so they cannot show the
+   * defect. Deseret does not fold, and neither do the CJK extensions, Gothic,
+   * Osage or Adlam that a report citing non-Latin sources carries.
+   */
+  const SUPP = '\u{10400}';
+
+  it('refuses a term wedged between two supplementary-plane letters', () => {
+    // Indexing by code unit returns a lone surrogate on each side, which
+    // `\p{L}` does not match, so the boundary rule read "letter" as "not a
+    // letter" and this answered true.
+    expect(mentions(`a${SUPP}AI${SUPP}b`, 'AI')).toBe(false);
+    expect(findMention(`a${SUPP}AI${SUPP}b`, 'AI')).toBe(-1);
+  });
+
+  it('refuses it on each side alone, since both sides carried the defect', () => {
+    expect(mentions(`${SUPP}AI`, 'AI')).toBe(false);
+    expect(mentions(`AI${SUPP}`, 'AI')).toBe(false);
+  });
+
+  it('agrees with the plain-BMP control it is supposed to behave like', () => {
+    expect(mentions('saidAIsaid', 'AI')).toBe(false);
+    expect(mentions('the AI market', 'AI')).toBe(true);
+  });
+
+  it('still matches beside a supplementary-plane NON-letter', () => {
+    // An emoji is not a word character, so it is a boundary rather than a
+    // neighbour. Over-correcting to "any surrogate blocks a match" would break
+    // this, and it is the ordinary case in report prose.
+    expect(mentions('\u{1F600}AI\u{1F600}', 'AI')).toBe(true);
+  });
+
+  it('reads the needle’s own ends as code points too', () => {
+    // A needle that begins or ends with a supplementary-plane letter has to
+    // demand a boundary there; reading its first code unit says it does not.
+    expect(mentions(`x${SUPP}zephyr`, `${SUPP}zephyr`)).toBe(false);
+    expect(mentions(`say ${SUPP}zephyr now`, `${SUPP}zephyr`)).toBe(true);
+  });
+});
+
 describe('CALIB-17 a label that lands on a line break', () => {
   it('still matches, because markdown wraps prose and a label does not', () => {
     expect(mentions('reported by Meta\nPlatforms, Inc. in the filing', 'Meta Platforms, Inc.')).toBe(

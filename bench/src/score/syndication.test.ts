@@ -9,11 +9,19 @@ import {
   resemblance,
   sameStory,
   shingleHashes,
+  SHINGLE_NORMALISATION,
   SHINGLE_WORDS,
   SYNDICATION_CONTAINMENT,
   SYNDICATION_RESEMBLANCE,
 } from './syndication.js';
-import { INDEPENDENT_ARTICLES, WIRE_PRINTINGS, WIRE_TRUNCATED } from './wire-fixtures.js';
+import {
+  INDEPENDENT_ARTICLES,
+  NORMALISATION_PAIRS,
+  typesetLigatures,
+  WIRE_PRINTINGS,
+  WIRE_TRUNCATED,
+} from './wire-fixtures.js';
+
 
 /**
  * A shingle set of an exact size, built from numbers rather than prose.
@@ -34,6 +42,10 @@ describe('SRCQ-11 the judgement calls are exported constants, not literals in a 
     expect(SYNDICATION_CONTAINMENT).toBe(0.9);
     expect(MIN_SHINGLES).toBe(100);
     expect(MAX_PAGE_CHARS).toBe(200_000);
+  });
+
+  it('SYND-U4 exports the normalisation form alongside them', () => {
+    expect(SHINGLE_NORMALISATION).toBe('NFKC');
   });
 });
 
@@ -267,6 +279,150 @@ describe('SRCQ-19 an oversized page is compared on a prefix', () => {
     // The body sits entirely beyond the cap, so none of its shingles survive.
     expect(shingleHashes(padded).size).toBeLessThan(shingleHashes(body).size);
     expect(sameStory(shingleHashes(padded), shingleHashes(body)).same).toBe(false);
+  });
+});
+
+/**
+ * The normaliser exactly as it shipped before BENCH-18, kept so the tests below
+ * prove the fix rather than restate it.
+ *
+ * A test that only asserts the new behaviour passes just as happily against a
+ * detector that was never broken, and says nothing about what was wrong. Running
+ * both rules over one pair shows the verdict changing, which is the claim.
+ */
+const withoutNormalisation = (text: string): Set<number> => {
+  const cleaned = text
+    .slice(0, MAX_PAGE_CHARS)
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim();
+  const words = cleaned === '' ? [] : cleaned.split(' ');
+  const out = new Set<number>();
+  if (words.length < SHINGLE_WORDS) return out;
+  for (let i = 0; i + SHINGLE_WORDS <= words.length; i += 1) {
+    out.add(hashShingle(words.slice(i, i + SHINGLE_WORDS).join(' ')));
+  }
+  return out;
+};
+
+describe('SYND-U1 and SYND-U2 one story in two costumes is one story', () => {
+  it.each(NORMALISATION_PAIRS)(
+    'the $name pair differs only by normalisation, and is not the same string',
+    ({ left, right }) => {
+      expect(right).not.toBe(left);
+      expect(right.normalize(SHINGLE_NORMALISATION)).toBe(left.normalize(SHINGLE_NORMALISATION));
+    },
+  );
+
+  it.each(NORMALISATION_PAIRS)('the $name pair collapses at resemblance 1', ({ left, right }) => {
+    const a = shingleHashes(left);
+    const b = shingleHashes(right);
+    expect(a.size).toBeGreaterThanOrEqual(MIN_SHINGLES);
+    expect(b.size).toBeGreaterThanOrEqual(MIN_SHINGLES);
+    expect(sameStory(a, b)).toMatchObject({ same: true, resemblance: 1, containment: 1 });
+  });
+
+  /**
+   * The fail-first evidence, and the reason the fix is not a one-liner.
+   *
+   * Under the old rule the ligature pair scores 0.632 and the fullwidth pair
+   * 0.684, both under the 0.7 bar and both under the 0.9 containment bar, so
+   * both were reported as two independent sources. The accent pair scores 0,
+   * because a combining mark is a whole extra character in every window.
+   */
+  it.each(NORMALISATION_PAIRS)(
+    'the $name pair was NOT the same story under the old rule',
+    ({ left, right }) => {
+      const verdict = sameStory(withoutNormalisation(left), withoutNormalisation(right));
+      expect(verdict.same).toBe(false);
+      expect(verdict.resemblance).toBeLessThan(SYNDICATION_RESEMBLANCE);
+      expect(verdict.containment).toBeLessThan(SYNDICATION_CONTAINMENT);
+    },
+  );
+
+  /**
+   * Why NFKC rather than NFC, asserted rather than asserted-in-a-comment.
+   *
+   * A ligature and a fullwidth digit are compatibility equivalences, so NFC
+   * leaves both pairs exactly where they were. A reviewer reaching for NFC out
+   * of habit would still miss the two costumes syndicated copy arrives in most
+   * often, and this is the test that would tell them.
+   */
+  it.each(NORMALISATION_PAIRS)('NFC alone is enough for the $name pair: $nfcSuffices', ({
+    left,
+    right,
+    nfcSuffices,
+  }) => {
+    const under = (form: 'NFC' | 'NFKC'): boolean =>
+      sameStory(
+        withoutNormalisation(left.normalize(form)),
+        withoutNormalisation(right.normalize(form)),
+      ).same;
+    expect(under('NFC')).toBe(nfcSuffices);
+    expect(under('NFKC')).toBe(true);
+  });
+});
+
+describe('SYND-U3 the fix is normalisation, not a loosened threshold', () => {
+  it('still scores four independently written articles at 0 against each other', () => {
+    const sets = INDEPENDENT_ARTICLES.map((p) => shingleHashes(p.text));
+    for (let i = 0; i < sets.length; i += 1) {
+      for (let j = i + 1; j < sets.length; j += 1) {
+        expect(resemblance(sets[i]!, sets[j]!)).toBe(0);
+        expect(sameStory(sets[i]!, sets[j]!).same).toBe(false);
+      }
+    }
+  });
+
+  it('does not merge an independent article with another just because it is typeset', () => {
+    const dressed = shingleHashes(typesetLigatures(INDEPENDENT_ARTICLES[0]!.text));
+    for (let j = 1; j < INDEPENDENT_ARTICLES.length; j += 1) {
+      expect(sameStory(dressed, shingleHashes(INDEPENDENT_ARTICLES[j]!.text)).same).toBe(false);
+    }
+  });
+
+  it('leaves every existing fixture untouched, since the fold is a no-op on ASCII', () => {
+    for (const page of [...WIRE_PRINTINGS, WIRE_TRUNCATED, ...INDEPENDENT_ARTICLES]) {
+      expect(shingleHashes(page.text)).toEqual(withoutNormalisation(page.text));
+    }
+  });
+});
+
+describe('SYND-U5 normalisation is idempotent, so there is one coordinate system', () => {
+  it.each(NORMALISATION_PAIRS)('re-normalising the $name pair changes nothing', ({ right }) => {
+    const once = normaliseForShingling(right);
+    expect(normaliseForShingling(once.join(' '))).toEqual(once);
+  });
+
+  it('holds for the awkward case where a case fold creates a composable pair', () => {
+    // An uppercase J with a combining caron has no precomposed form; lower-casing
+    // it lets a second pass compose it. `confidence.ts` documents the same edge.
+    const once = normaliseForShingling('J̌ is a letter and so is J̌ again ok');
+    expect(normaliseForShingling(once.join(' '))).toEqual(once);
+  });
+});
+
+describe('SYND-U6 the character cap is a bound on the raw text', () => {
+  /**
+   * The order is deliberate and this is what would catch a reversal.
+   *
+   * NFKC expands: `½` is one character and becomes three. Normalising before the
+   * cap would let a page of compatibility characters push real content past a
+   * bound that the raw page never came near.
+   */
+  it('cuts before normalising, so a compatibility expansion cannot evict real text', () => {
+    const body = WIRE_PRINTINGS[0]!.text;
+    // 120,000 raw characters, well inside the cap; 240,000 after NFKC, past it.
+    const page = `${'½ '.repeat(60_000)}${body}`;
+    expect(page.length).toBeLessThan(MAX_PAGE_CHARS);
+    expect(page.normalize(SHINGLE_NORMALISATION).length).toBeGreaterThan(MAX_PAGE_CHARS);
+
+    const bodySet = shingleHashes(body);
+    expect(resemblance(shingleHashes(page), bodySet)).toBeGreaterThan(0.9);
+    const normalisedFirst = shingleHashes(
+      page.normalize(SHINGLE_NORMALISATION).slice(0, MAX_PAGE_CHARS),
+    );
+    expect(resemblance(normalisedFirst, bodySet)).toBe(0);
   });
 });
 

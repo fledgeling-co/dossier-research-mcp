@@ -356,17 +356,66 @@ function isAlphanumeric(ch: string | undefined): boolean {
   return ch !== undefined && ALPHANUMERIC.test(ch);
 }
 
+/**
+ * The whole code point ending just before `at`, not the code unit.
+ *
+ * Indexing a string gives a UTF-16 code unit, so beside a supplementary-plane
+ * letter it returns a lone surrogate, which `\p{L}` does not match. The boundary
+ * rule then reads "letter" as "not a letter" and a term matches inside a word:
+ * against the previous version, `mentions('a\u{10400}AI\u{10400}b', 'AI')`
+ * answered `true` while the plain `mentions('saidAIsaid', 'AI')` correctly
+ * answered `false`.
+ *
+ * NFKC folds the mathematical alphanumerics (`𝐀` to `a`, `𝟏` to `1`) before this
+ * runs, so the trigger is not those. What survives it is script text: CJK
+ * Extension B and beyond, Deseret, Gothic, Osage, Adlam. A report citing Chinese
+ * or Japanese sources carries them as a matter of course.
+ *
+ * **Deliberately a copy of `due-weight/text.ts`, not an extraction.** That module
+ * fixed the same defect on its own side first, after an out-of-family reviewer
+ * demonstrated a match inside `a\u{10400}b`. BENCH-15 is the queued item that
+ * owns pulling shared primitives out of these modules; moving one here, on a
+ * branch that is not its, would restructure a file it is about to. The
+ * duplication is named on both sides so it is a recorded debt.
+ */
+function codePointBefore(s: string, at: number): string | undefined {
+  if (at <= 0) return undefined;
+  const low = s.charCodeAt(at - 1);
+  if (low >= 0xdc00 && low <= 0xdfff && at >= 2) {
+    const high = s.charCodeAt(at - 2);
+    if (high >= 0xd800 && high <= 0xdbff) return s.slice(at - 2, at);
+  }
+  return s[at - 1];
+}
+
+/** The whole code point starting at `at`. See `codePointBefore`. */
+function codePointAt(s: string, at: number): string | undefined {
+  if (at < 0 || at >= s.length) return undefined;
+  const cp = s.codePointAt(at);
+  return cp === undefined ? undefined : String.fromCodePoint(cp);
+}
+
 function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+/**
+ * Whether a match at `at` sits on word boundaries.
+ *
+ * Both neighbours are read as whole code points rather than as code units. The
+ * right-hand side matters as much as the left: `h[at + length]` beside a
+ * supplementary-plane letter returns that letter's lone *high* surrogate, which
+ * `\p{L}` does not match either, so the defect was on both sides of the boundary
+ * rather than only on the `h[at - 1]` an audit named.
+ */
 function boundaryOk(h: string, at: number, length: number, needle: string): boolean {
-  const guardLeft = isAlphanumeric(needle[0]);
-  const guardRight = isAlphanumeric(needle[needle.length - 1]);
-  const before = at === 0 ? undefined : h[at - 1];
-  const after = h[at + length];
+  const guardLeft = isAlphanumeric(codePointAt(needle, 0));
+  const guardRight = isAlphanumeric(codePointBefore(needle, needle.length));
+  const before = codePointBefore(h, at);
+  const after = codePointAt(h, at + length);
   return (!guardLeft || !isAlphanumeric(before)) && (!guardRight || !isAlphanumeric(after));
 }
+
 
 /**
  * Search from an index, in one already-normalised coordinate system.

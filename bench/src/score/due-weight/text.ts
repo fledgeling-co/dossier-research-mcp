@@ -128,6 +128,11 @@ function isWordChar(ch: string | undefined): boolean {
  * letter it returns a lone surrogate, which `\p{L}` does not match. The boundary
  * rule then reads "letter" as "not a letter" and a term matches inside a word.
  * Found by an out-of-family reviewer, who demonstrated a match inside `a\u{10400}b`.
+ *
+ * `score/confidence.ts` carried the same defect on both sides of its own
+ * boundary until BENCH-18, and now holds a copy of this pair. Two copies of four
+ * lines is a recorded debt rather than an accident: BENCH-15 is the queued item
+ * that owns pulling shared primitives out of these modules.
  */
 function codePointBefore(s: string, at: number): string | undefined {
   if (at <= 0) return undefined;

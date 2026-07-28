@@ -216,3 +216,58 @@ export const BOILERPLATE_PAGES: readonly { url: string; text: string }[] = [
     text: 'Subscribe to continue reading. Already a subscriber? Sign in. Get unlimited access from $4 a week. Cancel any time.',
   },
 ];
+
+/**
+ * One page, in the costumes a wire story actually arrives in.
+ *
+ * Every member is derived from `WIRE_PRINTINGS[0]` by a mechanical substitution
+ * rather than typed out, which is what makes the claim these tests rest on true
+ * by construction rather than by careful typing: each pair differs **only** by
+ * Unicode normalisation. The tests assert that too, since a fixture that merely
+ * happens to be similar proves nothing about normalisation.
+ */
+const PLAIN = WIRE_PRINTINGS[0]?.text ?? '';
+
+/**
+ * What a typesetter emits. Not `ﬁ` alone: the whole Alphabetic Presentation
+ * Forms run, longest first so `ffi` does not become `ﬀ` followed by a stray `i`.
+ */
+export const typesetLigatures = (s: string): string =>
+  s
+    .replace(/ffi/g, 'ﬃ')
+    .replace(/ffl/g, 'ﬄ')
+    .replace(/ff/g, 'ﬀ')
+    .replace(/fi/g, 'ﬁ')
+    .replace(/fl/g, 'ﬂ');
+
+/** Halfwidth digits to their fullwidth forms, as CJK-locale copy carries them. */
+export const fullwidthDigits = (s: string): string =>
+  s.replace(/[0-9]/g, (d) => String.fromCodePoint(0xff10 + Number(d)));
+
+/**
+ * The three pairs, each one story spelled two ways.
+ *
+ * `ligature` and `fullwidth` fold to their plain twin under NFKC and not under
+ * NFC, because a ligature and a fullwidth digit are compatibility equivalences.
+ * `accent` folds under both, because a decomposed accent is a canonical one. The
+ * source fixture is ASCII, so the accent pair has to introduce an accent before
+ * there is anything to compose: both its sides are the same accented page, one
+ * precomposed and one decomposed.
+ */
+export const NORMALISATION_PAIRS: readonly {
+  readonly name: 'ligature' | 'fullwidth' | 'accent';
+  readonly left: string;
+  readonly right: string;
+  /** Whether NFC alone is enough to fold this pair together. */
+  readonly nfcSuffices: boolean;
+}[] = [
+  { name: 'ligature', left: PLAIN, right: typesetLigatures(PLAIN), nfcSuffices: false },
+  { name: 'fullwidth', left: PLAIN, right: fullwidthDigits(PLAIN), nfcSuffices: false },
+  {
+    name: 'accent',
+    left: PLAIN.replace(/e/g, 'é').normalize('NFC'),
+    right: PLAIN.replace(/e/g, 'é').normalize('NFD'),
+    nfcSuffices: true,
+  },
+];
+

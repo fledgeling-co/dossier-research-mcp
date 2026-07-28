@@ -162,7 +162,71 @@ export const MIN_SHINGLES = 100;
 export const MAX_PAGE_CHARS = 200_000;
 
 /**
- * Words, lowercased, punctuation gone, digits kept.
+ * The Unicode normalisation form applied before a page is shingled.
+ *
+ * **NFKC, and the K is the whole point.** This is a judgement call like every
+ * other constant in this module, so it is a named value a test can assert rather
+ * than a string literal inside a function nobody re-reads.
+ *
+ * *What it fixes, measured on this module's own fixtures rather than argued.*
+ * One printing of the wire story against the same page as a typesetter would set
+ * it, dressed in the Alphabetic Presentation Forms ligature run (`ﬁ ﬂ ﬀ ﬃ ﬄ`):
+ *
+ * ```
+ * as shipped -> same:false  resemblance:0.632  containment:0.775
+ * with NFC   -> same:false  resemblance:0.632
+ * with NFKC  -> same:true   resemblance:1.000
+ * ```
+ *
+ * Fullwidth digits behave the same way, at 0.684 unnormalised and 1.000 under
+ * NFKC. Both are **compatibility** equivalences, so NFC does not touch either,
+ * and a scorer that reached for NFC out of habit would still miss the two
+ * costumes syndicated newswire copy arrives in most often. NFC fixes only the
+ * third case, a precomposed page against its decomposed spelling, which NFKC
+ * also fixes because NFKC composes as well as folds.
+ *
+ * A non-breaking space needs neither: the replace below already turns every run
+ * of non-alphanumerics into one separator, so `U+00A0` was never visible here.
+ * Recorded so nobody later credits normalisation with it.
+ *
+ * *Why the fold is safe here and is not safe in `due-weight/text.ts`.* NFKC
+ * rewrites characters that change what a figure says: `²` becomes `2`, `½`
+ * becomes `1⁄2`, `㎡` becomes `m2`. That is exactly why `due-weight/text.ts`
+ * refuses it and uses NFC, and its refusal is right **for its input**, because it
+ * extracts numeric mentions out of the normalised string and reports on them.
+ * Nothing of that kind happens here. The output of this function is joined into
+ * ten-word windows and hashed to a `number`, and the only operation ever
+ * performed on the result is set intersection against another page fingerprinted
+ * by this same function. No caller reads a figure, a word or a character back
+ * out of the shingle stream.
+ *
+ * **That last sentence is the condition, not an observation.** A future caller
+ * that reads a value out of shingled text would be reading a figure NFKC has
+ * already rewritten. If one ever needs to, it must take the raw text rather than
+ * relax this constant. The rule the rest of the tree follows, stated once
+ * because the two forms in it look like a drift and are not: NFKC where text is
+ * matched or fingerprinted (`verify/match.ts`, `score/confidence.ts`, here), NFC
+ * where a figure is read back out of it (`score/due-weight/text.ts`).
+ */
+export const SHINGLE_NORMALISATION = 'NFKC';
+
+/**
+ * Words, lowercased, punctuation gone, digits kept, Unicode folded to
+ * `SHINGLE_NORMALISATION` first.
+ *
+ * **Normalisation leads, because the failure it prevents fails open.** Two
+ * outlets running one agency story through two typesetters produce pages that
+ * differ only in costume, and without this they are two independent domains
+ * rather than one source in four hats. That overstates independence, which is
+ * the direction that flatters a backend and defeats the rule the product turns
+ * on. Nothing else in this module can see it: the strip below is Unicode-aware
+ * through `\p{L}` and `\p{N}`, so a ligature survives it intact as a single
+ * distinct letter and breaks every ten-word window it sits in.
+ *
+ * It is also the last normaliser in the tree to get this. `verify/match.ts`,
+ * `score/confidence.ts`, `score/units.ts` and `score/due-weight/text.ts` all
+ * normalise first; see `SHINGLE_NORMALISATION` for which form each takes and
+ * why the two answers are not a drift.
  *
  * Punctuation is dropped rather than kept because house style is exactly what
  * differs between two printings of one wire story: curly quotes for straight
@@ -171,13 +235,18 @@ export const MAX_PAGE_CHARS = 200_000;
  *
  * A decimal splits into its parts (`28.6%` becomes `28` and `6`), which loses
  * nothing that matters: inside a ten-word window those digits are still as
- * distinctive as they were, and the alternative — keeping `.` attached — puts
+ * distinctive as they were, and the alternative, keeping `.` attached, puts
  * every sentence-ending full stop inside a token instead.
  */
 export function normaliseForShingling(text: string): string[] {
-  const cleaned = text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+  const cleaned = text
+    .normalize(SHINGLE_NORMALISATION)
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim();
   return cleaned === '' ? [] : cleaned.split(' ');
 }
+
 
 /**
  * FNV-1a's construction, 32-bit, over UTF-16 code units.
@@ -219,6 +288,15 @@ export function hashShingle(shingle: string): number {
  * A set, not a list, exactly as Broder defines S(D, w): "the set of all unique
  * shingles of size w contained in D". Repetition inside one document carries no
  * information about whether another document is the same story.
+ *
+ * **The cap is taken on the raw text, before normalisation, and that order is
+ * deliberate.** NFKC can expand: `½` becomes two characters and `㎡` becomes
+ * two, so normalising first would let a page of compatibility characters grow
+ * past the bound `MAX_PAGE_CHARS` exists to hold. Slicing first means the bound
+ * is a bound on what this function will ever process. The cost is that the cut
+ * can land inside a surrogate pair or between a base character and its combining
+ * mark; the orphan is not `\p{L}` or `\p{N}` and is dropped by the strip, which
+ * loses one character of a page already being truncated and reported as such.
  */
 export function shingleHashes(text: string, width: number = SHINGLE_WORDS): Set<number> {
   const words = normaliseForShingling(text.slice(0, MAX_PAGE_CHARS));

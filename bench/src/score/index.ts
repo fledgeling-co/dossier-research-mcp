@@ -142,6 +142,7 @@ export {
   resemblance,
   sameStory,
   shingleHashes,
+  SHINGLE_NORMALISATION,
   SHINGLE_WORDS,
   SYNDICATION_CONTAINMENT,
   SYNDICATION_RESEMBLANCE,
