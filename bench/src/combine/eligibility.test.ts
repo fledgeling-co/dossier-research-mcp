@@ -241,3 +241,66 @@ describe('the seam is the only place combine sees a report', () => {
     expect(report.combinations).toHaveLength(3);
   });
 });
+
+describe('a backend that ran nothing in a category is a real result about that category', () => {
+  // `combinations.md` is explicit that such a member "contributes nothing there
+  // rather than being dropped from the lattice", because removing it would
+  // change which combinations exist per scope and make the frontiers
+  // incomparable. It stays in the lattice; what it cannot do is be half of a
+  // combination whose score gets quoted.
+  const tasks = Array.from({ length: MIN_TASKS_PER_CATEGORY }, (_, i) =>
+    task(`t${String(i)}`, 'technical'),
+  );
+  const agg = aggregate({
+    cells: tasks.flatMap((t) =>
+      Array.from({ length: MIN_REPETITIONS_FOR_SPREAD }, (_, r) =>
+        scoredCell(t.id, 'gemini', r + 1, 'technical', { accuracy: 0.8 }),
+      ),
+    ),
+    corpus: corpus(tasks),
+  });
+
+  it('carries the aggregate nothing-completed verdict onto the member', () => {
+    const eligibility = eligibilityFromAggregate(
+      agg,
+      { kind: 'category', category: 'technical' },
+      memberProviders,
+    );
+    expect(eligibility.members['gemini']!.verdict.scorable).toBe(true);
+    const absent = eligibility.members['perplexity']!.verdict;
+    expect(absent.scorable).toBe(false);
+    expect(absent.scorable ? '' : absent.reason).toBe('nothing-completed');
+  });
+
+  it('keeps it in the lattice and off the frontier, leaving too few candidates to state one', () => {
+    const members: CombinationMember[] = [
+      ...backendMembers(MIN_REPETITIONS_FOR_SPREAD).filter((m) => m.id === 'gemini'),
+      { id: 'perplexity', independence: 'independent', runs: [] },
+    ];
+    const report = evaluateCombinations({
+      members,
+      scoreCombination: COUNT,
+      measure: ACCURACY,
+      eligibility: eligibilityFromAggregate(
+        agg,
+        { kind: 'category', category: 'technical' },
+        memberProviders,
+      ),
+    });
+    // Still three combinations: the lattice is unchanged, which is what makes
+    // this scope's frontier comparable with another's.
+    expect(report.combinations.map((c) => c.id).sort()).toEqual([
+      'gemini',
+      'gemini+perplexity',
+      'perplexity',
+    ]);
+    // Two of them hold the member that completed nothing, so one candidate is
+    // left and one candidate is not a frontier.
+    expect(report.frontier.excluded.map((e) => e.id).sort()).toEqual([
+      'gemini+perplexity',
+      'perplexity',
+    ]);
+    expect(report.frontier.withheld?.reason).toBe('too-few-candidates');
+    expect(report.scorable).toBe(false);
+  });
+});
