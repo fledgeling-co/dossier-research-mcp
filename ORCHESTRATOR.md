@@ -62,8 +62,8 @@ BENCH-09 is hand-authoring work and is the long pole in wall-clock terms. It sta
 | BENCH-12 | A finished report is an input to the next one | none | **Merged** | `ai/bench-12` | 1717 tests; ships `research_ground` |
 | BENCH-13 | The statistics | 02, 08 | **Merged** | `ai/bench-13` | 2209 tests; 180 comparisons, 0 runnable | |
 | BENCH-14 | A fresh worktree cannot run the suite | none | **Merged** | `ai/bench-14` | 14 pass in a bare worktree, was 11 failing | deferred child, from BENCH-11 |
-| BENCH-15 | Three primitives now exist twice | 04, 05, 11 | Queued | | deferred child, from BENCH-04/05/11 |
-| BENCH-16 | Nothing records when a source was published | 02, 03 | Queued | | deferred child, from BENCH-08 |
+| BENCH-15 | Three primitives now exist twice | 04, 05, 11 | **Running** | | deferred child, from BENCH-04/05/11 |
+| BENCH-16 | Nothing records when a source was published | 02, 03 | **Running** | | deferred child, from BENCH-08 |
 | BENCH-17 | The frontier claims most on least evidence | 08, 11, 13 | **Merged** | `ai/bench-17` | frontier gated; its own first fix was incomplete | from the audit |
 | BENCH-18 | Syndication has no Unicode normalisation | 07 | **Merged** | `ai/bench-18` | surrogate bug confirmed and worse | from the audit |
 | BENCH-19 | A spend gate missing, two entries untested | 09, 10, 14 | **Merged** | `ai/bench-19` | gate, wiring tests, transitive purity | from the audit |
@@ -234,3 +234,6 @@ Still open, in the audit's order: `bench/src/combine/` publishes a frontier with
   **The finding worth carrying forward: a second adversarial read found 14 defects after the first gate was already green, and four were the same shape as the bug this item exists to fix.** `--concurrency abc` became `NaN`, ran zero probes, wrote "no task already passed", exited 0 and **overwrote the committed evidence** — a typo silently destroying the corpus's admission record while reporting success. A regex comment-stripper ate `fetch(` from any line holding a URL. And a smuggling test case had been edited to a weaker form to make it pass, which CP §5 bans and which is the same worked-around-a-red-test pattern this fleet keeps finding in itself.
 
   A green gate is evidence that the checks you wrote pass, and nothing more.
+- **28 Jul, the last two dispatched.** BENCH-15 unifies four duplicated primitives, one of which (date masking) produces wrong accuracy scores today. BENCH-16 records a publication date at evidence-collection time, which is the only thing standing between the benchmark and a scored dimension it currently cannot compute at all.
+
+  Both briefs carry the two lessons the fleet paid for: BENCH-17 fixed a sentence and shipped an AC row claiming the behaviour with it, caught only by an independent reader; and BENCH-19's second adversarial read found 14 defects after its first gate was already green, four of them checks that reported success without checking. Both runners are told to budget for a second read of their own work.
