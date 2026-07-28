@@ -45,13 +45,19 @@ export const IMPURE_MODULES = [
  * Ways out of the static graph, which a static walk by definition cannot follow.
  *
  * `createRequire` hands a module the CommonJS resolver, so anything after it is
- * invisible here. A walker that ignored it would return a clean graph for a
- * module that requires `node:fs` by a computed name, and the guarantee would be
- * worth nothing. Reported as an impure reach in its own right rather than
- * chased, because the honest answer is "this module can reach things I cannot
- * see", not a list.
+ * invisible here. A bare `fetch(` needs no import at all, because it is a
+ * global. A walker that ignored either would return a clean graph for a module
+ * that requires `node:fs` by a computed name or opens a socket with no import
+ * to see, and the guarantee would be worth nothing.
+ *
+ * Both were checked by the regex guards this walk replaces, so they are carried
+ * rather than quietly dropped: an upgrade that loses a check is a downgrade
+ * with better prose.
  */
-export const ESCAPE_HATCHES = ['createRequire'] as const;
+const ESCAPE_HATCHES: readonly { readonly name: string; readonly pattern: RegExp }[] = [
+  { name: 'createRequire', pattern: /\bcreateRequire\b/ },
+  { name: 'fetch()', pattern: /\bfetch\s*\(/ },
+];
 
 /** One forbidden import, and how the entry module reaches it. */
 export interface ImpureReach {
@@ -65,6 +71,11 @@ export interface ImpureReach {
    * `./arms.js` then `../citations/collect.js`" names the edge to change.
    */
   readonly path: readonly string[];
+}
+
+/** Source with block and line comments removed, so prose cannot trip a check. */
+function withoutComments(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
 }
 
 /** Every relative specifier `source` imports, in the order they appear. */
@@ -166,9 +177,15 @@ export function findImpureImports(
         reaches.push({ module, file: next.file, path: next.path });
       }
     }
+    // Comments are stripped first, because several modules in this repo explain
+    // at length why they do *not* call `fetch` directly, and a check that
+    // cannot tell an explanation from a call would force the reason out of the
+    // file to keep the rule. `bench/src/stats/purity.test.ts` already learned
+    // this the same way.
+    const code = withoutComments(source);
     for (const hatch of ESCAPE_HATCHES) {
-      if (source.includes(hatch)) {
-        reaches.push({ module: hatch, file: next.file, path: next.path });
+      if (hatch.pattern.test(code)) {
+        reaches.push({ module: hatch.name, file: next.file, path: next.path });
       }
     }
     for (const specifier of relativeSpecifiers(source)) {

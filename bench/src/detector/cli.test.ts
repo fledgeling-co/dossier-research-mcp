@@ -1,10 +1,9 @@
-import { spawn } from 'node:child_process';
 import { mkdtempSync, readFileSync, readdirSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { resolveTsx, spawnEntry, TSX_MISSING } from '../spawn-entry.js';
 import { sha256Hex } from './corpus.js';
 import { runDetector, type DetectorIo } from './cli.js';
 
@@ -35,38 +34,16 @@ import { runDetector, type DetectorIo } from './cli.js';
  * fetches a page and `judge` calls a model. What is proved instead is that both
  * are **reachable and refuse correctly**, which is the half a hermetic gate can
  * honestly check.
+ *
+ * The spawn helper and the skip reason moved to `bench/src/spawn-entry.ts` when
+ * three more entry points needed the same thing. Four hand-written copies is
+ * four chances for one of them to resolve its interpreter the way this file
+ * originally did.
  */
 
 const CLI = fileURLToPath(new URL('./cli.ts', import.meta.url));
 
-/**
- * tsx, through Node's own resolution rather than an assumed layout.
- *
- * `createRequire` walks ancestor `node_modules` directories exactly as an
- * `import` would, so a worktree inside the repo finds the root install. A
- * literal relative path finds nothing there, which was the defect.
- */
-function resolveTsx(): string | undefined {
-  try {
-    return createRequire(import.meta.url).resolve('tsx/cli');
-  } catch {
-    return undefined;
-  }
-}
-
 const TSX_CLI = resolveTsx();
-
-/**
- * Why the one process-dependent case skipped, when it does.
- *
- * A constant rather than an inline string so it can be asserted on. A skip
- * reason only ever prints in the environment that cannot check it, which is
- * exactly the wording nobody notices going wrong.
- */
-const TSX_MISSING =
-  'tsx could not be resolved from this checkout, so the entry point cannot be run as a ' +
-  'process. Run `npm install` here or in any directory above this one, then re-run. ' +
-  'Every other case in this file runs in-process and still covers the command logic.';
 
 interface Ran {
   readonly code: number;
@@ -91,32 +68,6 @@ async function run(args: readonly string[], stdin = ''): Promise<Ran> {
   return { code, stdout, stderr };
 }
 
-/** Drive the real entry point as a process, the way a person runs it. */
-function spawnCli(tsx: string): Promise<{ code: number | null; stdout: string; stderr: string }> {
-  return new Promise((resolve, reject) => {
-    // `process.execPath` and tsx's own entry, rather than the `.bin` shim, so
-    // this does not depend on a shim existing or being executable either.
-    const child = spawn(process.execPath, [tsx, CLI], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      // Inherited, so the corpus resolves the same way it does for a person
-      // running the command, and hermetic so nothing can reach a model.
-      env: { ...process.env, DOSSIER_HERMETIC: '1' },
-    });
-    let stdout = '';
-    let stderr = '';
-    child.stdout.on('data', (d: Buffer) => {
-      stdout += d.toString('utf8');
-    });
-    child.stderr.on('data', (d: Buffer) => {
-      stderr += d.toString('utf8');
-    });
-    child.on('error', reject);
-    child.on('close', (code) => {
-      resolve({ code, stdout, stderr });
-    });
-  });
-}
-
 describe('the entry point actually runs (SELF-23)', () => {
   it('is wired: the real CLI, spawned over its real argv, prints both families (WT-04)', async (ctx) => {
     const tsx = TSX_CLI;
@@ -127,7 +78,7 @@ describe('the entry point actually runs (SELF-23)', () => {
       ctx.skip(TSX_MISSING);
       return;
     }
-    const ran = await spawnCli(tsx);
+    const ran = await spawnEntry(tsx, CLI);
     expect(ran.stderr, ran.stderr).toBe('');
     expect(ran.code).toBe(0);
     expect(ran.stdout).toContain('# The support family');

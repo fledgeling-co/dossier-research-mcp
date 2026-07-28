@@ -260,10 +260,19 @@ describe('SELF-04: what the score can and cannot reach', () => {
     const reaches = findImpureImports(at('./report.ts'));
     expect(reaches.length).toBeGreaterThan(0);
 
-    // The two leaks the resolve-hook trace found, one per child of the arms.
-    expect(reaches.map((r) => r.module)).toEqual(
-      expect.arrayContaining(['undici', 'node:net', 'node:fs']),
-    );
+    // The exact set, not a subset. An `arrayContaining` here would have passed
+    // while the module's own header enumerated four of the six, which is the
+    // shape of defect this whole item is about: a claim narrower than the truth
+    // reads as reassuring and is still wrong. A new reach fails this and the
+    // header has to be corrected with it.
+    expect([...new Set(reaches.map((r) => r.module))].sort()).toEqual([
+      'node:child_process',
+      'node:dns/promises',
+      'node:fs',
+      'node:fs/promises',
+      'node:net',
+      'undici',
+    ]);
 
     // Every one of them, without exception, arrives through the arms.
     for (const reach of reaches) {
@@ -272,9 +281,9 @@ describe('SELF-04: what the score can and cannot reach', () => {
       );
     }
 
-    // And the arms really are the edge: remove that one import and the rest of
-    // what `report.ts` pulls in is clean, which is what makes the sentence
-    // above a measurement rather than an assertion.
+    // And the arms really are the edge: everything else `report.ts` imports is
+    // clean, which is what makes the sentence above a measurement rather than
+    // an assertion.
     for (const sibling of ['./confusion.ts', './corpus.ts', './schema.ts', './verdicts.ts']) {
       expect(findImpureImports(at(sibling)), sibling).toEqual([]);
     }
@@ -294,6 +303,7 @@ describe('SELF-04: what the score can and cannot reach', () => {
       "void import('node:fs/promises');",
       "const fs = require('node:fs');",
       "import { createRequire } from 'node:module';",
+      'await fetch(someUrl);',
     ];
     const dir = mkdtempSync(join(tmpdir(), 'purity-'));
     for (const [i, line] of smuggled.entries()) {

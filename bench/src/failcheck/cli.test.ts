@@ -1,11 +1,10 @@
 import { mkdtempSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { spawn } from 'node:child_process';
-import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
 import type { CliStatus } from '../../../src/local/cli.js';
+import { resolveTsx, spawnEntry, TSX_MISSING } from '../spawn-entry.js';
 import { argvFor, parseArgs, runFailCheck, type FailCheckIo, type Options } from './cli.js';
 
 /**
@@ -34,21 +33,7 @@ import { argvFor, parseArgs, runFailCheck, type FailCheckIo, type Options } from
 
 const CLI = fileURLToPath(new URL('./cli.ts', import.meta.url));
 
-/** tsx through Node's own resolution, so a worktree finds the root install (WT-04). */
-function resolveTsx(): string | undefined {
-  try {
-    return createRequire(import.meta.url).resolve('tsx/cli');
-  } catch {
-    return undefined;
-  }
-}
-
 const TSX_CLI = resolveTsx();
-
-const TSX_MISSING =
-  'tsx could not be resolved from this checkout, so the entry point cannot be run as a ' +
-  'process. Run `npm install` here or in any directory above this one, then re-run. ' +
-  'Every other case in this file runs in-process and still covers the command logic.';
 
 const roots: string[] = [];
 function temp(): string {
@@ -135,29 +120,6 @@ async function run(
   };
   const code = await runFailCheck(args, io);
   return { code, stderr, asked, identified, written };
-}
-
-/** Drive the real entry point as a process, the way a person runs it. */
-function spawnCli(tsx: string, args: readonly string[], cwd: string): Promise<{ code: number | null; stdout: string; stderr: string }> {
-  return new Promise((resolvePromise, reject) => {
-    const child = spawn(process.execPath, [tsx, CLI, ...args], {
-      cwd,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, DOSSIER_HERMETIC: '1' },
-    });
-    let stdout = '';
-    let stderr = '';
-    child.stdout.on('data', (d: Buffer) => {
-      stdout += d.toString('utf8');
-    });
-    child.stderr.on('data', (d: Buffer) => {
-      stderr += d.toString('utf8');
-    });
-    child.on('error', reject);
-    child.on('close', (code) => {
-      resolvePromise({ code, stdout, stderr });
-    });
-  });
 }
 
 describe('GATE-01 nothing is spawned without --confirm', () => {
@@ -391,7 +353,7 @@ describe('GATE-10 the entry point is wired', () => {
     // Hermetic by construction: the refusal path is the one that spawns
     // nothing, so proving the entry point runs costs no quota at all.
     const repoRoot = fileURLToPath(new URL('../../..', import.meta.url));
-    const ran = await spawnCli(tsx, ['--dir', corpusOf(2)], repoRoot);
+    const ran = await spawnEntry(tsx, CLI, ['--dir', corpusOf(2)], repoRoot);
     expect(ran.code).toBe(1);
     expect(ran.stderr).toContain('2 selected task(s)');
     expect(ran.stderr).toContain('--confirm');
@@ -413,7 +375,7 @@ describe('GATE-10 the entry point is wired', () => {
     }
     const out = join(temp(), 'must-not-exist.json');
     const repoRoot = fileURLToPath(new URL('../../..', import.meta.url));
-    await spawnCli(tsx, ['--dir', corpusOf(1), '--out', out], repoRoot);
+    await spawnEntry(tsx, CLI, ['--dir', corpusOf(1), '--out', out], repoRoot);
     expect(existsSync(out)).toBe(false);
   }, 60_000);
 });

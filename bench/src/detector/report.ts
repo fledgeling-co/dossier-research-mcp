@@ -33,18 +33,32 @@ import {
  *
  * **What this file can reach, stated accurately.** It used to say it must never
  * import `node:fs` and must never reach a network, and a guard reading its own
- * text agreed. Both were wrong. Through `./arms.js` it reaches the production
- * citation collector, and from there `undici`, `node:net`, `node:dns/promises`
- * and `node:fs`. That is four hops and two hops respectively, and no forbidden
- * word appears in this file, which is why a same-file check could never have
- * seen it.
+ * text agreed. Both were wrong, and by more than the audit that found it said.
+ * Through `./arms.js`, and only through `./arms.js`, it reaches six forbidden
+ * modules by three distinct chains:
+ *
+ * ```
+ * arms -> citations/cache            node:fs
+ * arms -> citations/fetch
+ *      -> src/net/safe-fetch         undici, node:net, node:dns/promises
+ * arms -> citations/collect
+ *      -> src/research/citations
+ *      -> src/store/types
+ *      -> src/research/failure
+ *      -> src/local/cli              node:fs, node:fs/promises, node:child_process
+ * ```
+ *
+ * None of those words appears anywhere in this file, and the nearest is two
+ * hops away while the furthest is six. That is why a same-file check could
+ * never have seen any of it, and why the guard now walks the graph instead.
  *
  * **Nothing is called, and the difference matters.** The registry arm drives
  * `collectCitationEvidence` with a scripted transport, an offline page fetcher,
- * an in-memory cache and a fixed clock, so scoring reaches no network and reads
- * no file. This is **capability, not behaviour**: the detector has never made a
- * network call, and saying otherwise would be a different and more alarming
- * claim than the true one. What was false was the guarantee, not the conduct.
+ * an in-memory cache and a fixed clock, so scoring reaches no network, reads no
+ * file and spawns nothing. This is **capability, not behaviour**: the detector
+ * has never made a network call, and saying otherwise would be a different and
+ * far more alarming claim than the true one. What was false was the guarantee,
+ * not the conduct.
  *
  * The guard in `corpus.test.ts` now walks the import graph and asserts the
  * narrow true thing: this module is impure, and `./arms.js` is the only edge by
