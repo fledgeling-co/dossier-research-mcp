@@ -79,6 +79,24 @@ const EnvSchema = z.object({
   DOSSIER_BUDGET_USD_GEMINI: numeric(0, 0, 1_000_000),
   DOSSIER_BUDGET_USD_PERPLEXITY: numeric(0, 0, 1_000_000),
   DOSSIER_BUDGET_USD_OPENAI: numeric(0, 0, 1_000_000),
+  /**
+   * How many runs may be in flight on ONE backend at once. 0 disables the cap.
+   *
+   * Separate from `DOSSIER_MAX_CONCURRENT` because a backend's real limit is
+   * not always a slot count. OpenAI deep research is metered in tokens per
+   * minute against the whole account, and two runs contending for one
+   * 1,000,000-token budget kill each other regardless of how many global slots
+   * are free.
+   */
+  // Defaults to 1, and it is the only backend that does. Measured, not
+  // guessed: six runs in this repo's own ledger died with "Limit 1000000, Used
+  // 993157" — an account at 99.3% of its minute budget, killed by a request for
+  // 53,211 more. Deep research accumulates context as it searches, so the
+  // second concurrent run is what breaks the first. Set it to 0 to disable.
+  DOSSIER_CONCURRENCY_OPENAI: numeric(1, 0, 1_000_000),
+  DOSSIER_CONCURRENCY_GEMINI: numeric(0, 0, 1_000_000),
+  DOSSIER_CONCURRENCY_PERPLEXITY: numeric(0, 0, 1_000_000),
+  DOSSIER_CONCURRENCY_XAI: numeric(0, 0, 1_000_000),
   DOSSIER_BUDGET_USD_XAI: numeric(0, 0, 1_000_000),
   /**
    * How many runs may be in flight at once, across every backend.
@@ -148,6 +166,8 @@ export interface Config {
   readonly budgetWindowHours: number;
   /** Optional per-provider sub-ceilings. Zero means "only the global one". */
   readonly providerBudgetsUsd: Readonly<Record<string, number>>;
+  /** Runs allowed in flight per backend. Zero means only the global cap applies. */
+  readonly providerConcurrency: Readonly<Record<string, number>>;
   readonly maxConcurrent: number;
   readonly requireContract: boolean;
   readonly dedupeTtlMinutes: number;
@@ -227,6 +247,16 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       perplexity: e.DOSSIER_BUDGET_USD_PERPLEXITY,
       openai: e.DOSSIER_BUDGET_USD_OPENAI,
       xai: e.DOSSIER_BUDGET_USD_XAI,
+    },
+    providerConcurrency: {
+      gemini: e.DOSSIER_CONCURRENCY_GEMINI,
+      perplexity: e.DOSSIER_CONCURRENCY_PERPLEXITY,
+      // Read straight through, so an explicit 0 really does disable the cap.
+      // The first version remapped 0 to 1 here, which made the documented
+      // "0 disables" false for the one backend that needed it — caught by a
+      // test that set it to 0 and was still refused a slot.
+      openai: e.DOSSIER_CONCURRENCY_OPENAI,
+      xai: e.DOSSIER_CONCURRENCY_XAI,
     },
     maxConcurrent: e.DOSSIER_MAX_CONCURRENT,
     requireContract: e.DOSSIER_REQUIRE_CONTRACT,

@@ -578,8 +578,13 @@ describe('the lock knows who holds it', () => {
 });
 
 describe('per-provider sub-ceilings', () => {
+  // `DOSSIER_CONCURRENCY_OPENAI: '0'` disables the per-backend slot cap for
+  // these cases. That cap defaults to 1 for OpenAI and is checked BEFORE the
+  // budget, following the documented order (dedupe, concurrency, budget,
+  // ledger, call) — so without this the second run here is refused for a slot
+  // and never reaches the ceiling these tests exist to prove.
   const config = (over: Record<string, string>) => ({
-    ...loadConfig({ DOSSIER_STORE_DIR: root, ...over }),
+    ...loadConfig({ DOSSIER_STORE_DIR: root, DOSSIER_CONCURRENCY_OPENAI: '0', ...over }),
     storeDir: root,
   });
 

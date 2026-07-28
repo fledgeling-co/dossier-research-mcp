@@ -12,6 +12,8 @@ import { fingerprint } from './contract.js';
 import {
   boughtNothing,
   classifyCreateFailure,
+  looksRateLimited,
+  rateLimitFacts,
   describeFailureKind,
   failureTag,
   isArgvRejection,
@@ -383,6 +385,20 @@ export class Runner {
       const occupied = active.length + unreadable;
       if (occupied >= this.config.maxConcurrent) {
         throw new ConcurrencyExceededError(occupied, this.config.maxConcurrent);
+      }
+
+      // Per-backend concurrency, beside the per-backend budget for the same
+      // reason: a global cap is the wrong unit when one backend's limit is not
+      // dollars but tokens per minute. OpenAI deep research accumulates context
+      // as it searches, so two runs at once contend for one account-wide TPM
+      // budget and the second kills the first. The global cap cannot express
+      // "ten runs, but never two of THESE".
+      const providerCap = this.config.providerConcurrency[provider] ?? 0;
+      if (providerCap > 0) {
+        const here = active.filter((r) => r.provider === provider).length;
+        if (here >= providerCap) {
+          throw new ConcurrencyExceededError(here, providerCap);
+        }
       }
 
       if (this.config.budgetUsd > 0) {
@@ -978,13 +994,33 @@ export class Runner {
         // The adapter's own verdict wins where it has one; otherwise the text
         // is checked for an argument parser's refusal, which is the signature
         // of broken software rather than of hard research.
+        // A rate limit reported in the response BODY, which `isRateLimited`
+        // cannot see because it asks about the HTTP status and this call
+        // returned 200. Every OpenAI run killed this way was filed as
+        // `research` — hard research that did not work — when the account had
+        // simply run out of tokens per minute. The two have opposite remedies.
+        const rateLimited = looksRateLimited(upstream);
         const kind: RunFailureKind =
-          snapshot.failureKind ?? (isArgvRejection(upstream) ? 'adapter-rejected' : 'research');
+          snapshot.failureKind ??
+          (rateLimited ? 'rate-limited' : isArgvRejection(upstream) ? 'adapter-rejected' : 'research');
+        const facts = rateLimited ? rateLimitFacts(upstream) : {};
+        const diagnosis =
+          rateLimited && facts.limit !== undefined && facts.used !== undefined
+            ? `\n\nYour account was at ${((facts.used / facts.limit) * 100).toFixed(1)}% of its ` +
+              `${facts.limit.toLocaleString('en-US')}-token minute budget when this run needed ` +
+              `${(facts.requested ?? 0).toLocaleString('en-US')} more` +
+              (facts.retryAfterSeconds !== undefined
+                ? `, and the provider asked for ${String(facts.retryAfterSeconds)}s.`
+                : '.') +
+              ' That is a capacity problem, not a research one: the fix is fewer runs against this ' +
+              'backend at once, or a higher limit on the account. `DOSSIER_PROVIDER_CONCURRENCY` ' +
+              'caps how many run on one backend simultaneously.'
+            : '';
         next = {
           ...next,
           state: 'failed',
           failureKind: kind,
-          error: `${upstream}\n\n${describeFailureKind(kind)}`.slice(0, 4000),
+          error: `${upstream}\n\n${describeFailureKind(kind)}${diagnosis}`.slice(0, 4000),
         };
         await this.store.appendJournal(run.id, 'failed', next.error ?? 'failed');
         break;

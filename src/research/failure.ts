@@ -141,3 +141,60 @@ export function failureTag(kind: RunFailureKind): string {
 export function statusOfFailure(error: unknown): number | undefined {
   return httpStatusOf(error);
 }
+
+/**
+ * A rate limit reported in a response BODY rather than as an HTTP status.
+ *
+ * `isRateLimited` asks whether the status was 429, which is right for a
+ * refused request. A background run is different: the HTTP call succeeds, the
+ * response says `status: "failed"`, and the reason is prose inside
+ * `error.message`. OpenAI deep research fails this way, and every one of those
+ * runs was classified as `research` — hard research that did not work — when
+ * the org had simply exhausted its tokens-per-minute budget.
+ *
+ * The distinction is worth the code: `research` tells the operator their
+ * question was too hard, and the truthful answer is that their account was too
+ * busy. One of those is fixed by rewriting the brief and the other by running
+ * fewer things at once.
+ */
+export function looksRateLimited(text: string): boolean {
+  return /\brate limit\b|\btokens per min\b|\bTPM\b|\bRPM\b|\bquota exceeded\b|\b429\b/i.test(text);
+}
+
+/** What a provider's rate-limit prose actually said, when it said numbers. */
+export interface RateLimitFacts {
+  readonly limit?: number;
+  readonly used?: number;
+  readonly requested?: number;
+  readonly retryAfterSeconds?: number;
+}
+
+/**
+ * Pull the numbers out of a rate-limit message.
+ *
+ * These are the difference between "it failed" and a diagnosis. A real one from
+ * this repo's ledger: `Limit 1000000, Used 993157, Requested 53211. Please try
+ * again in 2.782s.` The org was at 99.3% of its minute budget and the request
+ * that tipped it over was small — so the problem is concurrency, not the size
+ * of any single run, and the wait was under three seconds.
+ *
+ * Best-effort by construction: providers word these differently and a missing
+ * field is reported as missing rather than guessed.
+ */
+export function rateLimitFacts(text: string): RateLimitFacts {
+  const num = (re: RegExp): number | undefined => {
+    const m = re.exec(text);
+    if (!m?.[1]) return undefined;
+    const v = Number(m[1].replace(/,/g, ''));
+    return Number.isFinite(v) ? v : undefined;
+  };
+  const facts: RateLimitFacts = {
+    ...(num(/\bLimit\s+([\d,]+)/i) === undefined ? {} : { limit: num(/\bLimit\s+([\d,]+)/i)! }),
+    ...(num(/\bUsed\s+([\d,]+)/i) === undefined ? {} : { used: num(/\bUsed\s+([\d,]+)/i)! }),
+    ...(num(/\bRequested\s+([\d,]+)/i) === undefined ? {} : { requested: num(/\bRequested\s+([\d,]+)/i)! }),
+    ...(num(/try again in\s+([\d.]+)\s*s/i) === undefined
+      ? {}
+      : { retryAfterSeconds: num(/try again in\s+([\d.]+)\s*s/i)! }),
+  };
+  return facts;
+}
