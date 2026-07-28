@@ -64,8 +64,8 @@ BENCH-09 is hand-authoring work and is the long pole in wall-clock terms. It sta
 | BENCH-14 | A fresh worktree cannot run the suite | none | **Merged** | `ai/bench-14` | 14 pass in a bare worktree, was 11 failing | deferred child, from BENCH-11 |
 | BENCH-15 | Three primitives now exist twice | 04, 05, 11 | Queued | | deferred child, from BENCH-04/05/11 |
 | BENCH-16 | Nothing records when a source was published | 02, 03 | Queued | | deferred child, from BENCH-08 |
-| BENCH-17 | The frontier claims most on least evidence | 08, 11, 13 | **Running** | | from the audit |
-| BENCH-18 | Syndication has no Unicode normalisation | 07 | **Running** | | from the audit |
+| BENCH-17 | The frontier claims most on least evidence | 08, 11, 13 | **Merged** | `ai/bench-17` | frontier gated; its own first fix was incomplete | from the audit |
+| BENCH-18 | Syndication has no Unicode normalisation | 07 | **Merged** | `ai/bench-18` | surrogate bug confirmed and worse | from the audit |
 | BENCH-19 | A spend gate missing, two entries untested | 09, 10, 14 | **Running** | | from the audit |
 
 ## Context contract
@@ -214,3 +214,14 @@ Run after all fourteen merged, on the defects no single runner could see. Full f
 **Corrected. I propagated a false claim.** See the BENCH-14 entry above.
 
 Still open, in the audit's order: `bench/src/combine/` publishes a frontier with none of the four floors its sibling enforces and no path by which a tie test could reach it (latent, since nothing consumes `combine/` yet); syndication is the only text normaliser with no Unicode normalisation, and it fails open toward overstating independence; two date maskers disagree in both directions, which BENCH-15's own table says they do not; three `completionRate` implementations disagree on the empty denominator, so "never ran" prints as "failed everything"; `detector/` declares purity its own guard cannot check, and the guard omits the one leaking edge; and `failcheck/cli.ts` spends subscription quota with no confirmation gate while its sibling `detector/cli.ts` has one.
+- **28 Jul, BENCH-17 and BENCH-18 merged.** 2294 tests.
+
+  **BENCH-17's own first fix was incomplete, and it shipped an AC row saying otherwise.** It corrected the separability sentence and claimed the behaviour with it; an independent reviewer with fresh context found that `spreadsOverlap` needs both sides, so a pair holding one spread and one bare point estimate still fell through to a raw comparison and 0.001 still eliminated the candidate that had actually been measured. A one-sided pair is now tied, on that function's own rule that two values of unknown uncertainty cannot be separated. **This is the trap the brief warned about explicitly, and warning about it was not enough.**
+
+  Its reviewer also caught `scopeVerdict` reading the scope gate off `categoryGroups`, which exist only for providers that produced cells, so an empty cell store over a ten-task corpus reported a corpus holding none.
+
+  **It declined to wire a consumer, with a reason worth keeping.** `scoreCombination` is injected because three of five scorers cannot be reached from stored cells, so a `bench:combine` CLI would have to answer "what number is a combination's score", which is a scoring decision the design deliberately leaves to the caller. Purpose 4 of the design still has no producer, and what it lacks is a named measure rather than plumbing.
+
+  **BENCH-18 confirmed the surrogate lead and found it worse than reported**: both sides of the boundary were affected, not just the indexing expression named, and the needle's own ends too. Its sharpest consumer is `refusal.ts`, which filters fabricated entities through `mentions()`, so a false positive scores a correctly-refusing report as asserting the fabrication. It refuted the other half of the lead with evidence: the NFKC and NFC divergence between two normalisers is deliberate and load-bearing.
+
+  Its fix made a latent infinite loop **reachable**, caught by Codex review: advancing by one code unit after a rejected match snaps back forever inside a surrogate pair, which could not fire while the boundary was wrongly accepting those matches. And it mutation-tested its own claim that vitest's timeout would catch a reintroduced loop, found that false because the spin blocks the event loop, and corrected the comment, spec and AC row to say a hung gate is what happens.
