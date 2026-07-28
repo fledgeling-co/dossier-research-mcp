@@ -63,7 +63,12 @@ describe('every number carries what it cannot mean', () => {
     }
   });
 
-  it('says on the recency metric that the input is missing rather than the score being zero', () => {
-    expect(metricDescriptor('recency-fresh-share').caveat).toMatch(/publication date/);
+  it('DATE-24 says on the recency metric what the figure is over, not that it is missing', () => {
+    // Corrected 28 July 2026 with REPORT-21: the caveat used to say nothing
+    // records a publication date, and something now does.
+    const caveat = metricDescriptor('recency-fresh-share').caveat;
+    expect(caveat).toMatch(/datable/);
+    expect(caveat).toMatch(/never counts as fresh/);
+    expect(caveat).not.toMatch(/nothing in the stored results records/);
   });
 });

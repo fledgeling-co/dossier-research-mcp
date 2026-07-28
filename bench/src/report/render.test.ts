@@ -6,11 +6,12 @@ import { aggregate } from './aggregate.js';
 import { formatValue, rankings, render, renderJson, renderMarkdown } from './render.js';
 import { summarise } from './spread.js';
 import { corpus, scoredCell, task } from './fixtures.js';
+import type { DatingCounts } from '../score/recency.js';
 
 const SIX = ['t1', 't2', 't3', 't4', 't5', 't6'].map((id) => task(id, 'technical'));
 
 /** A corpus with a scorable category, an under-sampled one and a stale task. */
-function realistic() {
+function realistic(over: { readonly dating?: DatingCounts } = {}) {
   const tasks = [
     ...['t1', 't2', 't3', 't4', 't5'].map((id) => task(id, 'technical')),
     task('t6', 'technical', true),
@@ -58,7 +59,13 @@ function realistic() {
       [1, 2, 3].map((r) => scoredCell(id, 'gemini', r, 'contested', { accuracy: 0.4 })),
     ),
   ];
-  return aggregate({ cells, corpus: corpus(tasks) });
+  // Put the dating counts on exactly one cell rather than on every one, so the
+  // rendered totals are the numbers the test names rather than a multiple of
+  // them that nobody reading the assertion could check.
+  const dating = over.dating;
+  const withDating =
+    dating === undefined ? cells : cells.map((c, i) => (i === 0 ? { ...c, dating } : c));
+  return aggregate({ cells: withDating, corpus: corpus(tasks) });
 }
 
 describe('REPORT-06 no value is ever bare', () => {
@@ -265,11 +272,34 @@ describe('REPORT-01 and REPORT-18 the ranking on the page', () => {
   });
 });
 
-describe('REPORT-21 recency renders unavailable, never zero', () => {
-  it('names the missing publication dates in the limits and the column caveat', () => {
+describe('DATE-23 and DATE-24 the report prints what recency is computed over', () => {
+  // REPORT-21 asserted that recency renders unavailable and is corrected in
+  // place in `docs/test-plan.md`. The reason it named no longer exists.
+
+  it('DATE-24 no longer claims recency is unavailable', () => {
     const markdown = renderMarkdown(realistic());
-    expect(markdown).toMatch(/\*\*Recency is unavailable\*\*, not zero/);
-    expect(markdown).toMatch(/no publication date is recorded/);
+    expect(markdown).not.toMatch(/Recency is unavailable/);
+    expect(markdown).not.toMatch(/no publication date is recorded/);
+    expect(markdown).toMatch(/\*\*Recency is measured over the sources that could be dated\*\*/);
+  });
+
+  it('DATE-24 the metric caveat says what the figure is over, not that it cannot be computed', () => {
+    const markdown = renderMarkdown(realistic());
+    expect(markdown).toMatch(/share of \*\*datable\*\* sources/);
+  });
+
+  it('DATE-23 counts the sources it could and could not date, with the two causes apart', () => {
+    const markdown = renderMarkdown(
+      realistic({ dating: { dated: 12, absent: 25, unchecked: 3 } }),
+    );
+    expect(markdown).toMatch(/### Publication dates, and how many could not be established/);
+    expect(markdown).toMatch(/\*\*28 of 40 cited sources could not be dated\*\* \(70\.0%\)/);
+    expect(markdown).toMatch(/Dated 12; read and carrying no date 25; never read, or read only as far as the byte cap, 3\./);
+  });
+
+  it('DATE-23 says plainly that nothing was checked rather than printing a zero share', () => {
+    const markdown = renderMarkdown(realistic());
+    expect(markdown).toMatch(/No cited source was checked for a publication date/);
   });
 });
 

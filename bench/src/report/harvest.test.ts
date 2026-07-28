@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { PublicationDateView } from '../score/recency.js';
+import type { DatedPage, PublicationDateView } from '../score/recency.js';
+import type { PageEvidence } from '../citations/evidence.js';
 import { METRIC_IDS } from './metrics.js';
 import { harvestCell, type HarvestEvidenceView } from './harvest.js';
 import { cell, task } from './fixtures.js';
@@ -128,8 +129,13 @@ describe('REPORT-08 a not-applicable arm is null with its reason', () => {
   });
 });
 
-describe('REPORT-21 recency is unavailable, permanently and by name', () => {
-  it('is null with the missing input named, on a cell that scored everything else', () => {
+describe('DATE-20 and DATE-21 recency is computed at the caller, not only at the scorer', () => {
+  // REPORT-21 asserted the opposite of this group and is corrected in place in
+  // `docs/test-plan.md`. Proving the extractor works in isolation is not proving
+  // the caller changed, which is the lesson BENCH-17 paid for: it corrected a
+  // sentence and shipped an acceptance row claiming the behaviour with it.
+
+  it('DATE-20 nulls the metric with a reason when nothing could be dated, never zero', () => {
     const scored = harvestCell({
       cell: cell('t1', 'gemini', 1),
       task: task('t1', 'technical'),
@@ -137,8 +143,104 @@ describe('REPORT-21 recency is unavailable, permanently and by name', () => {
       evidence: evidence(),
     });
     expect(scored.metrics['recency-fresh-share']).toBeNull();
-    expect(scored.unmeasured['recency-fresh-share']).toMatch(/no publication date is recorded/);
-    expect(scored.unmeasured['recency-fresh-share']).toMatch(/fetch time/);
+    expect(scored.unmeasured['recency-fresh-share']).toMatch(/readable publication date/);
+    expect(scored.dating).toEqual({ dated: 0, absent: 2, unchecked: 0 });
+  });
+
+  it('DATE-21 scores a real figure over the sources it could date', () => {
+    const scored = harvestCell({
+      cell: cell('t1', 'gemini', 1),
+      task: task('t1', 'technical'),
+      report: REPORT,
+      evidence: evidence({
+        a: { status: 'found', date: '2026-06-15' },
+        b: { status: 'found', date: '2026-06-20' },
+      }),
+    });
+    // Both inside the 183-day journalism horizon against the task's 2026-07-01
+    // as-of date, so both are fresh.
+    expect(scored.metrics['recency-fresh-share']).toBe(1);
+    expect(scored.dating).toEqual({ dated: 2, absent: 0, unchecked: 0 });
+  });
+
+  it('DATE-21 an undated source leaves the denominator rather than lowering the share', () => {
+    const scored = harvestCell({
+      cell: cell('t1', 'gemini', 1),
+      task: task('t1', 'technical'),
+      report: REPORT,
+      evidence: evidence({ a: { status: 'found', date: '2026-06-15' }, b: { status: 'absent' } }),
+    });
+    // One dated and fresh, one undated. The share is 1.0 over a denominator of
+    // one, which is exactly why the dating counts are printed beside it.
+    expect(scored.metrics['recency-fresh-share']).toBe(1);
+    expect(scored.dating).toEqual({ dated: 1, absent: 1, unchecked: 0 });
+  });
+
+  it('an old dated source lowers the share, so the metric can actually move', () => {
+    const scored = harvestCell({
+      cell: cell('t1', 'gemini', 1),
+      task: task('t1', 'technical'),
+      report: REPORT,
+      evidence: evidence({
+        a: { status: 'found', date: '2026-06-15' },
+        b: { status: 'found', date: '2019-01-01' },
+      }),
+    });
+    expect(scored.metrics['recency-fresh-share']).toBe(0.5);
+  });
+
+  it('a cell with no snapshot at all counts every cited source unchecked', () => {
+    const scored = harvestCell({
+      cell: cell('t1', 'gemini', 1),
+      task: task('t1', 'technical'),
+      report: REPORT,
+    });
+    expect(scored.dating).toEqual({ dated: 0, absent: 0, unchecked: 2 });
+    expect(scored.metrics['recency-fresh-share']).toBeNull();
+  });
+
+  it('a failed cell measures no dates and reports none, rather than reporting zero', () => {
+    const scored = harvestCell({
+      cell: cell('t1', 'gemini', 1, { outcome: 'failed', failureKind: 'rate_limited' }),
+      task: task('t1', 'technical'),
+    });
+    expect(scored.dating).toEqual({ dated: 0, absent: 0, unchecked: 0 });
+    expect(scored.metrics['recency-fresh-share']).toBeNull();
+  });
+});
+
+describe('DATE-22 the persisted type and the scorer\'s view agree at compile time', () => {
+  it('a real PageEvidence satisfies the view this file requires', () => {
+    // A type-level assertion rather than an inspection. The collector's schema
+    // and the scorer's structural view are two declarations of one shape, which
+    // is the repo's established pattern, and this is what stops them drifting:
+    // change one and this line stops compiling.
+    const page: PageEvidence = {
+      url: 'https://example.test/a',
+      verdict: 'live',
+      text: '',
+      truncated: false,
+      completeHtml: true,
+      anchors: [],
+      published: {
+        status: 'found',
+        date: '2026-06-15',
+        signal: 'json-ld',
+        raw: '2026-06-15',
+        detail: 'read from a schema.org `datePublished` in a JSON-LD block',
+      },
+      checkedAt: '2026-07-28T00:00:00.000Z',
+    };
+    const asView: DatedPage = page;
+    expect(asView.published.status).toBe('found');
+
+    // And every state the schema admits is a state the view understands.
+    const states: PublicationDateView[] = [
+      { status: 'found', date: '2026-06-15' },
+      { status: 'absent' },
+      { status: 'unchecked' },
+    ];
+    expect(states).toHaveLength(3);
   });
 });
 

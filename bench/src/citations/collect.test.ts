@@ -228,3 +228,82 @@ describe('caps', () => {
     expect(evidence.notes.join(' ')).toMatch(/unchecked rather than absent/);
   });
 });
+
+describe('DATE-18 the collector dates the page it already holds', () => {
+  const options = {
+    registryTransport: transportFor({}),
+    now: () => new Date('2026-07-28T00:00:00.000Z'),
+  };
+
+  it('persists the date, the signal and the raw string on the page evidence', async () => {
+    const evidence = await collectCitationEvidence('See [a](https://example.com/a).', {
+      ...options,
+      fetchPage: () =>
+        Promise.resolve(
+          page({
+            body: '<html><head><meta name="citation_date" content="2025/09/02"></head><body>x</body></html>',
+          }),
+        ),
+    });
+    const first = evidence.pages[0];
+    expect(first?.published).toEqual({
+      status: 'found',
+      date: '2025-09-02',
+      signal: 'citation-meta',
+      raw: '2025/09/02',
+      detail: 'read from the `citation_date` meta tag',
+    });
+  });
+
+  it('records an explicit absence for a page that carries no date', async () => {
+    const evidence = await collectCitationEvidence('See [a](https://example.com/a).', {
+      ...options,
+      fetchPage: () => Promise.resolve(page()),
+    });
+    expect(evidence.pages[0]?.published.status).toBe('absent');
+  });
+
+  it('does not let a 404 page\'s own furniture date the citation', async () => {
+    // Gated on the judged verdict, exactly as `containment` is: a page that did
+    // not resolve is nowhere to look, and an error template carrying today's
+    // date would otherwise grade a dead citation as freshly published.
+    const evidence = await collectCitationEvidence('See [a](https://example.com/a).', {
+      ...options,
+      fetchPage: () =>
+        Promise.resolve(
+          page({
+            status: 404,
+            ok: false,
+            body: '<html><head><meta name="citation_date" content="2026-07-27"></head></html>',
+          }),
+        ),
+    });
+    expect(evidence.pages[0]?.verdict).toBe('not_found');
+    expect(evidence.pages[0]?.published.status).toBe('unchecked');
+  });
+
+  it('reads the raw body rather than the extracted text, which strips the markup', async () => {
+    // `extractText` removes every tag, so a date living in a meta attribute or a
+    // JSON-LD script body is gone by the time the text is produced. Reading the
+    // extracted text instead would silently date nothing at all.
+    const evidence = await collectCitationEvidence('See [a](https://example.com/a).', {
+      ...options,
+      fetchPage: () =>
+        Promise.resolve(
+          page({
+            body: '<html><head><script type="application/ld+json">{"@type":"Article","datePublished":"2024-03-15"}</script></head><body>no visible date</body></html>',
+          }),
+        ),
+    });
+    expect(evidence.pages[0]?.text).not.toContain('2024-03-15');
+    expect(evidence.pages[0]?.published).toMatchObject({ status: 'found', date: '2024-03-15' });
+  });
+
+  it('survives a fetch that threw, recording unchecked rather than losing the page', async () => {
+    const evidence = await collectCitationEvidence('See [a](https://example.com/a).', {
+      ...options,
+      fetchPage: () => Promise.reject(new BlockedUrlError('refused')),
+    });
+    expect(evidence.pages[0]?.published.status).toBe('unchecked');
+  });
+});

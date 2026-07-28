@@ -152,3 +152,54 @@ describe('matching a snapshot to its report', () => {
     expect(evidenceMatchesReport(snapshot(), 'anything')).toBe(true);
   });
 });
+
+describe('DATE-16 and DATE-17 the publication date is required, and the version guards it', () => {
+  it('refuses a page record with no publication date at all', () => {
+    // Required rather than optional, because an optional field is a sentinel a
+    // caller can forget and a forgotten one would report every source undated
+    // while every test stayed green.
+    const withoutIt = snapshot();
+    const pages = withoutIt.pages.map(({ published: _drop, ...rest }) => rest);
+    expect(() => parseEvidence({ ...withoutIt, pages })).toThrow(/malformed/);
+  });
+
+  it('accepts all three states and nothing else', () => {
+    for (const published of [
+      { status: 'absent', detail: 'the page was read in full and states no publication date' },
+      { status: 'unchecked', detail: 'nothing was read from this page' },
+    ] as const) {
+      const s = snapshot();
+      const first = s.pages[0];
+      if (first === undefined) throw new Error('fixture lost its page');
+      expect(parseEvidence({ ...s, pages: [{ ...first, published }] }).pages[0]?.published).toEqual(
+        published,
+      );
+    }
+    const s = snapshot();
+    const first = s.pages[0];
+    if (first === undefined) throw new Error('fixture lost its page');
+    expect(() =>
+      parseEvidence({ ...s, pages: [{ ...first, published: { status: 'guessed', detail: 'x' } }] }),
+    ).toThrow(/malformed/);
+  });
+
+  it('refuses a found date that is not a calendar day, or carries an unknown signal', () => {
+    const s = snapshot();
+    const first = s.pages[0];
+    if (first === undefined) throw new Error('fixture lost its page');
+    for (const published of [
+      { status: 'found', date: 'last Tuesday', signal: 'json-ld', raw: 'x', detail: 'y' },
+      { status: 'found', date: '2026-03-01', signal: 'vibes', raw: 'x', detail: 'y' },
+    ]) {
+      expect(() => parseEvidence({ ...s, pages: [{ ...first, published }] })).toThrow(/malformed/);
+    }
+  });
+
+  it('refuses a snapshot written before the field existed, rather than reading it as undated', () => {
+    // The version bump is the mechanism. A version-1 snapshot genuinely cannot
+    // answer the new question, and reading one as "no page here carries a date"
+    // would print an undated share of 100% about a pass that never looked.
+    const old = { ...snapshot(), version: 1 };
+    expect(() => parseEvidence(old)).toThrow(/malformed/);
+  });
+});

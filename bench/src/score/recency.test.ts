@@ -5,6 +5,7 @@ import {
   BENCH_SOURCE_HORIZONS,
   classifyDurability,
   recencyHorizon,
+  recencyInputs,
   scoreRecency,
   type RecencyResult,
   type RecencyScored,
@@ -299,5 +300,58 @@ describe('RECENCY-09 parity with the product', () => {
       AS_OF,
     );
     expect(ahead.freshness).toBe(assessStaleness('2026-12-01', AS_OF, 'other').freshness);
+  });
+});
+
+describe('DATE-19 the join produces the graded list and the printed counts in one pass', () => {
+  it('carries a found date onto the source and counts it dated', () => {
+    const { sources, dating } = recencyInputs(
+      ['https://a.test/x'],
+      [{ url: 'https://a.test/x', published: { status: 'found', date: '2026-07-01' } }],
+    );
+    expect(sources).toEqual([{ url: 'https://a.test/x', publishedAt: '2026-07-01' }]);
+    expect(dating).toEqual({ dated: 1, absent: 0, unchecked: 0 });
+  });
+
+  it('keeps the two undated causes apart, because they have different fixes', () => {
+    const { dating } = recencyInputs(
+      ['https://a.test/x', 'https://b.test/y'],
+      [
+        { url: 'https://a.test/x', published: { status: 'absent' } },
+        { url: 'https://b.test/y', published: { status: 'unchecked' } },
+      ],
+    );
+    expect(dating).toEqual({ dated: 0, absent: 1, unchecked: 1 });
+  });
+
+  it('counts a cited URL with no page record as unchecked, never as absent', () => {
+    // It was never fetched, whether the page budget bound or no snapshot exists
+    // at all. Reporting that as a publisher who omitted a date is the accusation
+    // this whole distinction exists to prevent.
+    const { sources, dating } = recencyInputs(['https://a.test/x'], []);
+    expect(dating).toEqual({ dated: 0, absent: 0, unchecked: 1 });
+    expect(sources).toEqual([{ url: 'https://a.test/x' }]);
+  });
+
+  it('grades every cited source, so the two numbers describe one population', () => {
+    const cited = ['https://a.test/x', 'https://b.test/y', 'https://c.test/z'];
+    const { sources, dating } = recencyInputs(cited, [
+      { url: 'https://a.test/x', published: { status: 'found', date: '2026-07-01' } },
+      { url: 'https://b.test/y', published: { status: 'absent' } },
+    ]);
+    expect(sources).toHaveLength(cited.length);
+    expect(dating.dated + dating.absent + dating.unchecked).toBe(cited.length);
+  });
+
+  it('an undated source reaches the scorer as undated and never as fresh', () => {
+    const { sources } = recencyInputs(
+      ['https://a.test/x'],
+      [{ url: 'https://a.test/x', published: { status: 'absent' } }],
+    );
+    const scored = scoreRecency(sources, '2026-07-28');
+    expect(scored.status).toBe('unmeasurable');
+    if (scored.status !== 'unmeasurable') throw new Error('expected unmeasurable');
+    expect(scored.counts.fresh).toBe(0);
+    expect(scored.counts.undated).toBe(1);
   });
 });
