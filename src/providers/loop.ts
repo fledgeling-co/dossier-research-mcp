@@ -315,7 +315,7 @@ export function loopProvider(config: Config, adapter: CliAdapter): ResearchProvi
   const runs = new Map<string, LoopRun>();
   const workDir = cliWorkDir(config.storeDir);
 
-  async function orchestrate(id: string, args: CreateRunArgs, bin: string, headless: (p: string) => readonly string[]): Promise<void> {
+  async function orchestrate(id: string, args: CreateRunArgs, bin: string, headless: (p: string, model?: string) => readonly string[]): Promise<void> {
     const run = runs.get(id);
     if (!run) return;
     const noSearch = (args.tools ?? []).length === 0;
@@ -341,7 +341,7 @@ export function loopProvider(config: Config, adapter: CliAdapter): ResearchProvi
       const prompt = workerPrompt(args.prompt, task, noSearch);
       const argv = noSearch
         ? ['-p', '--disallowedTools', ...CLOSED_BOOK_TOOLS, '--', prompt]
-        : headless(prompt);
+        : headless(prompt, config.localModels[adapter.id]);
 
       let findings: readonly Finding[] = [];
       let gaps: string | undefined;
@@ -390,7 +390,7 @@ export function loopProvider(config: Config, adapter: CliAdapter): ResearchProvi
     const draft = draftPrompt(args.prompt, session, notes);
     const draftArgv = noSearch
       ? ['-p', '--disallowedTools', ...CLOSED_BOOK_TOOLS, '--', draft]
-      : headless(draft);
+      : headless(draft, config.localModels[adapter.id]);
     const { stdout } = await askCli(bin, draftArgv, workDir, DRAFT_TIMEOUT_MS, id);
 
     const verdict = validateDraft(session, stdout);

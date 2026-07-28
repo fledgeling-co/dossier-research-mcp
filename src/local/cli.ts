@@ -135,12 +135,44 @@ export interface CliAdapter {
   /** Config paths whose *presence* implies authentication. Never read. */
   readonly authPaths: readonly string[];
   /**
+   * How this CLI is told which model to use, when it can be told.
+   *
+   * Every one of the four shipped CLIs accepts a model flag and Dossier passed
+   * none of them, so each ran whatever its default happened to be. That is not a
+   * neutral default: Cursor's is `composer-2.5`, a CODING model, and it was
+   * doing research. Cursor is really a multiplexer — its own `--list-models`
+   * offers Grok 4.5, Opus 5 and GPT-5.6 Sol alongside Composer — so one
+   * subscription can serve several of the panel's models, and which one it
+   * serves was the one thing the operator could not say.
+   *
+   * Declared per adapter rather than assumed, because the flag differs: `-m`
+   * on some, `--model` on others, and Claude Code takes an alias where Cursor
+   * takes a full id.
+   */
+  /**
+   * True when this CLI accepts a model flag at all.
+   *
+   * The flag's POSITION is the adapter's business, not a caller's: `codex exec`
+   * is a subcommand, so `-m` has to follow it, while the others take their flag
+   * before the prompt. Composing the argv from outside would put it in the
+   * wrong place for exactly one CLI, which is the kind of defect that shows up
+   * as an unrelated parse error hours later. So `headless` receives the model
+   * and each adapter inserts it itself; this flag only says whether asking is
+   * meaningful.
+   */
+  readonly acceptsModel?: boolean;
+  /**
    * Argv for a single headless prompt, in the form the current builds want.
    *
    * Used verbatim unless {@link headlessAlternate} is declared and its probe
    * says this binary documents the older form instead.
    */
-  readonly headless: (prompt: string) => readonly string[];
+  /**
+   * The argv for a one-shot run. `model` is the operator's override, absent
+   * when they did not set one, and each adapter places it where its own parser
+   * expects rather than having it composed in from outside.
+   */
+  readonly headless: (prompt: string, model?: string) => readonly string[];
   /**
    * The form to use instead when *this* binary documents it.
    *
@@ -176,7 +208,8 @@ export const CLI_ADAPTERS: readonly CliAdapter[] = [
     identity: /claude code/i,
     pathHints: ['/claude/', '/.claude/'],
     authPaths: [home('.claude.json'), home('.claude')],
-    headless: (prompt) => ['-p', prompt],
+    headless: (prompt, model) => (model ? ['--model', model, '-p', prompt] : ['-p', prompt]),
+    acceptsModel: true,
     billing:
       'Covered by a Pro/Max/Team subscription (verified 25 July 2026). Web search carries no per-search fee on a subscription, where the API charges $10 per 1,000 searches.',
     caution:
@@ -220,7 +253,13 @@ export const CLI_ADAPTERS: readonly CliAdapter[] = [
     // damage and anything written is revertible. Skipping it while standing in
     // the user's project would not be defensible, which is why the two changes
     // shipped together.
-    headless: (prompt) => ['exec', '--skip-git-repo-check', prompt],
+    // `-m` after `exec`, because `exec` is a subcommand and a flag before it
+    // is parsed against the top-level command instead.
+    headless: (prompt, model) =>
+      model
+        ? ['exec', '-m', model, '--skip-git-repo-check', prompt]
+        : ['exec', '--skip-git-repo-check', prompt],
+    acceptsModel: true,
     headlessAlternate: {
       // An older Codex may genuinely take `--search` on `exec`, and on such a
       // build search may not be on by default, which is what the flag was for.
@@ -264,7 +303,8 @@ export const CLI_ADAPTERS: readonly CliAdapter[] = [
     // `~/.grok/downloads/`, so the hint is the config home rather than `bin`.
     pathHints: ['/.grok/'],
     authPaths: [home('.grok', 'auth.json')],
-    headless: (prompt) => ['-p', prompt],
+    headless: (prompt, model) => (model ? ['-m', model, '-p', prompt] : ['-p', prompt]),
+    acceptsModel: true,
     billing:
       'Whether the CLI browser-OAuth path draws on a SuperGrok subscription is NOT stated in xAI documentation (checked 25 July 2026). Two third-party integrations report that it does. Corroboration, not confirmation.',
     caution: 'A third-party npm package also installs a `grok` binary and is not xAI’s. PATH order decides which one you get.',
@@ -279,7 +319,11 @@ export const CLI_ADAPTERS: readonly CliAdapter[] = [
     identity: null,
     pathHints: ['/cursor-agent/', '/.cursor/'],
     authPaths: [home('.cursor'), home('.local', 'share', 'cursor-agent')],
-    headless: (prompt) => ['-p', '--force', prompt],
+    // `cursor-agent --list-models` names them: `cursor-grok-4.5-high`,
+    // `claude-opus-5-thinking-high`, `gpt-5.6-sol-xhigh`, `composer-2.5`.
+    headless: (prompt, model) =>
+      model ? ['--model', model, '-p', '--force', prompt] : ['-p', '--force', prompt],
+    acceptsModel: true,
     billing: 'Covered by a Cursor subscription with plan-level pools (verified 25 July 2026).',
   },
   {
@@ -485,7 +529,7 @@ export async function resolveHeadless(
   adapter: CliAdapter,
   binPath: string,
   timeoutMs = 4_000,
-): Promise<(prompt: string) => readonly string[]> {
+): Promise<(prompt: string, model?: string) => readonly string[]> {
   const alternate = adapter.headlessAlternate;
   if (!alternate) return adapter.headless;
 
@@ -702,6 +746,63 @@ export function parseModelAnswer(raw: string): string | null {
  */
 export function normaliseModelName(model: string): string {
   return model.toLowerCase().replace(/[^a-z0-9.]+/g, ' ').trim();
+}
+
+/**
+ * Words that name who is reselling a model, not which model it is.
+ *
+ * `cursor-grok-4.5-high` and `Grok 4.5` are one set of weights reached two
+ * ways. The first token says whose subscription pays for it.
+ */
+const VENDOR_PREFIXES = new Set(['cursor', 'claude', 'anthropic', 'openai', 'xai', 'google', 'gemini']);
+
+/**
+ * Words that name a setting, not a model.
+ *
+ * A reasoning-effort or speed variant is the same weights turned up or down.
+ * For asking "do these two members judge from the same priors", they are.
+ */
+const EFFORT_SUFFIXES = new Set([
+  'high', 'low', 'medium', 'xhigh', 'fast', 'thinking', 'preview', 'latest', 'default', 'auto',
+  // Size and speed tiers. `flash` is here for a reason found by a test:
+  // without it `gemini-3.6-flash` had its leading `gemini` stripped as a
+  // reseller, leaving `3.6 flash` to collide with anything else versioned 3.6.
+  'flash', 'pro', 'lite', 'mini', 'nano', 'turbo',
+]);
+
+/**
+ * The model underneath a vendor's product id.
+ *
+ * `cursor-grok-4.5-high` and `Grok 4.5` reduce to `grok 4.5`;
+ * `claude-opus-5-thinking-high` and `Opus 5` reduce to `opus 5`. Version digits
+ * are kept whole, so `gpt 5.6 sol` and `gpt 5.5` stay different models rather
+ * than collapsing into `gpt`.
+ *
+ * **The conservative direction reversed, deliberately.** While a match REMOVED
+ * a backend, refusing to match was the safe error: a false positive silently
+ * deleted a paid-for member. Nothing is removed now — a match only records that
+ * two members share priors — so the costly error is the opposite one. A miss
+ * tells the operator they have two independent voices when they have one model
+ * in two harnesses, which is the corroboration trap the lane exists to avoid.
+ * So this matches harder than `normaliseModelName`, and the two are kept
+ * separate rather than one being loosened into the other: the strict form is
+ * still what gets displayed.
+ */
+export function modelFamily(model: string): string {
+  const parts = normaliseModelName(model).split(' ').filter(Boolean);
+  const kept = parts.filter((w) => !EFFORT_SUFFIXES.has(w));
+  const first = kept[0];
+  // A leading vendor word is dropped only when a MODEL NAME survives it.
+  //
+  // `cursor-grok-4.5-high` leaves `grok`, so `cursor` was the reseller.
+  // `gemini-3.6-flash` leaves only `3.6`, so `gemini` is the model's own name
+  // and stripping it would reduce the id to a bare version that collides with
+  // every other 3.6. Found by a test rather than by reading.
+  const dropVendor =
+    first !== undefined &&
+    VENDOR_PREFIXES.has(first) &&
+    kept.slice(1).some((w) => /[a-z]/.test(w));
+  return (dropVendor ? kept.slice(1) : kept).join(' ');
 }
 
 /**

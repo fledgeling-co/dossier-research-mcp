@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync } from 'node:fs';
 import { rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
-import { CLI_IDS, normaliseModelName, type CliId } from './cli.js';
+import { CLI_IDS, normaliseModelName, modelFamily, type CliId } from './cli.js';
 
 /**
  * What each CLI answered when it was asked which model it serves.
@@ -77,6 +77,11 @@ export interface ProbedModel {
    * reason nobody can reconstruct.
    */
   readonly normalised: string;
+  /**
+   * The model underneath the vendor's product id, for asking whether two
+   * members share priors. `normalised` stays the display form.
+   */
+  readonly family: string;
 }
 
 const FILE = 'cli-models.json';
@@ -119,6 +124,7 @@ export function readModelCache(storeDir: string): ReadonlyMap<CliId, ProbedModel
       model: entry.data.model,
       probedAt: entry.data.probedAt,
       normalised: normaliseModelName(entry.data.model),
+      family: modelFamily(entry.data.model),
     });
   }
   return out;

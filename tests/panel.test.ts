@@ -6,7 +6,7 @@ import { loadConfig, type Config } from '../src/config.js';
 import type { CostBand } from '../src/gemini/cost.js';
 import type { CreateRunArgs, DeepResearchClient } from '../src/gemini/client.js';
 import type { InteractionSnapshot } from '../src/gemini/types.js';
-import { normaliseModelName } from '../src/local/cli.js';
+import { normaliseModelName, modelFamily } from '../src/local/cli.js';
 import { writeModelCache, type ProbedModel } from '../src/local/model-cache.js';
 import { assemblePanelAmong, probedModelsFor, ProviderRegistry, sumBands } from '../src/providers/registry.js';
 import type {
@@ -371,42 +371,61 @@ describe('panel assembly', () => {
     new Map(
       Object.entries(entries).map(([id, model]) => [
         id as ProviderId,
-        { model, probedAt, normalised: normaliseModelName(model) },
+        { model, probedAt, normalised: normaliseModelName(model), family: modelFamily(model) },
       ]),
     );
 
   const cursorCli = provider('local-cursor', 0, caps({ billedTo: 'subscription' }), signedIn);
 
-  it('PANEL-25: two CLIs on one model take one seat, and the survivor is the earlier in preference order', () => {
-    // The owner's case exactly: Cursor lets you point it at Grok 4.5, and a
-    // lane holding Cursor-as-Grok beside Grok buys one perspective and reports
-    // two. Spelled differently on each side on purpose; a dedupe that only
-    // caught an exact string would miss the real answers.
+  it('PANEL-25: two CLIs on one model BOTH keep their seats, and the overlap is reported', () => {
+    // This reverses the original PANEL-25, which removed the second seat.
+    //
+    // The case is real — Cursor lets you point it at Grok 4.5 — but "one model
+    // is one perspective" is too strong, and this repo's own architecture is
+    // the counter-example: `loop-claude` against `local-claude` is the same
+    // model and the same binary, differing only in the harness, and the whole
+    // `loop-*` family exists because that difference is measurable. A different
+    // harness is a different system prompt, different tools and a different
+    // search path, so the two read different parts of the web.
+    //
+    // What shared weights really cost is independent JUDGEMENT: a model that
+    // believes something false believes it in both. That is a fact to report,
+    // not a backend to delete — the same shape as the grounding rule, which
+    // keeps a prior report as evidence while refusing to count it as
+    // corroboration. Spelled differently on each side on purpose; matching only
+    // an exact string would miss the real answers.
     const panel = panelFor(
       'Who leads this market?',
-      { cliModels: probedAs({ 'local-grok': 'Grok 4.5', 'local-cursor': 'grok-4.5' }) },
+      { freeLaneMax: 0, cliModels: probedAs({ 'local-grok': 'Grok 4.5', 'local-cursor': 'grok-4.5' }) },
       [cli, grokCli, cursorCli],
     );
 
-    expect(ids(panel.free)).toEqual(['local-claude', 'local-grok']);
-    const why = panel.rejected.find((r) => r.id === 'local-cursor')?.why ?? '';
-    expect(why).toMatch(/same model/);
+    expect(ids(panel.free)).toEqual(['local-claude', 'local-grok', 'local-cursor']);
+    expect(panel.rejected.find((r) => r.id === 'local-cursor')).toBeUndefined();
+
+    const note = panel.notes.join(' ');
+    // Both halves have to be said. Only the first reads as "run them both, they
+    // are independent"; only the second reads as "do not bother running both".
+    expect(note, 'that they still search independently').toMatch(/read different parts of the web/);
+    expect(note, 'and that they do not judge independently').toMatch(/one voice repeated/);
+
+    const corr = panel.correlated?.find((c) => c.id === 'local-cursor')?.why ?? '';
+    expect(corr).toMatch(/shares a model/);
     // Both spellings are named, and so is how old the reading is: a model
     // identity is a fact about a setting the user can change at any time.
-    expect(why).toMatch(/grok-4\.5/);
-    expect(why).toMatch(/Grok 4\.5/);
-    expect(why).toMatch(/oldest probe reading/);
-    expect(panel.notes.join(' ')).toMatch(/same model/);
+    expect(corr).toMatch(/grok-4\.5/);
+    expect(corr).toMatch(/Grok 4\.5/);
+    expect(corr).toMatch(/probe reading/);
   });
 
-  it('PANEL-25: the survivor is the order, not the id', () => {
+  it('PANEL-25: the correlation is recorded against the earlier member in order', () => {
     const reversed = panelFor(
       'Who leads this market?',
-      { cliModels: probedAs({ 'local-grok': 'Grok 4.5', 'local-cursor': 'Grok 4.5' }) },
+      { freeLaneMax: 0, cliModels: probedAs({ 'local-grok': 'Grok 4.5', 'local-cursor': 'Grok 4.5' }) },
       [cursorCli, grokCli],
     );
-    expect(ids(reversed.free)).toEqual(['local-cursor']);
-    expect(reversed.rejected.find((r) => r.id === 'local-grok')?.why).toMatch(/same model/);
+    expect(ids(reversed.free)).toEqual(['local-cursor', 'local-grok']);
+    expect(reversed.correlated?.find((c) => c.id === 'local-grok')?.with).toBe('local-cursor');
   });
 
   it('PANEL-25: two CLIs probed as different models both keep their seats', () => {
@@ -414,11 +433,11 @@ describe('panel assembly', () => {
     // and grok reports Grok 4.5. The dedupe must not bite here.
     const panel = panelFor(
       'Who leads this market?',
-      { cliModels: probedAs({ 'local-cursor': 'Composer', 'local-grok': 'Grok 4.5' }) },
+      { freeLaneMax: 0, cliModels: probedAs({ 'local-cursor': 'Composer', 'local-grok': 'Grok 4.5' }) },
       [cursorCli, grokCli],
     );
     expect(ids(panel.free)).toEqual(['local-cursor', 'local-grok']);
-    expect(panel.notes.join(' ')).not.toMatch(/same model/);
+    expect(panel.correlated ?? []).toHaveLength(0);
   });
 
   it('PANEL-26: an unprobed machine keeps every CLI and says the lane may hold duplicates', () => {
@@ -436,25 +455,29 @@ describe('panel assembly', () => {
     expect(note).toMatch(/research_doctor/);
   });
 
-  it('PANEL-28: a reading past its horizon stops removing anything, and says so', () => {
-    // A CLI can change the model it serves in a release. Dropping a backend on
-    // a months-old reading acts on a fact nobody rechecked, and the failure is
-    // invisible: the backend simply stops running. Showing a stale label costs
-    // a line of text, which is the cheaper way to be wrong.
+  it('PANEL-28: a reading past its horizon claims nothing, and says so', () => {
+    // A CLI can change the model it serves in a release, so a months-old
+    // reading is a fact nobody rechecked. That used to matter because it could
+    // DROP a backend invisibly; now nothing is dropped, and the same reasoning
+    // applies to the correlation warning instead. Telling a reader that two
+    // members share a model, on evidence two months stale, is a claim about
+    // their independence that may simply be false.
     const twoMonthsAgo = Date.now() - 60 * 24 * 60 * 60 * 1000;
     const fresh = panelFor(
       'Who leads this market?',
-      { cliModels: probedAs({ 'local-grok': 'Grok 4.5', 'local-cursor': 'Grok 4.5' }) },
+      { freeLaneMax: 0, cliModels: probedAs({ 'local-grok': 'Grok 4.5', 'local-cursor': 'Grok 4.5' }) },
       [cursorCli, grokCli],
     );
-    expect(ids(fresh.free)).toHaveLength(1);
+    expect(ids(fresh.free)).toHaveLength(2);
+    expect(fresh.correlated).toHaveLength(1);
 
     const stale = panelFor(
       'Who leads this market?',
-      { cliModels: probedAs({ 'local-grok': 'Grok 4.5', 'local-cursor': 'Grok 4.5' }, twoMonthsAgo) },
+      { freeLaneMax: 0, cliModels: probedAs({ 'local-grok': 'Grok 4.5', 'local-cursor': 'Grok 4.5' }, twoMonthsAgo) },
       [cursorCli, grokCli],
     );
     expect(ids(stale.free)).toHaveLength(2);
+    expect(stale.correlated, 'a stale reading must not assert a shared model').toHaveLength(0);
     expect(stale.notes.join(' ')).toMatch(/older than 30 days/);
   });
 

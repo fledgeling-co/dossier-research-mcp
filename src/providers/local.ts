@@ -320,7 +320,10 @@ export function localProvider(config: Config, adapter: CliAdapter): ResearchProv
           String(capabilities.maxWallClockMinutes * 60_000),
           String(MAX_OUTPUT_BYTES),
           bin,
-          ...headless(args.prompt),
+          // The operator's model for THIS CLI, where they named one. Absent
+          // otherwise, which leaves the CLI on its own default exactly as
+          // before.
+          ...headless(args.prompt, config.localModels[adapter.id]),
         ],
         {
           detached: true,

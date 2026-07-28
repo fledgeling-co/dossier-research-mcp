@@ -143,6 +143,24 @@ const EnvSchema = z.object({
    * Restricts the free lane to one CLI. Derived from `CLI_IDS` so the adapter
    * table stays the single place a CLI is declared.
    */
+  /**
+   * Which model a given CLI should run, where it accepts one.
+   *
+   * Every shipped CLI takes a model flag and Dossier passed none, so each ran
+   * its own default. Cursor's default is `composer-2.5`, a CODING model, doing
+   * research — while `cursor-agent --list-models` on the same account offers
+   * `cursor-grok-4.5-high`, `claude-opus-5-thinking-high` and
+   * `gpt-5.6-sol-xhigh`. One subscription can serve several of the panel's
+   * models and the operator could not say which.
+   *
+   * Bounded because the value reaches argv. Operator-set only, never
+   * agent-set: the same boundary as DOSSIER_LOCAL_CLI.
+   */
+  DOSSIER_LOCAL_MODEL_CLAUDE: z.string().trim().max(120).optional(),
+  DOSSIER_LOCAL_MODEL_CODEX: z.string().trim().max(120).optional(),
+  DOSSIER_LOCAL_MODEL_GROK: z.string().trim().max(120).optional(),
+  DOSSIER_LOCAL_MODEL_CURSOR: z.string().trim().max(120).optional(),
+
   DOSSIER_LOCAL_CLI: z
     .string()
     .trim()
@@ -242,6 +260,8 @@ export interface Config {
    * them spends subscription quota Dossier cannot see.
    */
   readonly localCli: readonly string[];
+  /** Model to request per CLI id, where the CLI accepts one. */
+  readonly localModels: Readonly<Record<string, string>>;
   readonly hermetic: boolean;
 }
 
@@ -322,6 +342,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       .filter(Boolean)
       .map((s) => resolve(s.startsWith('~') ? join(homedir(), s.slice(1)) : s)),
     localCli: e.DOSSIER_LOCAL_CLI ?? [],
+    localModels: {
+      ...(e.DOSSIER_LOCAL_MODEL_CLAUDE ? { claude: e.DOSSIER_LOCAL_MODEL_CLAUDE } : {}),
+      ...(e.DOSSIER_LOCAL_MODEL_CODEX ? { codex: e.DOSSIER_LOCAL_MODEL_CODEX } : {}),
+      ...(e.DOSSIER_LOCAL_MODEL_GROK ? { grok: e.DOSSIER_LOCAL_MODEL_GROK } : {}),
+      ...(e.DOSSIER_LOCAL_MODEL_CURSOR ? { cursor: e.DOSSIER_LOCAL_MODEL_CURSOR } : {}),
+    },
     hermetic: e.DOSSIER_HERMETIC,
   };
 }

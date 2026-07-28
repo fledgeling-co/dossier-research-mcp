@@ -1,4 +1,5 @@
 import type { Config } from '../config.js';
+import { modelFamily, normaliseModelName } from '../local/cli.js';
 import type { DeepResearchClient } from '../gemini/client.js';
 import type { CostBand, DurationOptions } from '../gemini/cost.js';
 import {
@@ -67,6 +68,7 @@ export class ProviderRegistry {
    */
   private readonly storeDir: string;
   private readonly freeLaneMax: number;
+  private readonly localModels: Readonly<Record<string, string>>;
 
   constructor(config: Config, resolveGeminiClient: () => DeepResearchClient | null) {
     const built = [
@@ -90,6 +92,7 @@ export class ProviderRegistry {
     this.all = this.allowListInForce ? built.filter((p) => allows(config.enabledProviders, p.id)) : built;
     this.storeDir = config.storeDir;
     this.freeLaneMax = config.freeLaneMax;
+    this.localModels = config.localModels;
   }
 
 
@@ -161,6 +164,7 @@ export class ProviderRegistry {
         paid: [],
         total: ZERO_BAND,
         rejected: this.all.map((p) => ({ id: p.id, why: p.detect().detail })),
+        correlated: [],
         notes: ['No provider credentials are configured, so there is no panel to assemble.'],
         crawl: null,
         profile: need.profile,
@@ -169,7 +173,7 @@ export class ProviderRegistry {
     return assemblePanelAmong(configured, {
       ...need,
       allowList: this.allowListInForce,
-      cliModels: probedModelsFor(this.storeDir),
+      cliModels: probedModelsFor(this.storeDir, this.localModels),
       freeLaneMax: this.freeLaneMax,
     });
   }
@@ -187,9 +191,29 @@ export class ProviderRegistry {
  * The free lane keeps every member when nothing is known, and only ever dedupes
  * on an answer a CLI actually gave.
  */
-export function probedModelsFor(storeDir: string): ReadonlyMap<ProviderId, ProbedModel> {
+export function probedModelsFor(
+  storeDir: string,
+  overrides: Readonly<Record<string, string>> = {},
+): ReadonlyMap<ProviderId, ProbedModel> {
   const byProvider = new Map<ProviderId, ProbedModel>();
   for (const [cli, entry] of readModelCache(storeDir)) byProvider.set(`local-${cli}`, entry);
+  // An operator's override BEATS a probe, and is treated as never stale.
+  //
+  // A probe is this server asking a CLI what it runs and believing the answer;
+  // an override is the operator telling the CLI what to run. The second is the
+  // stronger fact, and it matters for dedupe rather than for display: Cursor
+  // can be pointed at Grok 4.5, so a machine running the Grok CLI alongside a
+  // Cursor set to `cursor-grok-4.5-high` has ONE model wearing two hats. Without
+  // this the panel would seat both, report two free members, and count their
+  // agreement as a cross-model check that never happened.
+  for (const [cli, model] of Object.entries(overrides)) {
+    byProvider.set(`local-${cli}` as ProviderId, {
+      model,
+      normalised: normaliseModelName(model),
+      family: modelFamily(model),
+      probedAt: Date.now(),
+    });
+  }
   return byProvider;
 }
 
@@ -447,6 +471,16 @@ export interface PanelDecision {
   /** The sum of every member's band. What the reservation will ask for. */
   readonly total: CostBand;
   readonly rejected: readonly { id: ProviderId; why: string }[];
+  /**
+   * Members seated despite sharing a model with another member.
+   *
+   * Not a rejection and not nothing. They search independently — a different
+   * harness is a different system prompt, different tools and a different
+   * search path — but they judge from the same weights, so their agreement is
+   * one voice repeated rather than two concurring. Surfaced so a reader
+   * counting members does not read it as corroboration.
+   */
+  readonly correlated: readonly { id: ProviderId; with: ProviderId; why: string }[];
   /** Anything the reader would be annoyed to discover afterwards. */
   readonly notes: readonly string[];
   readonly crawl: CrawlRecommendation | null;
@@ -632,12 +666,24 @@ export function assemblePanelAmong(
 
   const crawl = recommendCrawl(need.profile);
 
-  return { members, free: freeFinal, paid: paidFinal, total, rejected, notes, crawl, profile: need.profile };
+  return {
+    members,
+    free: freeFinal,
+    paid: paidFinal,
+    total,
+    rejected,
+    correlated: deduped.correlated,
+    notes,
+    crawl,
+    profile: need.profile,
+  };
 }
 
 interface FreeLaneDedupe {
   readonly kept: PanelMember[];
   readonly dropped: { id: ProviderId; why: string }[];
+  /** Members kept despite sharing a model with another. Correlated, not removed. */
+  readonly correlated: { id: ProviderId; with: ProviderId; why: string }[];
   readonly notes: string[];
 }
 
@@ -693,6 +739,7 @@ function dedupeFreeLaneByModel(
 ): FreeLaneDedupe {
   const kept: PanelMember[] = [];
   const dropped: { id: ProviderId; why: string }[] = [];
+  const correlated: { id: ProviderId; with: ProviderId; why: string }[] = [];
   const notes: string[] = [];
   const seen = new Map<string, { member: PanelMember; probe: ProbedModel }>();
   let unprobed = 0;
@@ -710,9 +757,9 @@ function dedupeFreeLaneByModel(
       kept.push(member);
       continue;
     }
-    const incumbent = seen.get(probe.normalised);
+    const incumbent = seen.get(probe.family);
     if (!incumbent) {
-      seen.set(probe.normalised, { member, probe });
+      seen.set(probe.family, { member, probe });
       kept.push(member);
       continue;
     }
@@ -724,19 +771,44 @@ function dedupeFreeLaneByModel(
     // The older of the two readings, because the decision is only as current as
     // its weakest input.
     const oldest = Math.min(probe.probedAt, incumbent.probe.probedAt);
-    dropped.push({
+    // KEPT, not dropped, and this reverses the earlier decision.
+    //
+    // The old rule said two CLIs on one model are one perspective and removed
+    // the second. That is too strong, and this repo's own architecture is the
+    // counter-example: `loop-claude` against `local-claude` is the same model
+    // and the same binary, differing only in the harness around it, and the
+    // whole `loop-*` family exists because that difference is measurable. A
+    // different harness means a different system prompt, different tool
+    // implementations and a different search path, so the two read different
+    // parts of the web even when the weights match.
+    //
+    // What the old rule was right about is narrower: shared weights mean
+    // CORRELATED JUDGEMENT. A model that believes something false believes it
+    // in both harnesses, so their agreement is weaker evidence than two
+    // distinct models agreeing. That is a fact to report, not a backend to
+    // remove — the same shape as the grounding rule, which keeps a prior
+    // report as evidence while refusing to count it as corroboration.
+    //
+    // So both run, both cover the web, and the correlation is stated.
+    kept.push(member);
+    correlated.push({
       id: member.provider.id,
+      with: incumbent.member.provider.id,
       why:
-        `serves the same model as ${incumbent.member.provider.label} (${named}), ` +
-        `so seating both would buy one perspective and report two; oldest probe reading ${describeProbeAge(oldest)}`,
+        `shares a model with ${incumbent.member.provider.label} (${named}), so it searches independently ` +
+        `but judges from the same weights; their agreement is weaker evidence than two distinct models ` +
+        `agreeing. Oldest probe reading ${describeProbeAge(oldest)}`,
     });
   }
 
-  if (dropped.length > 0) {
+  if (correlated.length > 0) {
     notes.push(
-      `${String(dropped.length)} CLI(s) left the free lane because another CLI already on it serves the same model. ` +
-        'Two CLIs on one model read the same web, and counting that as two backends is the overlap this panel exists to avoid. ' +
-        'Point them at different models, or name one with the `provider` argument to run it on its own.',
+      `${String(correlated.length)} CLI(s) on the free lane share a model with another member. ` +
+        'They still run: a different harness means a different system prompt, different tools and a different ' +
+        'search path, so they read different parts of the web even on the same weights — which is exactly what ' +
+        'the `loop-*` backends exist to measure. What they do NOT give you is independent judgement: a model ' +
+        'that believes something false believes it in both, so treat their agreement as one voice repeated ' +
+        'rather than two voices concurring. Point them at different models to get both kinds of independence.',
     );
   }
   if (staleReadings > 0) {
@@ -755,7 +827,7 @@ function dedupeFreeLaneByModel(
     );
   }
 
-  return { kept, dropped, notes };
+  return { kept, dropped, correlated, notes };
 }
 
 /**
