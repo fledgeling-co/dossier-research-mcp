@@ -302,7 +302,7 @@ describe('DATE-18 the collector dates the page it already holds', () => {
   it('survives a fetch that threw, recording unchecked rather than losing the page', async () => {
     const evidence = await collectCitationEvidence('See [a](https://example.com/a).', {
       ...options,
-      fetchPage: () => Promise.reject(new BlockedUrlError('refused')),
+      fetchPage: () => Promise.reject(new BlockedUrlError('private', 'refused as a private address')),
     });
     expect(evidence.pages[0]?.published.status).toBe('unchecked');
   });
