@@ -22,9 +22,9 @@ import type { PageVerdict } from './schema.js';
  * code rather than assigning one, so a test can drive every branch without a
  * subprocess. `bench/src/report/cli.ts` has the same shape for the same reason.
  * What that buys is not only speed: a test that spawns has to find an
- * interpreter on disk, and this file's used to be found by a literal path into
- * `node_modules`, so eleven cases failed in any git worktree until somebody ran
- * `npm install` inside it (BENCH-14).
+ * interpreter on disk, and this one's test used to find tsx by a literal path
+ * into `node_modules`, so eleven cases failed in any git worktree until
+ * somebody ran `npm install` inside it (BENCH-14).
  */
 
 /** Where a command's output goes, and where its stdin comes from. */
