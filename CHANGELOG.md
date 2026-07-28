@@ -6,6 +6,42 @@ Dates are the release date. Costs are estimate bands, never quotes. Where a fact
 
 This project follows [semantic versioning](https://semver.org/). Until 1.0 the minor number carries breaking changes.
 
+## [0.12.0] - 2026-07-28
+
+### Added
+
+- **`loop-claude`, `loop-codex` and a backend for every other signed-in CLI: Dossier's own research method, driven by a CLI instead of by you.** `research_local_start` and its siblings are this product's method — decompose by source class, search each in the dialect that index expects, register every source once, freeze the registry before a word is drafted, refuse a draft citing anything the run did not gather. It costs nothing and needs no key. It also needed an AI in the loop to do the searching, which is why nothing could measure it and why `docs/plan/benchmark.md` named it the control while the control could not be run.
+
+  A CLI now takes the caller's seat: one spawn per search task returning findings as JSON, one more to draft from the frozen registry. The method is imported rather than reimplemented, so what runs is the shipped loop.
+
+  **The pairing is the point.** `loop-claude` against `local-claude` is one binary, one subscription and one web search, differing only in whether the method sits in between — so the gap between them is the method's contribution, measured rather than asserted. Ids are derived from the same adapter table as the direct ones, and a test asserts every CLI has a loop twin.
+
+  Weaker than its siblings in one way, stated plainly: it orchestrates in-process, so a server restart loses a run in flight. Bounded by what it costs — the work spends a CLI subscription, so a lost run is re-runnable at no charge.
+
+### Fixed
+
+- **Every local CLI ran one directory below your finished reports.** The scratch directory each CLI worked in was `storeDir/cli-workdir`, so a panel member stood exactly one `..` from `reports/`, `runs/`, `sessions/` and `ledger.jsonl` — 92 reports at mode 0755 on the machine where this was found. Every one of those CLIs has file tools.
+
+  This was worse than the problem it replaced, in a way peculiar to this product. A panel beats a single backend only because its members answer independently, and `countsAsCorroboration` treats two members agreeing as two sources. A member that read the others first is an echo, and nothing downstream distinguishes an echo from agreement: the report reads as corroborated, the ledger bills the run as an independent voice, and confidence is inflated by exactly the mechanism the panel exists to provide. Reported from a real session before it was found here — one CLI member had summarised two others' reports.
+
+  The scratch directory now lives under the temp root at 0700, one per store, with nothing of Dossier's above it. `Store.init` re-applies 0700 on every boot, because `mkdir` applies its mode only when it creates the directory and a store predating that mode kept whatever the umask gave it. **The test covering this had asserted the defect as the requirement** — "and it lives under the store" — so it is inverted with the reasoning written down rather than deleted.
+
+- **A run a panel member started was charged to you and counted as your own voice.** A local CLI with Dossier's MCP registered can call `research_start`. That run arrived as an ordinary MCP call: billed to your budget, and if it landed in a panel, counted as one more independent backend. It is neither — its author is a backend Dossier spawned, which had already read the brief.
+
+  The fix rests on one fact about MCP: a stdio server is a CHILD of the client that launched it. So Dossier puts `DOSSIER_SPAWNED_BY` in the environment of every CLI it spawns, and a Dossier that CLI then launches inherits it and stamps everything it runs. No handshake, no registry, and it works for a CLI Dossier has never heard of. The panel merge names derivative members **before** the merge rather than after, and `research_budget` leads with what they cost, because the spend view is where an unexplained figure gets noticed.
+
+- **The same report was titled up to twenty-three times, at $0.08 a time.** Found by auditing a real ledger: 279 utility calls for 67 runs, one titled 23 times in 64 seconds, 49 of 67 titled more than once, $22.32 spent where $5.36 was warranted.
+
+  The cause was ordering rather than a missing guard. `refresh` correctly refuses to poll a terminal run — but the record was saved as completed only AFTER the summariser, which reserves and then waits several seconds on a model. For that whole window the run was still `running` on disk, so every concurrent `refresh` re-read it, polled it, found it completed again, and titled it again. Several MCP clients share one store and each runs its own Dossier, so concurrent polling is the normal case. The terminal state is now written before titling, and the callback checks for an existing title before reserving.
+
+- **A run the provider had cancelled was reported as stalled, possibly still billing, forever.** `INTERACTION_STATUSES` had four values and the live API returns a fifth. `cancelled` fell through `z.enum(...).catch('unknown')` into the unknown branch, so the run was marked stalled with "the run may still be executing and billing" — about a run that was definitively over — and the watchdog kept polling it. Found on a real $7 run whose interaction returned `status: "cancelled"` with a single `user_input` step. The reservation stays, matching a caller-requested cancel: the provider may have billed for work done before stopping.
+
+- **An exhausted ceiling now says where it went.** A window reading $173.64 of $100 had $27 held by six runs that failed without producing a report. Not released, and that is the right call rather than a limitation: each of those runs was created, so the provider may have billed for work before it failed, and a reservation is only given back when the provider proved it created nothing. What was missing was not a refund but an explanation — the failure was on each record and nothing added them up.
+
+- **OpenAI runs were killing each other, and it was reported as failed research.** Six runs died at $9 each with `Limit 1000000, Used 993157, Requested 53211. Please try again in 2.782s.` Every number there changes the conclusion: the account was at 99.3% of its minute budget, the request that tipped it over was 53k rather than 900k, and the wait was under three seconds. The runs contend with each other, and the fix is fewer at once rather than a smaller brief.
+
+  Two things were missing. Nothing capped concurrency **per backend** — `DOSSIER_MAX_CONCURRENT` is global and cannot express "ten runs, but never two of THESE", which matters because a backend's real limit is not always a slot count. `DOSSIER_CONCURRENCY_<BACKEND>` now caps per backend and defaults to 1 for OpenAI alone, a default measured rather than picked. And these failures were classified `research` — hard research that did not work — because `isRateLimited` asks whether the HTTP status was 429 and this call returns 200 with the reason as prose in `error.message`. The two diagnoses have opposite remedies. They are now classified `rate-limited`, and the stored error states the percentage, the tipping request, and the wait the provider asked for.
+
 ## [0.11.0] - 2026-07-28
 
 ### Changed
@@ -618,7 +654,8 @@ Four defects that a full hermetic suite passed and one real API call each found.
 
 - First release. Gemini Deep Research wrapped so an agent can drive it safely: durable runs that survive a disconnect, a spend gate that reserves the worst case before the call, and outline-first reading so a 60,000-token report never lands inline.
 
-[Unreleased]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.8.0...v0.9.0
