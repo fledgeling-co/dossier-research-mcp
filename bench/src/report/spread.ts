@@ -147,7 +147,7 @@ export function summarise(
  * Used by `rank.ts` to mark two backends as tied rather than ordering them.
  * **This is a descriptive check over observed interquartile ranges and it is
  * not a significance test.** BENCH-13 owns bootstrap intervals and paired
- * differences; this is the cheapest honest thing available before they land,
+ * differences; this was the cheapest honest thing available before they landed, and rank.ts now prefers them where a comparison exists,
  * and every ranking that uses it says so.
  *
  * A missing spread on either side counts as overlapping, because two values

@@ -116,8 +116,10 @@ export const SEPARABILITY_CHECKED =
   'Two combinations whose observed score spreads overlap are treated as tied on that axis, so neither ' +
   'dominates the other on a score difference this sample cannot establish. That is the same descriptive ' +
   'check bench/src/report/rank.ts applies before ordering two backends, imported rather than restated. ' +
-  'It is not a significance test: bootstrap intervals, paired differences and errors clustered on topic ' +
-  'are BENCH-13.';
+  'It is not a significance test. Bootstrap intervals, paired differences and errors clustered on category ' +
+  'now exist in bench/src/stats/ and bench/src/report/rank.ts consumes them, but nothing supplies them here: ' +
+  'evaluateCombinations sets no score spread and offers no parameter through which one could arrive, so this ' +
+  'frontier is decided by the weaker rule while making the stronger claim.';
 
 export const SEPARABILITY_UNCHECKED =
   'No score spreads were supplied, so this is a point-estimate frontier: every score difference, however ' +

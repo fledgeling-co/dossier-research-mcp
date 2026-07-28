@@ -26,8 +26,9 @@ import { canonicaliseUrl } from '../../../src/research/corroborate.js';
  * that module. Two implementations of one rule eventually disagree about what
  * the rule is, so they should be unified into one exported helper; that is a
  * restructure of another merged item's file and is recorded rather than done
- * here. A test pins the two to the same answers so they cannot drift in the
- * meantime.
+ * here. **No test pins the two together**, contrary to what this comment said
+ * until a cross-slice audit checked for one. They are byte-identical today and
+ * that is the whole of the guarantee; BENCH-15 owns unifying them.
  */
 export function sourceIdentity(raw: string): string {
   return canonicaliseUrl(raw).replace(/^http:\/\//i, 'https://');

@@ -1,6 +1,6 @@
 # Orchestrator: the Dossier benchmark
 
-**Started** 27 July 2026 · **Integration branch** `main` · **Fleet size** 16 items, up to 8 concurrent
+**Started** 27 July 2026 · **Integration branch** `main` · **Fleet size** 19 items, up to 8 concurrent
 
 This file is the memory, not the transcript. A fresh session resumes the whole fleet from here alone. If context is compacted, re-read this file, `CLAUDE.md` and `docs/plan/benchmark.md` before doing anything else.
 
@@ -64,6 +64,9 @@ BENCH-09 is hand-authoring work and is the long pole in wall-clock terms. It sta
 | BENCH-14 | A fresh worktree cannot run the suite | none | **Merged** | `ai/bench-14` | 14 pass in a bare worktree, was 11 failing | deferred child, from BENCH-11 |
 | BENCH-15 | Three primitives now exist twice | 04, 05, 11 | Queued | | deferred child, from BENCH-04/05/11 |
 | BENCH-16 | Nothing records when a source was published | 02, 03 | Queued | | deferred child, from BENCH-08 |
+| BENCH-17 | The frontier claims most on least evidence | 08, 11, 13 | **Running** | | from the audit |
+| BENCH-18 | Syndication has no Unicode normalisation | 07 | **Running** | | from the audit |
+| BENCH-19 | A spend gate missing, two entries untested | 09, 10, 14 | **Running** | | from the audit |
 
 ## Context contract
 

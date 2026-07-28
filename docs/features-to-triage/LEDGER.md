@@ -36,3 +36,6 @@ serially, through the orchestrator.
 | BENCH-16 | Nothing records when a source was published | [brief](BENCH-16-evidence-dates.md) | Untriaged | | |
 | BENCH-14 | A fresh worktree cannot run the suite | [brief](BENCH-14-worktree-tsx.md) | In Review | [spec](../specs/spec-BENCH-14.md) | [plan](../plans/plan-BENCH-14.md) |
 | BENCH-13 | The statistics | [brief](BENCH-13-statistics.md) | In Review | [spec](../specs/spec-BENCH-13.md) | [plan](../plans/plan-BENCH-13.md) |
+| BENCH-17 | The frontier makes the strongest claim with the weakest evidence | [brief](BENCH-17-combine-floors.md) | Untriaged | | |
+| BENCH-18 | Syndication has no Unicode normalisation | [brief](BENCH-18-syndication-unicode.md) | Untriaged | | |
+| BENCH-19 | One entry point spends with no gate; two have no test | [brief](BENCH-19-spend-gates.md) | Untriaged | | |

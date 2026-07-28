@@ -285,9 +285,11 @@ export function assessSourceRecency(source: RecencySource, asOf: string): Source
   // Branch on the raw difference, not on the rounded one. `Math.round(-0.4)` is
   // `-0`, and `-0 < 0` is false, so a source stamped up to twelve hours *after*
   // the as-of date fell through the guard and was counted `fresh`, entering the
-  // numerator of the freshness share. The product's `assessStaleness` still
-  // rounds first and still has that hole; the benchmark does not, and the
-  // divergence is confined to sub-day future timestamps.
+  // numerator of the freshness share. The product's `assessStaleness` had that
+  // hole and no longer does: it compares raw timestamps as of 27 July 2026, and
+  // a parity check over sub-day future timestamps finds zero divergence. One
+  // real difference does remain and it is not the rounding: an unparseable
+  // as-of date returns `undated` from the product and throws from here.
   const deltaMs = anchor - at;
   const ageDays = Math.round(deltaMs / DAY_MS);
   if (deltaMs < 0) {
