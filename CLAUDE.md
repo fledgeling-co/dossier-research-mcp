@@ -172,9 +172,19 @@ bench/                  the benchmark. NOT compiled into dist/ and NOT published
   src/score/prose.ts       the report's text with every citation form stripped, and
                         the negation rule; a denied figure is still a figure
   src/score/units.ts       canonical units; percent, percentage points, basis
-                        points and each currency never collapse together
+                        points and each currency never collapse together, plus
+                        SCALE_WORDS, the one magnitude vocabulary both numeric
+                        readers draw from
   src/score/numbers.ts     every way a model writes one figure, and the decimal
                         shift that makes scaling exact
+  src/score/noise-shapes.ts  the runs that look like numbers and are not: dates,
+                        clock times and URLs, blanked before any figure is read.
+                        One implementation for both numeric readers, filled with
+                        a character that is not whitespace because a whitespace
+                        fill let a magnitude word be read across a masked date
+  src/score/source-identity.ts  the http-to-https fold, layered on the product's
+                        canonicaliseUrl. One implementation, and the comment
+                        names which scorers deliberately do NOT apply it
   src/score/dates.ts       the accepted written date forms, compared as UTC days
   src/score/accuracy.ts    was each recorded answer actually stated; produces the
                         recovery record calibration takes as an input
