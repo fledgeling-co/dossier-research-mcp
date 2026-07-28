@@ -6,6 +6,34 @@ Dates are the release date. Costs are estimate bands, never quotes. Where a fact
 
 This project follows [semantic versioning](https://semver.org/). Until 1.0 the minor number carries breaking changes.
 
+## [0.13.0] - 2026-07-29
+
+### Added
+
+- **`DOSSIER_LOCAL_MODEL_<CLI>`: tell a CLI which model to run.** Every shipped CLI accepts a model flag — verified against each binary's own `--help`: `claude --model`, `codex -m`, `grok -m`, `cursor-agent --model` — and Dossier passed none of them, so each ran whatever its default happened to be. That default is not neutral. Cursor's is `composer-2.5`, a **coding** model, and it was doing research.
+
+  Cursor is really a multiplexer: its own `--list-models` offers `cursor-grok-4.5-high`, `claude-opus-5-thinking-high` and `gpt-5.6-sol-xhigh` alongside Composer, so one subscription can serve several of the panel's models and the operator had no way to say which.
+
+  The flag's **position** is the adapter's business rather than the caller's, because `codex exec` is a subcommand and `-m` placed before it is parsed against the top-level command instead. Checked both ways against the real binary: the wrong position reproduces the `Reading additional input from stdin…` hang that appears in this repo's own failure ledger.
+
+- **`DOSSIER_FREE_LANE_MAX`, defaulting to 2, with the rest held as tie-breakers.** Every signed-in CLI joined the free lane, which on a four-CLI machine is four frontier models per question — and they are genuinely four rather than duplicates.
+
+  A second model is the cheapest check there is on an invented finding: a claim only one backend found is visibly weaker than one both found, and it costs nothing extra in dollars. A third mostly widens web coverage rather than verifying anything, because `countsAsCorroboration` counts independent registrable domains and not backends, so a fourth model agreeing is not a fourth source. What the extra ones do cost is subscription quota — the one price in this system Dossier cannot see, meter or put a ceiling on.
+
+  So two run and the rest are **held, not dropped**. Each held CLI is listed with its reason and the plan names which to reach for: *"If the two disagree, break the tie with `provider: "local-codex"`."* A third is worth spending exactly when the first two failed to agree. `DOSSIER_FREE_LANE_MAX=0` restores every signed-in CLI.
+
+- **`DOSSIER_LOCAL_CLI` takes a list, and orders as well as restricts.** It accepted exactly one id, so the only choices were one CLI or all of them. Listing all four in preference order picks which two run and leaves the others as tie-breakers, where naming only two would run those two with nothing held back. A typo is refused rather than ignored: silently widening the lane back to every CLI spends quota nobody asked to spend.
+
+### Changed
+
+- **Two CLIs serving one model no longer lose a seat.** The previous rule called them one perspective and removed the second. That is too strong, and this repo's own architecture is the counter-example: `loop-claude` against `local-claude` is the same model and the same binary, differing only in the harness around it, and the whole `loop-*` family exists because that difference is measurable. A different harness means a different system prompt, different tool implementations and a different search path, so two members read different parts of the web even on identical weights.
+
+  What shared weights actually cost is narrower than the old rule claimed. Not coverage, but independent **judgement**: a model that believes something false believes it in both harnesses. That is a fact to report, not a backend to delete — the same shape as the grounding rule, which keeps a prior report as evidence while refusing to count it as corroboration. Both members run, and the overlap is stated in both halves, because saying only the first reads as "they are independent" and only the second as "do not bother running both".
+
+  The reversal inverts which error is expensive. While a match removed a backend, refusing to match was the safe failure; now a **miss** is the costly one, since it tells an operator they have two voices when they have one model in two harnesses. So matching is done on a model family that sees through reseller prefixes and effort suffixes, while the displayed name stays exact. A test caught the obvious overreach: `gemini-3.6-flash` had its leading `gemini` stripped as a reseller, leaving `3.6 flash` to collide with anything else versioned 3.6. The vendor word is dropped only when a model name survives it.
+
+- **The `loop-*` backends are opt-in, deliberately rather than accidentally.** They were falling out of every panel because their `detect()` never reported `signedIn`, so the panel rejected them as "installed but not signed in" — which is false, and would send someone debugging a sign-in that was fine. `detect()` is truthful now and the exclusion is a stated policy: a loop backend spawns its CLI once per search task plus once to draft, roughly six processes per run against the direct lane's one, so joining automatically would multiply a panel's quota burn about sixfold, silently. They remain fully available by name, which is how the benchmark measures `loop-claude` against `local-claude`.
+
 ## [0.12.0] - 2026-07-28
 
 ### Added
@@ -654,7 +682,8 @@ Four defects that a full hermetic suite passed and one real API call each found.
 
 - First release. Gemini Deep Research wrapped so an agent can drive it safely: durable runs that survive a disconnect, a spend gate that reserves the worst case before the call, and outline-first reading so a 60,000-token report never lands inline.
 
-[Unreleased]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.9.0...v0.10.0
