@@ -817,3 +817,26 @@ The whole feature pipeline runs in git worktrees, and a worktree has no `node_mo
 | **WT-03** | Importing the entry module does not run it: no corpus is scored and nothing reaches stdout as an import side effect | unit: `cli` | ✓ |
 | **WT-04** | The entry point is still proved wired by one real process over real argv, and that process's interpreter is resolved through Node's own resolution rather than an assumed layout | unit: `cli` | ✓ |
 | **WT-05** | When the interpreter cannot be resolved the one process-dependent case skips rather than fails, and its reason names the missing binary, the fix, and what is still covered | unit: `cli` | ✓ |
+## BENCH-13: the statistics
+
+Paired differences with cluster-bootstrap intervals, standard errors clustered on category, `pass@1` beside `pass^k`, and completion as a validity floor. The code is [`bench/src/stats/`](../bench/src/stats) and [`bench/src/report/comparison.ts`](../bench/src/report/comparison.ts); the reference is [`bench/statistics.md`](bench/statistics.md).
+
+| AC | Statement | Test | Status |
+|---|---|---|---|
+| **STAT-01** | A pairwise comparison uses only the tasks on which both backends have a value, and the tasks it dropped are counted | unit: `paired` | ✓ |
+| **STAT-02** | Every reported difference carries a 95% bootstrap interval from 5,000 resamples, both echoed on the result | unit: `bootstrap`, `paired` | ✓ |
+| **STAT-03** | A difference whose interval crosses zero renders the literal words `no measured difference`, with no point estimate | unit: `paired`, `render` | ✓ |
+| **STAT-04** | The bootstrap is reproducible: the same input gives the same interval twice | unit: `bootstrap` | ✓ |
+| **STAT-05** | The bootstrap resamples clusters, not tasks, so a correlated fixture gives a wider interval than the same values one per cluster | unit: `bootstrap` | ✓ |
+| **STAT-06** | A naive and a category-clustered standard error are both reported, with the ratio between them | unit: `clustered` | ✓ |
+| **STAT-07** | On perfect within-category correlation the clustered figure is larger than the naive one by exactly the design effect | unit: `clustered` | ✓ |
+| **STAT-08** | With one task per category the clustered and naive figures are identical | unit: `clustered` | ✓ |
+| **STAT-09** | `pass@1` and `pass^k` are reported side by side, with `k` stated | unit: `reliability`, `render` | ✓ |
+| **STAT-10** | `pass^k` is withheld below `k = 3` using `spreadEligibility`, the same floor the spread rule uses | unit: `reliability` | ✓ |
+| **STAT-11** | A backend below the completion share renders invalid rather than a number, and the share is on the report | unit: `aggregate`, `render` | ✓ |
+| **STAT-12** | The completion floor composes with the corpus floor rather than replacing it | unit: `aggregate` | ✓ |
+| **STAT-13** | Citation accuracy and citation volume never appear in one table | unit: `render` | ✓ |
+| **STAT-14** | The count of comparisons producing a measured difference is above every score and reads plainly at zero | unit: `render` | ✓ |
+| **STAT-15** | No file in `bench/src/stats/` imports a filesystem, network, model or spend module | unit: `stats-purity` | ✓ |
+| **STAT-16** | A comparison inherits BENCH-08's gates and withholds with the same reason vocabulary | unit: `comparison` | ✓ |
+| **STAT-17** | A paired verdict decides `rank.ts`'s tie where one exists; interquartile overlap decides only where it does not | unit: `rank` | ✓ |
