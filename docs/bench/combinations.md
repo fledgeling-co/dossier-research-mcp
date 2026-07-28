@@ -101,9 +101,41 @@ There is no single "score" in this benchmark, on purpose. Source quality refuses
 
 A frontier is a **stronger** claim than a ranking. Saying a combination is dominated says nobody should ever buy it.
 
-[`reporting.md`](reporting.md) already answers the question of when a sample can support an ordering, and two answers to that in one codebase is worse than either, so the rule is imported rather than restated. Supply a score spread per candidate and two combinations whose observed interquartile ranges overlap are treated as **tied on that axis**, so neither dominates the other on a difference the sample cannot establish. That is a descriptive check over observed values and not a significance test; bootstrap intervals, paired differences and errors clustered on topic are BENCH-13's.
+[`reporting.md`](reporting.md) already answers the question of when a sample can support an ordering, and two answers to that in one codebase is worse than either, so the rule is imported rather than restated.
 
-Without spreads the frontier is still computed and says so in a sentence carried on every result, rather than presenting a point-estimate frontier as though the sample had been asked.
+**Corrected 28 July 2026 by BENCH-17, after a cross-slice audit found that none of it was wired.** The paragraph below used to describe a tie test that existed and could not be reached: `evaluateCombinations` never set a score spread and offered no parameter through which one could arrive, so `spreadsOverlap` was dead outside its own tests and every frontier took the unchecked branch. Two members, one run each, 0.800 against 0.801, printed "nobody should ever buy alpha". None of the four floors reached this slice either, although `evaluateScopes` runs per task category, which is precisely the scope `MIN_TASKS_PER_CATEGORY` governs. The overclaim is left visible because it is more instructive than the correction.
+
+#### The four gates, and where each comes from
+
+A frontier is stated only when all four hold, and the result names the one that failed when it does not. Every one is `bench/src/report/`'s, taken **whole** rather than recomputed, exactly as [`comparison.ts`](../../bench/src/report/comparison.ts) takes them: a second answer to "can this sample support a claim" is how the scorecard came to call a backend invalid while the ranking ranked it.
+
+1. **The scope is scorable.** A category below the task floor cannot produce a frontier, however many members ran in it. The refusal carries the aggregate's own sentence, not a paraphrase.
+2. **Every candidate carries an eligibility.** A candidate nobody has said anything about is refused rather than admitted on a permissive default, which is the state this whole slice was in.
+3. **Every candidate clears the repetition floor.** One thin candidate withholds the **whole** frontier rather than leaving a frontier over the survivors: a frontier over part of a lattice is not the frontier, and the holes would read as combinations nobody should buy.
+4. **At least two candidates remain.** A blocked candidate is folded into `too-few-candidates`, the word `rank.ts` and `comparison.ts` both use, so the withheld tables read side by side.
+
+A combination is only as eligible as its **worst** member, because its score is the union of its members: a member whose own figure was withheld cannot be half of a union that gets quoted.
+
+`MIN_COMPLETION_SHARE` needs no gate of its own here. It is already the fourth arm of `verdictFor`, so it arrives inside the verdict with the other three. `mergeCombination` computes a completion rate and the report prints the worst one as a note; thresholding that as well would be a fifth floor, disagreeing with the four in `aggregate.ts` the first time either moved. Nothing in `bench/src/combine/` compares a completion rate against anything, and a test asserts it by reading the source.
+
+When a frontier is withheld the numbers still print. Every combination keeps its score, its cost and its overlap profile, which is `rank.ts`'s own posture one claim stronger: the numbers are the numbers, and it is the sample that cannot order them.
+
+#### The tie test, which now reaches the production path
+
+Supply a score spread per candidate and two combinations whose observed interquartile ranges overlap are treated as **tied on that axis**, so neither dominates the other on a difference the sample cannot establish. That is a descriptive check over observed values and not a significance test; bootstrap intervals, paired differences and errors clustered on topic are BENCH-13's, and the frontier now takes one of those **by injection** in the same shape `rank.ts` does, with the same precedence: the paired verdict where it has one, the interquartile overlap where it does not, the observed values where neither is available. A paired verdict that disagrees with the observed ordering ties, because a frontier printing an order its own test contradicts is the defect BENCH-13's review found in the ranking.
+
+Nothing supplies a paired comparison over combinations yet. It is a seam rather than a wire, and the frontier says which check actually ran.
+
+#### The three sentences, and the trap that made them three
+
+Without spreads the frontier is still computed and says so, rather than presenting a point-estimate frontier as though the sample had been asked. There are **three** states rather than two, and the third is a defect found by the audit while reading:
+
+- **checked**, when every compared pair had an instrument;
+- **unchecked**, when no pair did and nobody supplied a spread;
+- **mixed**, when some pairs were checked and some were not.
+
+The old code set the checked sentence when **some** candidate had a spread, while the comparison needs **both**. A mixed set therefore advertised the stronger sentence over pairs compared as point estimates. It is worse than an overstated sentence, and the fixture that shows it is in the tests: `alpha` carries a spread of 0.79 to 0.81 and `beta` is a bare 0.801, so `spreadsOverlap` never runs and 0.001 eliminates the candidate that was actually measured. **Supplying evidence for some combinations and not others penalised the ones you measured.**
+
 
 ### Per category, not one global winner
 
@@ -153,3 +185,16 @@ The panel routing in `src/providers/registry.ts` joins a paid backend on questio
 **It does not change the routing**, and that separation is deliberate. The measurement and the decision made from it are two acts, and doing both in one change means nobody can check the second against the first.
 
 One caveat travels with every result and belongs here too. These are point estimates. There are no confidence intervals, no paired-difference tests and no standard errors clustered on topic, and this corpus is exactly the shape where naive errors inflate, being ten categories of related tasks. A frontier computed from point estimates over a small category must not authorise a routing change on its own. It is the input to that decision, not the decision.
+
+## What has no producer, and why that was left alone
+
+**Nothing consumes this slice.** No file outside `bench/src/combine/` imports it, there is no `bench:combine` script, and the report CLI never touches it. So the design's fourth stated purpose, "which combination is worth its price", has the machinery and no producer.
+
+BENCH-17 wired the seam to `bench/src/report/` and deliberately did not wire a CLI. The reason is that the missing piece is not plumbing.
+
+`evaluateCombinations` takes `scoreCombination` by injection, for the reason set out above: three of the five scorers cannot be reached from stored cells at all. A `bench:combine` CLI has to answer "what number is a combination's score, and how is it computed over a merged union", and that is a scoring decision this document deliberately leaves to the caller. Making it inside a floors fix would be a second answer to a question that is documented as open, which is the same error the floors fix is correcting one level down.
+
+There is a second reason, and it is measurable. On the corpus as it stands, seven tasks across four categories, **every category is below the five-task floor**, which is why BENCH-13 enumerated 180 pairwise comparisons and could run none. A `bench:combine` wired today would print `withheld` for every scope, so it would produce no information while committing the design decision above.
+
+What exists instead is the join, under test end to end: real cells through `harvest` and `aggregate`, the verdicts mapped onto members by `eligibility.ts`, and the frontier withholding with the report's own sentence. So the floors are proven against BENCH-08's real output rather than against a fixture written to agree with itself, and whoever picks the named measure inherits a lattice that already refuses what the sample cannot support.
+

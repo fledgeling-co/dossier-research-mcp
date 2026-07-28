@@ -226,7 +226,13 @@ bench/                  the benchmark. NOT compiled into dist/ and NOT published
                         a member that saw another; `overlap.ts` measures what was
                         bought twice three ways and gives none of them a
                         direction; `frontier.ts` has a closed three-axis shape,
-                        which is what keeps overlap out of a ranking.
+                        which is what keeps overlap out of a ranking, and states
+                        a frontier only behind four gates that are all
+                        `src/report/`'s, taken whole; `eligibility.ts` is the
+                        only file here that has ever seen a `BenchAggregate`,
+                        and it computes no floor of its own. Nothing in the
+                        directory has a consumer yet, and the reason is a
+                        scoring decision rather than a wire.
                         docs/bench/combinations.md
   detector/             the labelled corpus: claims paired with frozen page text,
                         each carrying why it was labelled as it was
