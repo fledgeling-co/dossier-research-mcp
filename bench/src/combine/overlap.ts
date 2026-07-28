@@ -166,7 +166,8 @@ export interface OverlapProfile {
   readonly robustness: RobustnessProfile;
   readonly centrality: CentralityProfile;
   /**
-   * Completed runs over attempted, across every member.
+   * Completed runs over attempted, across every member, or `null` when nothing
+   * was attempted.
    *
    * Carried here as well as on the merge because a combination's overlap is
    * read from a sample that failures have already narrowed: two members that
@@ -174,7 +175,7 @@ export interface OverlapProfile {
    * different pages, or because they barely read anything. The rate is what
    * tells those apart.
    */
-  readonly completionRate: number;
+  readonly completionRate: number | null;
   /** Always `OVERLAP_IS_NOT_AN_OBJECTIVE`. */
   readonly caution: string;
 }

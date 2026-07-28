@@ -348,10 +348,17 @@ export function evaluateCombinations(input: EvaluateInput): CombinationReport {
     );
   }
 
-  const worstCompletion = evaluations.reduce(
-    (lowest, e) => Math.min(lowest, e.merged.completionRate),
-    1,
-  );
+  // The worst rate over the combinations that attempted anything. A combination
+  // whose members hold no runs reports `null` rather than 0, and a null is
+  // excluded here rather than folded in as a zero, which would make "never ran"
+  // print as the least reliable purchase on the board. Folded rather than
+  // spread into `Math.min`, because the lattice can hold tens of thousands of
+  // combinations and an argument list that long is a stack risk.
+  const worstCompletion = evaluations.reduce<number | null>((lowest, e) => {
+    const rate = e.merged.completionRate;
+    if (rate === null) return lowest;
+    return lowest === null ? rate : Math.min(lowest, rate);
+  }, null);
   const subscriptionRuns = evaluations.reduce(
     (most, e) => Math.max(most, e.merged.cost.subscriptionRuns),
     0,
@@ -387,7 +394,7 @@ export function evaluateCombinations(input: EvaluateInput): CombinationReport {
         'included in the cost and the count beside it says the figure is not to be trusted on its own.',
     );
   }
-  if (worstCompletion < 1) {
+  if (worstCompletion !== null && worstCompletion < 1) {
     notes.push(
       `The least reliable combination completed ${(worstCompletion * 100).toFixed(0)}% of its attempted ` +
         'runs. Completion rate is a validity metric rather than a footnote: failed runs are carried into ' +

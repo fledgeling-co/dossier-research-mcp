@@ -120,12 +120,15 @@ export interface MergedCombination {
   /** Runs that produced a report. */
   readonly completedRunCount: number;
   /**
-   * Completed over attempted.
+   * Completed over attempted, or `null` when nothing was attempted.
    *
    * A validity metric, not a footnote: a combination whose members half-fail is
-   * not the same purchase as one whose members finish, at any score.
+   * not the same purchase as one whose members finish, at any score. Null is
+   * the "never ran" state, kept apart from a rate of zero, which is "failed
+   * everything". See `completionRate` in `member.ts` for why that distinction
+   * is one this repo already made twice.
    */
-  readonly completionRate: number;
+  readonly completionRate: number | null;
   /** See `UNION_SEMANTICS`. Rides on the value so it cannot be left behind. */
   readonly semantics: string;
 }

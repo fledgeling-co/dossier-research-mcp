@@ -285,16 +285,28 @@ export function memberCostUsd(member: CombinationMember): number {
 }
 
 /**
- * How much of what was attempted actually finished.
+ * How much of what was attempted actually finished, or `null` when nothing was.
  *
  * The 2026 prior art promotes completion rate to a **validity metric** rather
  * than a footnote, and this repo's own ledger is the argument: `local-codex`
  * was 0-for-3 and `openai` 0-for-2, and both would have silently vanished from
  * a naive average. A combination whose members half-fail is not the same
  * purchase as one whose members finish, at any score.
+ *
+ * **An empty denominator is `null`, not zero.** This returned `0` until
+ * BENCH-15, so a member that never attempted anything and had nothing fail read
+ * as "completed 0% of its attempted runs", which is the worst possible result
+ * printed for the one state that is not a result at all. The rule is not
+ * re-derived here: `bench/src/report/aggregate.ts` already keeps four distinct
+ * refusal reasons precisely to separate "never ran" from "failed everything",
+ * and `bench/src/stats/reliability.ts` follows it. This is the third
+ * implementation agreeing with the first two rather than a fourth answer.
+ *
+ * A member whose every run failed still returns `0`, which was never the
+ * disagreement and is correct on both readings.
  */
-export function completionRate(runs: readonly MemberRun[]): number {
-  if (runs.length === 0) return 0;
+export function completionRate(runs: readonly MemberRun[]): number | null {
+  if (runs.length === 0) return null;
   return runs.filter((r) => r.outcome === 'ok').length / runs.length;
 }
 
