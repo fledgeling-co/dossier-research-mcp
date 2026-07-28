@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { loadConfig, type Config } from '../../../src/config.js';
 import type { DeepResearchClient } from '../../../src/gemini/client.js';
 import type { InteractionSnapshot } from '../../../src/gemini/types.js';
-import { Runner, type StartRunArgs } from '../../../src/research/runner.js';
+import { ConcurrencyExceededError, Runner, type StartRunArgs } from '../../../src/research/runner.js';
 import { Store } from '../../../src/store/store.js';
 import type { BenchTask } from '../tasks/index.js';
 import { createCellExecutor } from './dossier.js';
@@ -284,5 +284,45 @@ describe('the live cell executor', () => {
     const run = await store.getRun(result.runId as string);
     expect(run?.provider).toBe('gemini');
     expect(run?.repeat).toBe(4);
+  });
+
+  it('queues a cell when the backend refuses a slot, rather than failing it', async () => {
+    // The interaction that made this necessary. Backends now cap their own
+    // concurrency — OpenAI at one, because its runs contend for a single
+    // account-wide TPM budget and the second kills the first. Without this, a
+    // working guardrail would fail almost every cell of the capped backend the
+    // moment the batch ran more than one at a time, which is worse than the
+    // rate limit it was added to prevent.
+    //
+    // Safe to retry, and provably rather than hopefully: the admission order is
+    // dedupe, concurrency, budget, ledger, call, so the refusal lands before
+    // anything is written to the ledger and before any paid call.
+    const real = new Runner(store, config, () =>
+      scriptedClient([snapshot({ status: 'completed', markdown: '# Report\n\nBody.' })]),
+    );
+    let refusals = 0;
+    const runner = Object.create(real) as Runner;
+    (runner as unknown as { start: Runner['start'] }).start = async (args) => {
+      if (refusals < 2) {
+        refusals += 1;
+        throw new ConcurrencyExceededError(1, 1);
+      }
+      return real.start(args);
+    };
+
+    const execute = createCellExecutor({
+      runner,
+      store,
+      tasks: new Map([['t1', task('t1')]]),
+      startArgs,
+      pollIntervalMs: 0,
+      sleep: async () => {
+        await real.tick();
+      },
+    });
+
+    const result = await execute({ taskId: 't1', provider: 'openai', repeat: 1 });
+    expect(refusals, 'it waited through both refusals instead of giving up on the first').toBe(2);
+    expect(result.outcome).toBe('ok');
   });
 });

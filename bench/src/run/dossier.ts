@@ -1,6 +1,7 @@
 import type { Store } from '../../../src/store/store.js';
 import type { ProviderId } from '../../../src/providers/types.js';
 import type { Runner } from '../../../src/research/runner.js';
+import { ConcurrencyExceededError } from '../../../src/research/runner.js';
 import type { RunRecord } from '../../../src/store/types.js';
 import { TERMINAL_STATES } from '../../../src/store/types.js';
 import type { BenchTask } from '../tasks/index.js';
@@ -48,6 +49,10 @@ export interface CellExecutorOptions {
  * it by the run id on the record.
  */
 export const DEFAULT_CELL_TIMEOUT_MS = 90 * 60_000;
+/** How long a cell will queue for a backend slot before giving up. */
+export const SLOT_WAIT_BUDGET_MS = 15 * 60_000;
+/** How often it re-asks for one. */
+export const SLOT_POLL_MS = 5_000;
 const DEFAULT_POLL_INTERVAL_MS = 15_000;
 
 const defaultSleep = (ms: number): Promise<void> =>
@@ -91,7 +96,12 @@ export function createCellExecutor(
     }
 
     let run: RunRecord;
-    try {
+    // Bounded, because a queue that never gives up is a hang. Fifteen minutes of
+    // waiting for a slot is generous against a run that takes 4-60, and a cell
+    // that still cannot start after it is a real result worth recording.
+    const slotDeadline = Date.now() + SLOT_WAIT_BUDGET_MS;
+    for (;;) {
+      try {
       // The cell's own backend and repetition are bound here, over whatever the
       // caller's `startArgs` returned. They are not the caller's to choose: a
       // `startArgs` that omitted `repeat` would collapse five distinct cell keys
@@ -105,6 +115,23 @@ export function createCellExecutor(
       });
       run = started.run;
     } catch (e: unknown) {
+      // A slot refusal is a queue signal, not a result.
+      //
+      // Backends now cap their own concurrency — OpenAI at one, because its
+      // runs contend for a single account-wide tokens-per-minute budget and the
+      // second kills the first. Recording that as a failed cell would turn a
+      // working guardrail into a batch that fails almost every cell of the
+      // capped backend the moment it runs more than one at a time.
+      //
+      // Safe to retry, and provably so rather than hopefully: the admission
+      // order is dedupe, concurrency, budget, ledger, call, so this throw
+      // happens BEFORE anything is written to the ledger and before any paid
+      // call. That is the same reasoning that makes a definitive rejection
+      // retryable and an ambiguous one not.
+      if (e instanceof ConcurrencyExceededError && Date.now() < slotDeadline) {
+        await sleep(SLOT_POLL_MS);
+        continue;
+      }
       // Includes the budget and concurrency refusals. Recorded as a failed
       // cell rather than allowed to end the batch: a run refused because the
       // rolling window is momentarily full is a cell to re-plan later, not a
@@ -120,8 +147,10 @@ export function createCellExecutor(
           `${e instanceof Error ? e.message : String(e)}\n\n` +
           'This cell has no run id because the failure happened during creation. If the reason above ' +
           'describes an uncertain outcome rather than a refusal, a run may exist and may have been ' +
-          `charged; look for a run tagged with this question on ${ref.provider}.`,
-      };
+            `charged; look for a run tagged with this question on ${ref.provider}.`,
+        };
+      }
+      break;
     }
 
     const deadline = Date.now() + cellTimeoutMs;
