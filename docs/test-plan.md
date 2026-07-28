@@ -869,5 +869,5 @@ Two further rows, added after the out-of-family review of this change found each
 
 | AC | Statement | Test | Status |
 |---|---|---|---|
-| **CONF-U2** | The multi-word search path terminates when a rejected match sits on a surrogate pair, rather than returning the same match forever | unit: `confidence` | ✓ |
+| **CONF-U2** | The multi-word search path terminates when a rejected match sits on a surrogate pair, rather than returning the same match forever. The spin is synchronous, so a reintroduction hangs the suite rather than failing the case; the row is honest about which | unit: `confidence` | ✓ |
 | **SYND-U7** | A word whose case fold creates a composable sequence folds onto one token rather than two spellings, so the fold runs twice | unit: `syndication` | ✓ |

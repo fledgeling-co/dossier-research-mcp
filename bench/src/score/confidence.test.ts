@@ -226,8 +226,14 @@ describe('CONF-U1 the boundary is read in code points, not code units', () => {
    * match in the middle of a surrogate pair, so beside a supplementary-plane
    * character it snapped straight back and `exec` returned the identical match
    * forever. It could not fire while `boundaryOk` wrongly accepted the match, so
-   * correcting the boundary is what opened it. `vitest`'s per-test timeout is
-   * what fails this if it is ever reintroduced.
+   * correcting the boundary is what opened it.
+   *
+   * **This test does not fail if the loop returns; it HANGS, and that is the
+   * honest description.** The spin is synchronous, so it blocks the event loop
+   * and vitest's per-test timeout can never fire. Reintroducing the one-code-unit
+   * advance was tried and the run had to be killed after five minutes with no
+   * failure reported. A hung gate is still a stopped gate, which is why the case
+   * is worth keeping, but nobody should read it as a timeout that catches this.
    */
   it('terminates on the regex path when a rejected match sits on a surrogate pair', () => {
     expect(findMention(`a${SUPP} zephyr`, `${SUPP} zephyr`)).toBe(-1);
