@@ -183,7 +183,7 @@ What actually bounds the cost is not the concurrency number, it is **committing 
 
   Swept the tree for the same habit: exactly one instance existed. The other three gate-running spawns use `npx tsx`, which already walks ancestors, proven by the baseline where only one file failed.
 
-  **Flagged, not fixed:** `bench/src/report/cli.ts` has no wiring test at all, so `bench:report` could break its entry point and the gate would stay green. Same class of defect as the one this item exists to prevent.
+  **Flagged, and I recorded it wrongly.** BENCH-14 reported that `bench/src/report/cli.ts` had no wiring test, and I wrote that down twice without checking. `report-cli.test.ts` exists, 19 cases, added before the claim was made. What survives is narrower and real: nothing exercises that file's `invokedDirectly` guard and nothing spawns `bench:report`, so the guard could stop firing while every in-process test stayed green. Corrected 28 July after a cross-slice audit checked it.
 - **28 Jul, BENCH-13 merged. All thirteen original items are in.** 2209 tests green.
 
   **The headline is a refusal, and it is the right one.** Probed with three backends at three repetitions across all seven admitted tasks, with a fabricated 70-point accuracy gap deliberately planted: **180 pairwise comparisons enumerate and 0 can run.** Every one refused as not scorable, because every category sits below the five-task floor. The report says so above every score. A benchmark that produced a confident ranking from that corpus would be the exact failure this whole design argues against, and it declined.
@@ -196,6 +196,18 @@ What actually bounds the cost is not the concurrency number, it is **committing 
 
 ## Remaining
 
-BENCH-15 and BENCH-16 are queued deferred children. One more was surfaced by BENCH-14 and has no row yet: `bench/src/report/cli.ts` has no wiring test, so `bench:report` could break its entry point and the gate would stay green.
+BENCH-15 and BENCH-16 are queued deferred children. One more was surfaced by BENCH-14 and needs restating rather than assigning: I recorded that `bench/src/report/cli.ts` had no wiring test, and it has 19. The real gap is that nothing exercises its `invokedDirectly` guard, which `bench/src/verify/cli.ts` and `bench/src/failcheck/cli.ts` also lack, and those two have no wiring test of any kind.
 
 **The binding constraint on everything is the corpus.** Until at least two categories hold five tasks each, no comparison can run at all. Every scorer, every statistic and every frontier now exists and has nothing it can distinguish. That is BENCH-09's LiveDRBench problem-inversion follow-up, and it is worth more than any remaining code.
+
+## Cross-slice audit, 28 July
+
+Run after all fourteen merged, on the defects no single runner could see. Full findings in the audit; the ones acted on immediately:
+
+**Fixed. `containment.ts` held a third magnitude table with no abbreviations**, so `$1.2bn` fell through to the bare-number pattern, backtracked across the missing word boundary between `2` and `b`, and produced the token `1`. A token of `1` is contained in very nearly any page, so the same claim scored **supported when abbreviated and refused when spelled out**: the check rewarded abbreviating, and `450m` produced no token at all. Two sibling implementations already handled these; the weakest of the three was the one wired into the default support oracle.
+
+**That falsified a claim shipped in the product hours earlier.** `research_verify_claims` told every agent the containment gap was "structural rather than tunable". The measured 11 of 23 is sound and its cause is structural, but this was a tunable false-pass, and the detector corpus contains no abbreviated magnitudes so it could never have found it. The tool description and `docs/tools.md` now read 11 of 23 as a floor rather than a ceiling, and say why. **A measurement is only as general as the corpus behind it.**
+
+**Corrected. I propagated a false claim.** See the BENCH-14 entry above.
+
+Still open, in the audit's order: `bench/src/combine/` publishes a frontier with none of the four floors its sibling enforces and no path by which a tie test could reach it (latent, since nothing consumes `combine/` yet); syndication is the only text normaliser with no Unicode normalisation, and it fails open toward overstating independence; two date maskers disagree in both directions, which BENCH-15's own table says they do not; three `completionRate` implementations disagree on the empty denominator, so "never ran" prints as "failed everything"; `detector/` declares purity its own guard cannot check, and the guard omits the one leaking edge; and `failcheck/cli.ts` spends subscription quota with no confirmation gate while its sibling `detector/cli.ts` has one.

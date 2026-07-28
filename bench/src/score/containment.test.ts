@@ -179,3 +179,34 @@ describe('anchor honesty (INTEG-23, INTEG-24)', () => {
     expect(anchorHonesty('https://example.com/a#results', undefined).verdict).toBe('unchecked');
   });
 });
+
+describe('INTEG-38: an abbreviated magnitude is a number, not the digit before it', () => {
+  // Found by a cross-slice audit after every item merged. The scaled-number
+  // pattern accepted only spelled-out words, so `$1.2bn` fell through to the
+  // bare-number pattern, which backtracked across the missing word boundary
+  // between `2` and `b` and matched `1`. A token of `1` is contained in very
+  // nearly any page, so the identical claim scored supported when abbreviated
+  // and refused when spelled out. The check rewarded abbreviating.
+  it.each([
+    ['$1.2bn', '1.2bn'],
+    ['$1.2 billion', '1.2 billion'],
+    ['450m', '450m'],
+    ['3.5k', '3.5k'],
+    ['2tn', '2tn'],
+  ])('reads %s as one number token', (claim, expected) => {
+    const nums = checkableTokens(`Revenue was ${claim} last year.`).filter((t) => t.cls === 'number');
+    expect(nums.map((t) => t.text)).toEqual([expected]);
+  });
+
+  it('expands an abbreviation to the digits a page might print', () => {
+    const [tok] = checkableTokens('Revenue was $1.2bn.').filter((t) => t.cls === 'number');
+    expect(tok?.forms).toContain('1200000000');
+    expect(tok?.forms).toContain('1,200,000,000');
+  });
+
+  it('does not read a word merely starting with a suffix as a magnitude', () => {
+    // `1.2bill` must not become 1.2 billion. The suffix ends at a word boundary.
+    const nums = checkableTokens('Version 1.2bill shipped.').filter((t) => t.cls === 'number');
+    expect(nums.map((t) => t.text)).toEqual(['1']);
+  });
+})

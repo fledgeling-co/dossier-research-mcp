@@ -323,7 +323,9 @@ Not a matter of taste. On a 30-case labelled corpus with five verdicts, built by
 | Token containment | 86.7% | 26.7% | **11 of 23** |
 | Judged | 100% | 80.0% | **0 of 23** |
 
-Containment passed every overstatement and four of seven outright contradictions. **The cause is structural, not a threshold to tune**: a contradiction states the opposite of the page using the page's own numbers and names, so a token check has nothing to see. One corpus case asserts the exact reverse of a sentence on the page and every token it carries is on that page.
+Containment passed every overstatement and four of seven outright contradictions. **Those eleven fail structurally**: a contradiction states the opposite of the page using the page's own numbers and names, so a token check has nothing to see. One corpus case asserts the exact reverse of a sentence on the page and every token it carries is on that page.
+
+**Read 11 of 23 as a floor, not a ceiling.** A cross-slice audit run after the measurement found containment also reading `$1.2bn` as the number **1**, because its magnitude table held only spelled-out words and the bare-number pattern backtracked across the missing word boundary. A token of `1` is contained in very nearly any page, so the same claim scored supported when abbreviated and refused when spelled out; the check rewarded abbreviating. That defect is fixed, and it is named here because the corpus which produced the eleven contains no abbreviated magnitudes and therefore could not have found it. A measurement is only as general as the corpus behind it.
 
 Containment remains the default, because a check that costs money per run gets run once and then not at all. But the price of that choice is now a number rather than an assumption, and where being wrong matters, use the judged pass.
 

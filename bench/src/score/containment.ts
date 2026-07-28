@@ -71,10 +71,32 @@ const NOT_PROPER_NOUNS = new Set([
   'since', 'until', 'unlike', 'despite', 'across', 'within', 'among', 'against', 'via',
 ]);
 
+/**
+ * Magnitudes, spelled every way a report actually spells them.
+ *
+ * The abbreviations are not a nicety. Without them the scaled-number pattern
+ * misses `$1.2bn`, and the bare-number pattern then backtracks into it: there
+ * is no word boundary between the `2` and the `b`, so the match collapses to
+ * `1`, and a token of `1` is contained in very nearly any page. A claim written
+ * `$1.2bn` scored as supported against a decoy page while the identical claim
+ * written `$1.2 billion` was correctly refused, which means the check rewarded
+ * abbreviating. `450m` extracted no token at all and reported `unchecked`.
+ *
+ * Two sibling implementations already handled these (`score/units.ts` and
+ * `score/due-weight/numbers.ts`); this, the one wired into the default support
+ * oracle, was the weakest of the three. See BENCH-15 for the unification.
+ */
 const SCALE_WORDS: Readonly<Record<string, number>> = {
+  k: 1e3,
   thousand: 1e3,
+  m: 1e6,
+  mn: 1e6,
   million: 1e6,
+  b: 1e9,
+  bn: 1e9,
   billion: 1e9,
+  t: 1e12,
+  tn: 1e12,
   trillion: 1e12,
 };
 
@@ -120,7 +142,10 @@ export function checkableTokens(statement: string): CheckableToken[] {
   }
 
   for (const m of statement.matchAll(
-    /\b(\d[\d,]*(?:\.\d+)?)\s*(thousand|million|billion|trillion)\b/gi,
+    // Longest alternatives first, or `b` matches the start of `billion` and
+    // leaves `illion` stranded. The suffix must end at a word boundary so
+    // `1.2bill` is not read as 1.2 billion.
+    /\b(\d[\d,]*(?:\.\d+)?)\s*(thousand|trillion|million|billion|tn|mn|bn|k|m|b|t)\b/gi,
   )) {
     const value = parseNumeric(m[1] ?? '');
     const scale = SCALE_WORDS[(m[2] ?? '').toLowerCase()];
