@@ -1,9 +1,9 @@
-import { canonicaliseUrl } from '../../../../src/research/corroborate.js';
 import { extractCitedUrls } from '../../../../src/research/report.js';
 import type { BenchTask } from '../../tasks/corpus.js';
 import type { ConflictingFigure, FringeClaim, TaskCategory } from '../../tasks/schema.js';
 import { extractNumericMentions, type NumericMention } from './numbers.js';
 import { withinTolerance } from '../numbers.js';
+import { sourceIdentity } from '../source-identity.js';
 import {
   PROXIMITY_CHARS,
   containsTerm,
@@ -261,26 +261,6 @@ export interface DueWeightScore {
   readonly falseBalance: Measured<FalseBalanceGuard>;
   /** What was measured and what was not, in words, carried into the report. */
   readonly limits: readonly string[];
-}
-
-/**
- * One source's identity, for deciding whether a report cited it.
- *
- * `canonicaliseUrl` does the work — tracking parameters, `www.`, a trailing
- * slash and a fragment all collapse — but it deliberately **preserves the
- * scheme**, because it exists to count independent sources for corroboration
- * and there `http` and `https` are two strings it has no business equating.
- * Measured rather than assumed: it returns `http://example.org/a` and
- * `https://example.org/a` unchanged and distinct.
- *
- * For dissent recall they are the same document, and a report citing the `http`
- * form of a source the author recorded as `https` has plainly reached it. So the
- * scheme fold is layered on here rather than pushed into the product's function:
- * a benchmark that edits the behaviour it is measuring to make its own numbers
- * nicer has stopped being a benchmark.
- */
-function sourceIdentity(raw: string): string {
-  return canonicaliseUrl(raw).replace(/^http:\/\//i, 'https://');
 }
 
 function citesUrl(citedIdentities: ReadonlySet<string>, target: string): boolean {
