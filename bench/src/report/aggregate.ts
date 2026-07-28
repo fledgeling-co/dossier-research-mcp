@@ -1,7 +1,7 @@
 import { TASK_CATEGORIES, type TaskCategory } from '../tasks/schema.js';
 import type { TaskCorpus } from '../tasks/corpus.js';
 import { METRIC_IDS, type MetricId } from './metrics.js';
-import { MIN_REPETITIONS_FOR_SPREAD } from '../run/cell.js';
+import { MIN_REPETITIONS_FOR_SPREAD, TARGET_REPETITIONS } from '../run/cell.js';
 import { summarise, type SampleUnit, type SpreadReport } from './spread.js';
 import type { RegistryCounts, ScoredCell } from './harvest.js';
 
@@ -43,6 +43,33 @@ import type { RegistryCounts, ScoredCell } from './harvest.js';
  */
 export const MIN_TASKS_PER_CATEGORY = 5;
 
+/**
+ * The share of attempted cells a backend must complete before its figure is a
+ * number rather than the word `invalid`.
+ *
+ * Derived rather than picked, because a floor nobody can defend is a floor
+ * somebody will lower. `docs/plan/benchmark.md` runs five repetitions per cell
+ * and treats three as the floor at which a figure over them says anything, so a
+ * backend completing fewer than three in five has, at the median cell, fallen
+ * below the sample floor its own figure is printed against. Three fifths.
+ *
+ * It is a **third** floor, composed with the two BENCH-08 already enforces
+ * rather than replacing either, and it is checked **last** of the four so that
+ * neither of theirs changes behaviour: an under-sampled corpus is still named
+ * as such, and a backend that completed too few distinct tasks is still
+ * withheld separately, because those three have three different fixes.
+ *
+ * What it catches that neither of the others does: a backend that attempted
+ * every task, completed enough distinct ones to clear the count floor, and
+ * failed most of its attempts on the way. Its figure is then computed over
+ * whichever repetitions happened to survive, which is the completion-rate
+ * lesson applied to the numerator after BENCH-08 applied it to the denominator.
+ * On this project `local-codex` was 0-for-3 and `openai` 0-for-2, and both of
+ * those are caught by the nothing-completed arm; the backend at 40% with full
+ * task coverage is the one that would otherwise be scored.
+ */
+export const MIN_COMPLETION_SHARE = MIN_REPETITIONS_FOR_SPREAD / TARGET_REPETITIONS;
+
 export type ScorableVerdict =
   | { readonly scorable: true }
   | {
@@ -51,10 +78,17 @@ export type ScorableVerdict =
        * `under-sampled-corpus` is a property of the suite: too few tasks exist,
        * and nobody can be scored. `under-sampled-completed` is a property of
        * this backend's run: enough tasks exist and it finished too few of them.
-       * They have different causes and different fixes, so they are never
-       * flattened into one word.
+       * `under-completed` is a property of the *attempts*: enough distinct
+       * tasks finished, and too large a share of the attempts behind them
+       * failed, so the figure is computed over whichever ones survived. They
+       * have different causes and different fixes, so they are never flattened
+       * into one word.
        */
-      readonly reason: 'under-sampled-corpus' | 'under-sampled-completed' | 'nothing-completed';
+      readonly reason:
+        | 'under-sampled-corpus'
+        | 'under-sampled-completed'
+        | 'under-completed'
+        | 'nothing-completed';
       readonly why: string;
     };
 
@@ -114,6 +148,23 @@ export interface TaskGroup {
    */
   readonly totalCostUsd: number;
   readonly registry: RegistryCounts;
+  /**
+   * Which metric decides whether a repetition of this task passed.
+   *
+   * `refusal` where the task measured it, otherwise `accuracy`, and null where
+   * neither was measurable. Carried rather than re-derived, so `pass@1` and
+   * `pass^k` are computed over the same numbers the tables print.
+   */
+  readonly passMetric: MetricId | null;
+  /**
+   * That metric's value on each completed repetition that measured it.
+   *
+   * One entry per measurable repetition, never one per requested repetition. A
+   * completed repetition that measured nothing is an absence, and counting it
+   * as a failed attempt would score an absence as a zero, which every other
+   * layer of this read side refuses.
+   */
+  readonly passValues: readonly number[];
 }
 
 /** Stage 2: one backend in one category. */
@@ -166,6 +217,8 @@ export interface CorpusFacts {
 export interface BenchAggregate {
   readonly corpus: CorpusFacts;
   readonly minTasksPerCategory: number;
+  /** The completion share below which a figure renders invalid. Printed, always. */
+  readonly minCompletionShare: number;
   readonly providers: readonly string[];
   readonly taskGroups: readonly TaskGroup[];
   readonly categoryGroups: readonly CategoryGroup[];
@@ -187,6 +240,11 @@ export interface AggregateInput {
   readonly cells: readonly ScoredCell[];
   readonly corpus: TaskCorpus;
   readonly minTasksPerCategory?: number | undefined;
+  /**
+   * The share of attempted cells a backend must complete before its figure in a
+   * scope is a number. Defaults to `MIN_COMPLETION_SHARE`.
+   */
+  readonly minCompletionShare?: number | undefined;
   /**
    * Cell keys the caller could not harvest because the corpus no longer holds
    * their task.
@@ -304,6 +362,25 @@ function groupBy<T>(items: readonly T[], key: (item: T) => string): Map<string, 
 }
 
 /**
+ * Which metric decides a pass on this task, and its value per repetition.
+ *
+ * Refusal first, because on a false-premise or obscure-entity task the correct
+ * answer is not an answer and accuracy is not applicable there at all. Accuracy
+ * otherwise. Neither measurable leaves the task out of the reliability figures,
+ * with the exclusion named rather than the task counted as a failure.
+ */
+function passSeries(ok: readonly ScoredCell[]): {
+  metric: MetricId | null;
+  values: readonly number[];
+} {
+  for (const metric of ['refusal', 'accuracy'] as const) {
+    const values = ok.map((c) => c.metrics[metric]).filter((v): v is number => v !== null);
+    if (values.length > 0) return { metric, values };
+  }
+  return { metric: null, values: [] };
+}
+
+/**
  * Stage 1: one task on one backend, over its repetitions.
  */
 function buildTaskGroups(cells: readonly ScoredCell[]): TaskGroup[] {
@@ -325,6 +402,7 @@ function buildTaskGroups(cells: readonly ScoredCell[]): TaskGroup[] {
 
     let registry = EMPTY_REGISTRY;
     for (const cell of bucket) registry = addRegistry(registry, cell.registry);
+    const pass = passSeries(ok);
 
     groups.push({
       taskId: first.taskId,
@@ -355,6 +433,8 @@ function buildTaskGroups(cells: readonly ScoredCell[]): TaskGroup[] {
         bucket.reduce((sum, c) => sum + c.estimatedCostUsd, 0).toFixed(4),
       ),
       registry,
+      passMetric: pass.metric,
+      passValues: pass.values,
     });
   }
   groups.sort((a, b) => a.taskId.localeCompare(b.taskId) || a.provider.localeCompare(b.provider));
@@ -406,6 +486,8 @@ function verdictFor(
   minTasks: number,
   provider: string,
   category: TaskCategory,
+  completionRate: number | null,
+  minCompletionShare: number,
 ): ScorableVerdict {
   if (tasksInCorpus < minTasks) {
     return {
@@ -432,7 +514,27 @@ function verdictFor(
         `below the floor of ${String(minTasks)}. Scoring it here would grade it on whichever tasks it happened to finish; the fix is re-running the failed cells.`,
     };
   }
+  // Last, because it is the narrowest of the four and BENCH-08's two floors
+  // keep their existing behaviour exactly. This one catches what neither of
+  // them can see: a backend that finished enough distinct tasks to clear the
+  // count floor and failed most of its attempts getting there, so its figure is
+  // computed over whichever repetitions survived.
+  if (completionRate !== null && completionRate < minCompletionShare) {
+    return {
+      scorable: false,
+      reason: 'under-completed',
+      why:
+        `${provider} completed ${percent(completionRate)} of its attempted ${category} cells, ` +
+        `below the floor of ${percent(minCompletionShare)}. The score is rendered invalid rather than as a number: ` +
+        `a figure computed over whichever attempts survived describes the attempts that survived, and a backend that fails its hard cells and is scored on the rest is a benchmark rewarding giving up.`,
+    };
+  }
   return { scorable: true };
+}
+
+/** One decimal place, so a floor of 0.6 reads as 60.0% rather than as 0.6. */
+function percent(value: number): string {
+  return `${(value * 100).toFixed(1)}%`;
 }
 
 /**
@@ -444,6 +546,7 @@ function buildCategoryGroups(
   tasksByCategory: Readonly<Record<TaskCategory, number>>,
   staleByCategory: Readonly<Record<TaskCategory, number>>,
   minTasks: number,
+  minCompletionShare: number,
 ): CategoryGroup[] {
   const byKey = groupBy(taskGroups, (g) => groupKey(g.provider, g.category));
   const groups: CategoryGroup[] = [];
@@ -484,7 +587,15 @@ function buildCategoryGroups(
         tasksCompleted,
         staleTasks: staleByCategory[category],
         completion: counts,
-        verdict: verdictFor(tasksInCorpus, tasksCompleted, minTasks, provider, category),
+        verdict: verdictFor(
+          tasksInCorpus,
+          tasksCompleted,
+          minTasks,
+          provider,
+          category,
+          counts.rate,
+          minCompletionShare,
+        ),
         repetitionFloor: repetitionFloor(
           scored.map((g) => g.completion.completed),
           `${provider}'s ${category} tasks`,
@@ -585,6 +696,12 @@ export function aggregate(input: AggregateInput): BenchAggregate {
       `the minimum tasks per category must be a positive integer; received ${String(minTasksPerCategory)}`,
     );
   }
+  const minCompletionShare = input.minCompletionShare ?? MIN_COMPLETION_SHARE;
+  if (!Number.isFinite(minCompletionShare) || minCompletionShare <= 0 || minCompletionShare > 1) {
+    throw new TypeError(
+      `the minimum completion share must be a number in (0, 1]; received ${String(minCompletionShare)}`,
+    );
+  }
 
   const tasksByCategory = {} as Record<TaskCategory, number>;
   const staleByCategory = {} as Record<TaskCategory, number>;
@@ -619,6 +736,7 @@ export function aggregate(input: AggregateInput): BenchAggregate {
     tasksByCategory,
     staleByCategory,
     minTasksPerCategory,
+    minCompletionShare,
   );
   const backends = buildBackends(categoryGroups, providers);
 
@@ -645,6 +763,7 @@ export function aggregate(input: AggregateInput): BenchAggregate {
       tasksByCategory,
     },
     minTasksPerCategory,
+    minCompletionShare,
     providers,
     taskGroups,
     categoryGroups,

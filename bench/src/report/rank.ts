@@ -13,20 +13,44 @@ import { spreadsOverlap, type SpreadReport } from './spread.js';
  * withhold and the ranking is what has to earn its way out.
  *
  * The tie rule is the part worth reading twice. Even when all four conditions
- * pass, two adjacent backends whose observed interquartile ranges overlap are
- * reported **tied at this sample size** rather than ordered. That is a
- * descriptive check over observed values and it is not a significance test:
- * BENCH-13 owns bootstrap intervals, paired differences and clustered standard
- * errors. The prior art's finding is that every published deep-research ranking
- * it could find is a point-estimate ordering with unquantified uncertainty, and
- * an overlap check is the cheapest honest thing available until the statistics
- * land. Every ranking carries that sentence, so nobody quotes the order without
- * it.
+ * pass, two adjacent backends the sample cannot separate are reported **tied at
+ * this sample size** rather than ordered. What decides that is now a paired
+ * difference with a cluster-bootstrap interval, supplied by BENCH-13 through
+ * the optional `separated` oracle; where no interval can be computed the older
+ * check applies, that two observed interquartile ranges overlap, which is
+ * descriptive and is not a significance test. The prior art's finding is that
+ * every published deep-research ranking it could find is a point-estimate
+ * ordering with unquantified uncertainty, so whichever check ran is named on
+ * the ranking and its sentence rides along with it.
  */
 
-/** The sentence that rides on every ranking. Exported so tests assert on it. */
+/**
+ * The sentence that rides on a ranking whose ties came from observed spreads.
+ *
+ * Exported so tests assert on it.
+ */
 export const OVERLAP_NOTE =
-  'Two backends are reported tied when their observed interquartile ranges overlap. That is a descriptive check over observed values, not a significance test: bootstrap intervals and paired differences are BENCH-13.';
+  'Two backends are reported tied when their observed interquartile ranges overlap. That is a descriptive check over observed values and not a significance test; where a paired difference with a bootstrap interval can be computed, BENCH-13\'s comparison supersedes it and this note is replaced.';
+
+/**
+ * The sentence that rides on a ranking whose ties came from a paired test.
+ *
+ * Which one appears is decided by whether a separation oracle was supplied and
+ * whether it had an answer, never by which reads better.
+ */
+export const PAIRED_NOTE =
+  'Two backends are separated only where the paired difference between them, over the tasks they both answered, has a bootstrap interval that excludes zero. Categories are resampled as units, so within-category correlation is in the interval\'s width. Where no interval could be computed the tie falls back to an interquartile overlap, which is a descriptive check and not a significance test. Both are BENCH-13\'s.';
+
+/** What a paired comparison says about two adjacent backends. */
+export type SeparationVerdict = 'separated' | 'tied';
+
+/**
+ * The oracle `rankBackends` consults before falling back to overlap.
+ *
+ * Returns null where it has no answer, which is the ordinary case on a corpus
+ * too small to pair anything, and is why the overlap check stays.
+ */
+export type SeparationOracle = (a: string, b: string) => SeparationVerdict | null;
 
 export type WithheldReason =
   | 'metric-not-rankable'
@@ -92,8 +116,18 @@ export interface Ranking {
   /** Null whenever the sample cannot support an ordering. */
   readonly entries: readonly RankedEntry[] | null;
   readonly withheld: WithheldReason | null;
-  /** Always populated: either the overlap note, or why there is no ordering. */
+  /** Always populated: either the separation note, or why there is no ordering. */
   readonly note: string;
+  /**
+   * Which check decided the ties.
+   *
+   * `paired` when a bootstrap interval answered for at least one adjacent pair,
+   * `overlap` when every tie fell back to observed interquartile ranges, and
+   * `none` when no ordering was stated. Reported rather than inferred from the
+   * note's wording, because a consumer should not have to read prose to find
+   * out which test ran.
+   */
+  readonly separation: 'paired' | 'overlap' | 'none';
   /** Candidates that could not enter, and why. Never silently dropped. */
   readonly excluded: readonly { readonly provider: string; readonly why: string }[];
 }
@@ -110,12 +144,18 @@ function scopeName(scope: RankScope): string {
  * eventually disagree about what the rule is, which is the argument this repo
  * already makes for building the benchmark beside the product rather than
  * beyond it.
+ *
+ * `separated` is the same argument one layer up. It is BENCH-13's paired
+ * comparison, injected rather than imported, so this module keeps knowing
+ * nothing about bootstraps and the two answers to "can this sample separate
+ * these two" stay one answer with one fallback.
  */
 export function rankBackends(
   metric: MetricId,
   scope: RankScope,
   candidates: readonly RankCandidate[],
   scopeScorable = true,
+  separated?: SeparationOracle | undefined,
 ): Ranking {
   const excluded: { provider: string; why: string }[] = [];
 
@@ -129,6 +169,7 @@ export function rankBackends(
       withheld: 'metric-not-rankable',
       note: `${label} is a ${family} figure and is never ordered. It says how much a backend did, not how well.`,
       excluded,
+      separation: 'none',
     };
   }
 
@@ -142,6 +183,7 @@ export function rankBackends(
       withheld: 'scope-not-scorable',
       note: `${scopeName(scope)} holds too few tasks to be scored, so there is nothing to rank in it.`,
       excluded,
+      separation: 'none',
     };
   }
 
@@ -206,6 +248,7 @@ export function rankBackends(
       withheld: 'metric-not-measured',
       note: `no backend has a value for ${metricDescriptor(metric).label} in ${scopeName(scope)}, so there is nothing to order. This is a metric that was never measured here, not a sample too small to separate.`,
       excluded,
+      separation: 'none',
     };
   }
 
@@ -236,6 +279,7 @@ export function rankBackends(
         `No ordering is stated. The numbers above are the numbers; the sample is what cannot rank them. ` +
         `The floor is ${String(floor)} results, and this is the point at which a benchmark would otherwise publish a confident ranking it cannot support.`,
       excluded,
+      separation: 'none',
     };
   }
 
@@ -248,6 +292,7 @@ export function rankBackends(
       withheld: 'too-few-candidates',
       note: `only ${String(eligible.length)} backend${eligible.length === 1 ? '' : 's'} could be scored in ${scopeName(scope)}, which is not a comparison.`,
       excluded,
+      separation: 'none',
     };
   }
 
@@ -258,9 +303,23 @@ export function rankBackends(
 
   const entries: RankedEntry[] = [];
   let rank = 0;
+  let usedPaired = false;
   sorted.forEach((entry, index) => {
     const previous = index === 0 ? undefined : sorted[index - 1];
-    const tied = previous !== undefined && spreadsOverlap(previous.value, entry.value);
+    let tied = false;
+    if (previous !== undefined) {
+      // The paired test first, where it has an answer. It is the stronger
+      // instrument and it is the one this benchmark tells its readers it uses;
+      // consulting the overlap check alongside it would be two answers to one
+      // question, which is the thing the whole read side is arranged to avoid.
+      const verdict = separated?.(previous.provider, entry.provider) ?? null;
+      if (verdict === null) {
+        tied = spreadsOverlap(previous.value, entry.value);
+      } else {
+        usedPaired = true;
+        tied = verdict === 'tied';
+      }
+    }
     if (!tied) rank = index + 1;
     entries.push({
       provider: entry.provider,
@@ -273,5 +332,13 @@ export function rankBackends(
     });
   });
 
-  return { metric, scope, entries, withheld: null, note: OVERLAP_NOTE, excluded };
+  return {
+    metric,
+    scope,
+    entries,
+    withheld: null,
+    note: usedPaired ? PAIRED_NOTE : OVERLAP_NOTE,
+    excluded,
+    separation: usedPaired ? 'paired' : 'overlap',
+  };
 }

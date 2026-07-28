@@ -14,6 +14,15 @@ import {
   type CompletionCounts,
 } from './aggregate.js';
 import { rankBackends, type RankCandidate, type Ranking } from './rank.js';
+import {
+  comparisonSummary,
+  comparisons as buildComparisons,
+  reliability as buildReliability,
+  separatorFor,
+  type Comparison,
+  type ComparisonSummary,
+} from './comparison.js';
+import { NO_MEASURED_DIFFERENCE, type ReliabilityReport } from '../stats/index.js';
 
 /**
  * The aggregate, as something a person can act on.
@@ -101,7 +110,7 @@ function renderHeader(agg: BenchAggregate): string {
     `- **Corpus** ${String(agg.corpus.tasks)} tasks, evaluated as of ${agg.corpus.evaluatedAt}`,
     `- **Cells** ${String(agg.overall.attempted)} recorded, ${String(agg.overall.completed)} completed`,
     `- **Backends** ${agg.providers.length === 0 ? 'none' : agg.providers.join(', ')}`,
-    `- **Floors in force** a spread needs 3 results; a category needs ${String(agg.minTasksPerCategory)} tasks before it is scored at all`,
+    `- **Floors in force** a spread needs 3 results; a category needs ${String(agg.minTasksPerCategory)} tasks before it is scored at all; a backend must complete ${PERCENT(agg.minCompletionShare)} of its attempted cells in a scope before its figure there is a number rather than the word invalid`,
   ].join('\n');
 }
 
@@ -111,7 +120,7 @@ function renderHeader(agg: BenchAggregate): string {
  * Three numbers here exist because each of them was learned the hard way on
  * this project rather than derived from a design.
  */
-function renderValidity(agg: BenchAggregate): string {
+function renderValidity(agg: BenchAggregate, analysis: Analysis): string {
   const rows = agg.backends.map((b) => [
     b.provider,
     String(b.completion.attempted),
@@ -127,9 +136,21 @@ function renderValidity(agg: BenchAggregate): string {
   const parts = [
     '## Validity, before any score',
     '',
+    '### What this corpus can actually distinguish',
+    '',
+    // First, above the completion rate and above every score, because it is the
+    // one thing a reader in a hurry has to leave with. Correct statistics over
+    // a corpus this size will mostly report that differences are not
+    // measurable, and that is the right answer rather than a fault in the
+    // method. Burying it would be the failure this benchmark exists to catch,
+    // appearing in its own output.
+    analysis.summary.sentence,
+    '',
     '### Completion rate',
     '',
     'A backend that failed every cell disappears from a naive average while the benchmark rewards giving up. On this project `local-codex` was 0-for-3 through an argument-parsing bug and `openai` 0-for-2 through rate limits, which is why this table is above the scores rather than below them. **A failed cell counts here and reaches no metric denominator.** It is never scored as a zero.',
+    '',
+    `Completion is also a **floor**, not only a column: a backend that completed under ${PERCENT(agg.minCompletionShare)} of its attempted cells in a scope has its figure there rendered \`invalid\` rather than as a number, because a score computed over whichever attempts survived describes the attempts that survived.`,
     '',
     rows.length === 0
       ? '_No cells recorded._'
@@ -211,11 +232,21 @@ function scorecardFor(
     return [`${level} ${title}`, '', preamble, '', '_No cells recorded._'].join('\n');
   }
   const header = ['Backend', 'Completion rate', ...metrics.map((m) => m.label)];
-  const rows = agg.backends.map((b) => [
-    b.provider,
-    formatCompletion(b.completion),
-    ...metrics.map((m) => formatValue(b.metrics[m.id], formatterFor(m))),
-  ]);
+  const rows = agg.backends.map((b) => {
+    // The completion floor, rendered where a reader looks first. A backend
+    // under it does not get a number with a footnote; it gets the word
+    // `invalid`, because a figure computed over whichever attempts survived is
+    // the absence of a claim rather than a low one.
+    const invalid =
+      b.completion.rate !== null && b.completion.rate < agg.minCompletionShare
+        ? `invalid (completed ${PERCENT(b.completion.rate)}, floor ${PERCENT(agg.minCompletionShare)})`
+        : null;
+    return [
+      b.provider,
+      formatCompletion(b.completion),
+      ...metrics.map((m) => invalid ?? formatValue(b.metrics[m.id], formatterFor(m))),
+    ];
+  });
   return [
     `${level} ${title}`,
     '',
@@ -322,9 +353,11 @@ function renderMatrix(agg: BenchAggregate, metric: MetricDescriptor): string {
         const group = byKey.get(`${provider} ${category}`);
         if (group === undefined) return 'not run';
         if (!group.verdict.scorable) {
-          return group.verdict.reason === 'nothing-completed'
-            ? 'nothing completed'
-            : `withheld (${String(group.tasksCompleted)}/${String(group.tasksInCorpus)} tasks)`;
+          if (group.verdict.reason === 'nothing-completed') return 'nothing completed';
+          if (group.verdict.reason === 'under-completed') {
+            return `invalid (completed ${group.completion.rate === null ? 'nothing' : PERCENT(group.completion.rate)})`;
+          }
+          return `withheld (${String(group.tasksCompleted)}/${String(group.tasksInCorpus)} tasks)`;
         }
         const value = formatValue(group.metrics[metric.id], formatterFor(metric));
         // A figure whose tasks were each run too few times still has a real
@@ -400,26 +433,67 @@ function candidatesFor(
 }
 
 /** Every ranking this aggregate can support, and every one it cannot. */
-export function rankings(agg: BenchAggregate): readonly Ranking[] {
+export function rankings(
+  agg: BenchAggregate,
+  comparisons: readonly Comparison[] = buildComparisons(agg),
+): readonly Ranking[] {
   const out: Ranking[] = [];
   for (const metric of metricsOfFamily('quality')) {
+    const overallScope = { kind: 'overall' } as const;
     const overall = candidatesFor(agg, metric.id, 'overall');
     out.push(
-      rankBackends(metric.id, { kind: 'overall' }, overall.candidates, overall.scopeScorable),
+      rankBackends(
+        metric.id,
+        overallScope,
+        overall.candidates,
+        overall.scopeScorable,
+        separatorFor(comparisons, metric.id, overallScope),
+      ),
     );
     for (const category of TASK_CATEGORIES) {
       if (agg.corpus.tasksByCategory[category] === 0) continue;
+      const scope = { kind: 'category', category } as const;
       const scoped = candidatesFor(agg, metric.id, category);
       out.push(
-        rankBackends(metric.id, { kind: 'category', category }, scoped.candidates, scoped.scopeScorable),
+        rankBackends(
+          metric.id,
+          scope,
+          scoped.candidates,
+          scoped.scopeScorable,
+          separatorFor(comparisons, metric.id, scope),
+        ),
       );
     }
   }
   return out;
 }
 
-function renderRankings(agg: BenchAggregate): string {
-  const all = rankings(agg);
+/**
+ * Everything the two renderers need, computed once.
+ *
+ * The bootstrap runs 5,000 resamples per comparison that clears the gates, so
+ * computing it twice because markdown and JSON both asked would double the cost
+ * of the only expensive thing on this path.
+ */
+export interface Analysis {
+  readonly comparisons: readonly Comparison[];
+  readonly summary: ComparisonSummary;
+  readonly reliability: readonly ReliabilityReport[];
+  readonly rankings: readonly Ranking[];
+}
+
+export function analyse(agg: BenchAggregate): Analysis {
+  const comparisons = buildComparisons(agg);
+  return {
+    comparisons,
+    summary: comparisonSummary(comparisons),
+    reliability: buildReliability(agg),
+    rankings: rankings(agg, comparisons),
+  };
+}
+
+function renderRankings(analysis: Analysis): string {
+  const all = analysis.rankings;
   const stated = all.filter((r) => r.entries !== null);
 
   const lines = [
@@ -475,11 +549,125 @@ function renderRankings(agg: BenchAggregate): string {
   return lines.join('\n');
 }
 
-function renderLimits(agg: BenchAggregate): string {
+/**
+ * The paired differences, which are the point of this whole section.
+ *
+ * Only the comparisons that reached a bootstrap get a row. The refused ones are
+ * counted by reason rather than listed, because a corpus below the task floor
+ * refuses every pair on every metric in every scope and a thousand identical
+ * rows would bury the one sentence that matters.
+ */
+function renderComparisons(analysis: Analysis): string {
+  const ran = analysis.comparisons.filter((c) => c.result !== null && c.withheld === null);
+  const rows = ran.map((c) => {
+    const result = c.result;
+    const interval = result?.interval;
+    const error = result?.error;
+    const measured = result?.verdict === 'measured';
+    return [
+      metricDescriptor(c.metric).label,
+      c.scope.kind === 'overall' ? 'overall' : c.scope.category,
+      `${c.a} vs ${c.b}`,
+      String(result?.shared.length ?? 0),
+      // The rule, rendered. A crossing interval prints the words and no point
+      // estimate: a number on a page is an ordering, whatever the interval
+      // beside it says.
+      measured ? num(result?.pointEstimate ?? 0) : NO_MEASURED_DIFFERENCE,
+      interval === null || interval === undefined
+        ? 'none'
+        : `${num(interval.lower)} to ${num(interval.upper)}`,
+      error === null || error === undefined ? 'n/a' : num(error.naive),
+      error === null || error === undefined ? 'n/a' : num(error.clustered),
+      error?.inflation === null || error?.inflation === undefined
+        ? 'n/a'
+        : `${error.inflation.toFixed(2)}x`,
+    ];
+  });
+
+  const withheldRows = Object.entries(analysis.summary.withheldBy)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([reason, count]) => [reason, String(count)]);
+
+  return [
+    '## Differences between backends',
+    '',
+    `Every comparison here is **paired**: it uses only the tasks both backends answered, because an unpaired test throws away the pairing that makes the comparison powerful. The interval is a percentile bootstrap over ${String(analysis.comparisons.find((c) => c.result?.interval)?.result?.interval?.resamples ?? 5000)} resamples that draws **categories** as units, so two tasks in one category are not counted as two independent observations.`,
+    '',
+    `**A difference whose interval contains zero is reported as ${NO_MEASURED_DIFFERENCE}, in those words, and never as a smaller number.** The point estimate is in the JSON for a downstream consumer; it is off this page because a number here would be read as an ordering.`,
+    '',
+    analysis.summary.sentence,
+    '',
+    rows.length === 0
+      ? '_No pairwise comparison could be run._'
+      : table(
+          [
+            'Metric',
+            'Scope',
+            'Pair',
+            'Shared tasks',
+            'Difference',
+            '95% interval',
+            'SE naive',
+            'SE clustered',
+            'Inflation',
+          ],
+          rows,
+        ),
+    '',
+    '**The inflation column is the one to read.** It is the clustered standard error divided by the naive one, which is how much the naive figure understates the uncertainty by treating related tasks as independent observations. Published measurement puts it up to 3.05x, and at that ratio a difference that looks significant is not.',
+    '',
+    withheldRows.length === 0
+      ? ''
+      : [
+          'Comparisons refused before an interval could be computed, by reason:',
+          '',
+          table(['Condition', 'Comparisons'], withheldRows),
+        ].join('\n'),
+  ]
+    .filter((s) => s !== '')
+    .join('\n');
+}
+
+/** `pass@1` beside `pass^k`, which are two different products. */
+function renderReliability(analysis: Analysis): string {
+  const rows = analysis.reliability.map((r) => [
+    r.provider,
+    r.passAt1 === null ? 'not measured' : PERCENT(r.passAt1),
+    r.passHatK === null ? 'withheld' : PERCENT(r.passHatK),
+    String(r.k),
+    String(r.tasksCounted),
+    num(r.threshold),
+    r.metrics.length === 0 ? 'none' : r.metrics.join(', '),
+  ]);
+
+  const withheld = analysis.reliability.filter((r) => r.passHatK === null && r.kWithheld !== '');
+
+  return [
+    '## Reliability: pass@1 beside pass^k',
+    '',
+    '`pass@1` is what a user gets on one attempt. `pass^k` is whether the backend gets it right on **every** one of k, which is the number that matters for anything run unattended. A backend with high `pass@1` and low `pass^k` sometimes works, and reporting only the first sells it as one that does: published measurement has agents at 61% pass@1 collapsing to 25% pass@8.',
+    '',
+    'A pass is full credit on the task\'s own primary metric, refusal correctness where the task measured it and accuracy otherwise. A repetition that measured nothing is an absence and leaves the denominator; it is never counted as a failed attempt.',
+    '',
+    rows.length === 0
+      ? '_No cells recorded._'
+      : table(
+          ['Backend', 'pass@1', 'pass^k', 'k', 'Tasks counted', 'Threshold', 'Pass metric'],
+          rows,
+        ),
+    ...(withheld.length === 0
+      ? []
+      : ['', ...withheld.map((r) => `- **${r.provider}** ${r.kWithheld}`)]),
+  ].join('\n');
+}
+
+function renderLimits(agg: BenchAggregate, analysis: Analysis): string {
   return [
     '## What none of this can mean',
     '',
-    `- **This is not a significance test.** Spreads are observed interquartile ranges over the results in hand. Bootstrap intervals, paired differences and standard errors clustered on category are BENCH-13, and until they land, an overlap between two spreads is the only separation check offered here.`,
+    `- **A spread is not an interval.** Spreads in the tables are observed interquartile ranges over the results in hand. The paired differences carry a real ${String(Math.round((analysis.comparisons.find((c) => c.result?.interval)?.result?.interval?.confidence ?? 0.95) * 100))}% bootstrap interval, and the two are different things: only the second says anything about how much of a gap survives resampling.`,
+    `- **An interval that contains zero is ${NO_MEASURED_DIFFERENCE}**, not a small one. ${String(analysis.summary.measured)} of ${String(analysis.summary.ran)} comparisons that could be run produced one.`,
+    `- **Clustering is on category and on nothing else.** Two tasks in different categories that share a source, an entity or a week are still treated as independent observations, and a corpus this size is small enough that they might not be.`,
     `- **A ranking withheld is not a tie.** It means the sample cannot order the backends, which is a different statement from their being equal.`,
     `- **Cost is a reservation at the worst case of an estimate band**, never an invoice.`,
     `- **A stale task is still scored.** ${String(agg.corpus.staleTasks)} of ${String(agg.corpus.tasks)} tasks here have gold that has gone unverified for ${String(agg.corpus.staleAfterDays)} days or more.`,
@@ -512,10 +700,11 @@ const SCORECARD_METRICS = [
 /** The whole report, in markdown. */
 export function renderMarkdown(agg: BenchAggregate): string {
   const quality = SCORECARD_METRICS.map(metricDescriptor);
+  const analysis = analyse(agg);
   return [
     renderHeader(agg),
     '',
-    renderValidity(agg),
+    renderValidity(agg, analysis),
     '',
     renderPrice(agg),
     '',
@@ -523,16 +712,20 @@ export function renderMarkdown(agg: BenchAggregate): string {
       agg,
       quality,
       'Per-backend scorecard',
-      'One row per backend, across the categories it may be scored in. Every value carries its sample size, and its completion rate is the column beside it. A value reading `not measured` was never measured; it is not a zero.',
+      'One row per backend, across the categories it may be scored in. Every value carries its sample size, and its completion rate is the column beside it. A value reading `not measured` was never measured; it is not a zero, and a row reading `invalid` is a backend that completed too few of its attempts for any of its figures to be a claim.',
     ),
     '',
     renderCitations(agg),
     '',
     renderMatrices(agg),
     '',
-    renderRankings(agg),
+    renderComparisons(analysis),
     '',
-    renderLimits(agg),
+    renderReliability(analysis),
+    '',
+    renderRankings(analysis),
+    '',
+    renderLimits(agg, analysis),
     '',
   ].join('\n');
 }
@@ -541,12 +734,24 @@ export function renderMarkdown(agg: BenchAggregate): string {
  * The same numbers, as JSON.
  *
  * Everything the markdown shows and everything it summarises, including the
- * per-task groups, so BENCH-11 and BENCH-13 consume this rather than parsing
- * prose. Stable key order and two-space indentation, so two renders of one
- * store are byte-identical and a diff between two runs is readable.
+ * per-task groups and every paired comparison, so BENCH-11 and anything after
+ * it consume this rather than parsing prose. Stable key order and two-space
+ * indentation, so two renders of one store are byte-identical and a diff
+ * between two runs is readable. That property is why the bootstrap is seeded.
  */
 export function renderJson(agg: BenchAggregate): string {
-  return `${JSON.stringify({ aggregate: agg, rankings: rankings(agg) }, null, 2)}\n`;
+  const analysis = analyse(agg);
+  return `${JSON.stringify(
+    {
+      aggregate: agg,
+      rankings: analysis.rankings,
+      comparisons: analysis.comparisons,
+      comparisonSummary: analysis.summary,
+      reliability: analysis.reliability,
+    },
+    null,
+    2,
+  )}\n`;
 }
 
 /** Everything the report can be rendered as. */
