@@ -45,10 +45,14 @@ export type PairedWithheld =
   /** Fewer than two tasks both backends have a value on. */
   | 'too-few-shared-tasks'
   /**
-   * One cluster. Resampling one category with replacement always draws that
-   * category, so every replicate is identical and the interval is a point:
-   * something that looks like precision and is an artefact of having nothing to
-   * resample.
+   * One cluster.
+   *
+   * Not a technicality: with every shared task in one category there is no
+   * replication *across* clusters, so within-category correlation cannot be
+   * corrected for at all. A task-level interval could still be computed and it
+   * would assume the tasks are independent, which is the assumption this whole
+   * module exists to refuse, and it would understate the width in the direction
+   * that flatters whichever backend happened to win.
    */
   | 'too-few-clusters';
 
@@ -165,7 +169,7 @@ export function pairedDifference(input: PairedInput): PairedDifference {
       interval: null,
       error,
       betterBackend: null,
-      summary: `${input.a} and ${input.b} share tasks in only ${String(clusters)} categor${clusters === 1 ? 'y' : 'ies'}, so resampling categories cannot produce an interval. Reported as ${NO_MEASURED_DIFFERENCE} rather than as a point estimate with an interval of width zero.`,
+      summary: `${input.a} and ${input.b} share tasks in only ${String(clusters)} categor${clusters === 1 ? 'y' : 'ies'}, so there is no replication across clusters and within-category correlation cannot be corrected for. Reported as ${NO_MEASURED_DIFFERENCE}: an interval computed over the tasks instead would assume they are independent observations, which is the assumption this comparison exists to refuse.`,
     };
   }
 

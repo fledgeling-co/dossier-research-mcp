@@ -37,7 +37,7 @@ export type { SampleUnit, Spread, SpreadReport } from './spread.js';
 export { harvestCell } from './harvest.js';
 export type { EvidenceState, HarvestInput, RegistryCounts, ScoredCell } from './harvest.js';
 
-export { MIN_TASKS_PER_CATEGORY, aggregate, uncheckedShare } from './aggregate.js';
+export { MIN_COMPLETION_SHARE, MIN_TASKS_PER_CATEGORY, aggregate, uncheckedShare } from './aggregate.js';
 export type {
   AggregateInput,
   BackendSummary,
@@ -49,8 +49,19 @@ export type {
   TaskGroup,
 } from './aggregate.js';
 
-export { OVERLAP_NOTE, rankBackends } from './rank.js';
-export type { RankCandidate, RankScope, Ranking, RankedEntry, WithheldReason } from './rank.js';
+export { OVERLAP_NOTE, PAIRED_NOTE, rankBackends } from './rank.js';
+export type {
+  RankCandidate,
+  RankScope,
+  Ranking,
+  RankedEntry,
+  SeparationOracle,
+  SeparationVerdict,
+  WithheldReason,
+} from './rank.js';
 
-export { formatValue, render, renderJson, renderMarkdown, rankings } from './render.js';
-export type { ReportFormat } from './render.js';
+export { comparisonSummary, comparisons, reliability, separatorFor } from './comparison.js';
+export type { Comparison, ComparisonSummary, ComparisonWithheld } from './comparison.js';
+
+export { analyse, formatValue, render, renderJson, renderMarkdown, rankings } from './render.js';
+export type { Analysis, ReportFormat } from './render.js';

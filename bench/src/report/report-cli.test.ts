@@ -70,6 +70,7 @@ function args(overrides: Partial<ReturnType<typeof parseArgs>>): ReturnType<type
     storeDir: '',
     evidenceDir: '',
     minTasksPerCategory: undefined,
+    minCompletionShare: undefined,
     format: 'markdown',
     asOf: '2026-07-27',
     ...overrides,

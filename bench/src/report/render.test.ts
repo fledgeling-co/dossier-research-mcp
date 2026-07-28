@@ -477,3 +477,146 @@ describe('the citation headings nest under their section', () => {
     expect(renderMarkdown(realistic())).toContain('## Per-backend scorecard');
   });
 });
+
+/** Two categories of five tasks, three repetitions, which is the smallest set anything can be compared on. */
+function comparable(values: (category: string) => { alpha: number; beta: number }) {
+  const categories = ['technical', 'contested'] as const;
+  const tasks = categories.flatMap((category) =>
+    [1, 2, 3, 4, 5].map((n) => task(`${category}-${String(n)}`, category)),
+  );
+  const cells = categories.flatMap((category) =>
+    [1, 2, 3, 4, 5].flatMap((n) =>
+      [1, 2, 3].flatMap((r) => [
+        scoredCell(`${category}-${String(n)}`, 'alpha', r, category, {
+          accuracy: values(category).alpha,
+        }),
+        scoredCell(`${category}-${String(n)}`, 'beta', r, category, {
+          accuracy: values(category).beta,
+        }),
+      ]),
+    ),
+  );
+  return aggregate({ cells, corpus: corpus(tasks) });
+}
+
+describe('STAT-03 and STAT-14 what the differences section says', () => {
+  it('puts the separability sentence above every score, not under them', () => {
+    const markdown = renderMarkdown(realistic());
+    const headline = markdown.indexOf('What this corpus can actually distinguish');
+    expect(headline).toBeGreaterThan(-1);
+    expect(headline).toBeLessThan(markdown.indexOf('## Per-backend scorecard'));
+    expect(headline).toBeLessThan(markdown.indexOf('## Citations'));
+    expect(headline).toBeLessThan(markdown.indexOf('## Rankings'));
+  });
+
+  it('says plainly that nothing is distinguishable, when nothing is', () => {
+    const markdown = renderMarkdown(realistic());
+    expect(markdown).toMatch(/\*\*Almost nothing here is distinguishable yet\.\*\*/);
+    expect(markdown).toMatch(/authoring tasks, not loosening the statistics/);
+  });
+
+  it('renders a crossing interval as the literal words and no point estimate', () => {
+    // The gap flips sign between the two categories, so resampling categories
+    // straddles zero however large either gap is on its own.
+    const markdown = renderMarkdown(
+      comparable((c) => (c === 'technical' ? { alpha: 0.9, beta: 0.2 } : { alpha: 0.2, beta: 0.9 })),
+    );
+    const section = markdown.slice(
+      markdown.indexOf('## Differences between backends'),
+      markdown.indexOf('## Reliability'),
+    );
+    expect(section).toContain('no measured difference');
+    expect(section).toMatch(/\| alpha vs beta \| 10 \| no measured difference \|/);
+  });
+
+  it('renders a measured difference with its interval and both standard errors', () => {
+    const markdown = renderMarkdown(
+      comparable((c) => (c === 'technical' ? { alpha: 0.9, beta: 0.2 } : { alpha: 0.85, beta: 0.15 })),
+    );
+    const section = markdown.slice(
+      markdown.indexOf('## Differences between backends'),
+      markdown.indexOf('## Reliability'),
+    );
+    expect(section).toContain('| SE naive | SE clustered | Inflation |');
+    expect(section).toMatch(/\| alpha vs beta \| 10 \| 0\.7/);
+    expect(section).toMatch(/\*\*The inflation column is the one to read\.\*\*/);
+    expect(markdown).toMatch(/1 produced a measured difference/);
+  });
+
+  it('counts the refusals by reason instead of printing a thousand rows', () => {
+    const markdown = renderMarkdown(realistic());
+    const section = markdown.slice(markdown.indexOf('## Differences between backends'));
+    expect(section).toContain('| Condition | Comparisons |');
+    expect(section).toContain('_No pairwise comparison could be run._');
+  });
+});
+
+describe('STAT-09 pass@1 beside pass^k', () => {
+  it('prints both, with k and the threshold', () => {
+    const markdown = renderMarkdown(realistic());
+    const section = markdown.slice(
+      markdown.indexOf('## Reliability: pass@1 beside pass^k'),
+      markdown.indexOf('## Rankings'),
+    );
+    expect(section).toContain('| Backend | pass@1 | pass^k | k | Tasks counted | Threshold | Pass metric |');
+    expect(section).toMatch(/collapsing to 25% pass@8/);
+    expect(section).toMatch(/never counted as a failed attempt/);
+  });
+
+  it('withholds pass^k below the floor and names it', () => {
+    const cells = SIX.flatMap((t) =>
+      [1, 2].map((r) => scoredCell(t.id, 'gemini', r, 'technical', { accuracy: 1 })),
+    );
+    const markdown = renderMarkdown(aggregate({ cells, corpus: corpus(SIX) }));
+    const section = markdown.slice(markdown.indexOf('## Reliability'), markdown.indexOf('## Rankings'));
+    expect(section).toContain('| gemini | 100.0% | withheld | 2 |');
+    expect(section).toMatch(/below the floor of 3/);
+  });
+});
+
+describe('STAT-11 an under-completed backend renders invalid, not a number', () => {
+  it('says invalid in the scorecard rather than printing its accuracy', () => {
+    const cells = SIX.flatMap((t) =>
+      [1, 2, 3].map((r) =>
+        r === 1
+          ? scoredCell(t.id, 'gemini', r, 'technical', { accuracy: 0.9 })
+          : scoredCell(t.id, 'gemini', r, 'technical', {}, { outcome: 'failed', failureKind: '429' }),
+      ),
+    );
+    const markdown = renderMarkdown(aggregate({ cells, corpus: corpus(SIX) }));
+    expect(markdown).toMatch(/invalid \(completed 33\.3%, floor 60\.0%\)/);
+    expect(markdown).toMatch(/invalid \(completed 33\.3%\)/);
+    expect(markdown).toMatch(/a backend must complete 60\.0% of its attempted cells/);
+  });
+});
+
+describe('STAT-13 the new sections did not merge the two citation tables', () => {
+  it('still keeps accuracy and volume apart, with the differences section between neither', () => {
+    const markdown = renderMarkdown(realistic());
+    const volumeSection = markdown.slice(
+      markdown.indexOf('### Citation volume'),
+      markdown.indexOf('### Registry checks per backend'),
+    );
+    expect(volumeSection).not.toContain('| Citation accuracy |');
+    expect(markdown.indexOf('### Citation accuracy')).toBeLessThan(
+      markdown.indexOf('### Citation volume'),
+    );
+  });
+});
+
+describe('the JSON carries the statistics, so nothing downstream parses prose', () => {
+  it('round-trips the comparisons, the summary and the reliability', () => {
+    const parsed: unknown = JSON.parse(renderJson(realistic()));
+    expect(parsed).toHaveProperty('comparisons');
+    expect(parsed).toHaveProperty('comparisonSummary');
+    expect(parsed).toHaveProperty('reliability');
+  });
+
+  it('is byte-identical on two renders, which is what the seeded bootstrap buys', () => {
+    const agg = comparable((c) =>
+      c === 'technical' ? { alpha: 0.9, beta: 0.2 } : { alpha: 0.85, beta: 0.15 },
+    );
+    expect(renderJson(agg)).toBe(renderJson(agg));
+    expect(renderMarkdown(agg)).toBe(renderMarkdown(agg));
+  });
+});

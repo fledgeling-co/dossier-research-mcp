@@ -35,6 +35,8 @@ export interface ReportCliArgs {
   /** BENCH-03's evidence snapshots, keyed by cell key. */
   readonly evidenceDir: string;
   readonly minTasksPerCategory: number | undefined;
+  /** The share of attempted cells a backend must complete before it is scored. */
+  readonly minCompletionShare: number | undefined;
   readonly format: ReportFormat;
   /** The date staleness is measured against, `YYYY-MM-DD`. */
   readonly asOf: string;
@@ -47,12 +49,22 @@ const USAGE = `Usage: bench-report [options]
   --store <dir>       Dossier store root, holding reports/ (default $DOSSIER_STORE_DIR)
   --evidence <dir>    citation evidence snapshots (default beside the registry cache)
   --min-tasks <n>     tasks a category needs before it is scored at all (default 5)
+  --min-completion <s>  share of attempted cells a backend must complete, 0 to 1 (default 0.6)
   --format <fmt>      markdown (default) or json
   --as-of <date>      YYYY-MM-DD the corpus staleness is measured against (default today)
 
 Reads stored results and renders them. Runs no research, calls no model, spends nothing.`;
 
-const VALUE_FLAGS = new Set(['cells', 'tasks', 'store', 'evidence', 'min-tasks', 'format', 'as-of']);
+const VALUE_FLAGS = new Set([
+  'cells',
+  'tasks',
+  'store',
+  'evidence',
+  'min-tasks',
+  'min-completion',
+  'format',
+  'as-of',
+]);
 
 /** Exported for the arg-parsing tests. An ignored typo here renders the wrong store. */
 export function parseArgs(args: readonly string[]): ReportCliArgs {
@@ -108,6 +120,17 @@ export function parseArgs(args: readonly string[]): ReportCliArgs {
     }
   }
 
+  const shareRaw = flags.get('min-completion');
+  let minCompletionShare: number | undefined;
+  if (shareRaw !== undefined) {
+    minCompletionShare = Number(shareRaw);
+    // A share, not a percentage. `--min-completion 60` would silently admit
+    // nobody, which is the safe direction and still not what anybody meant.
+    if (!Number.isFinite(minCompletionShare) || minCompletionShare <= 0 || minCompletionShare > 1) {
+      throw new Error(`--min-completion must be a share in (0, 1]; got "${shareRaw}".`);
+    }
+  }
+
   const storeDir = flags.get('store') ?? process.env['DOSSIER_STORE_DIR'];
 
   return {
@@ -122,6 +145,7 @@ export function parseArgs(args: readonly string[]): ReportCliArgs {
       flags.get('evidence') ?? join(homedir(), '.dossier-research-mcp', 'citation-evidence'),
     ),
     minTasksPerCategory,
+    minCompletionShare,
     format: formatRaw,
     asOf,
   };
@@ -212,6 +236,7 @@ export function renderFromDisk(options: RenderFromDiskOptions): string {
     cells: scored,
     corpus,
     minTasksPerCategory: args.minTasksPerCategory,
+    minCompletionShare: args.minCompletionShare,
     orphanCells,
   });
   return render(agg, args.format);

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { MIN_TASKS_PER_CATEGORY, aggregate, uncheckedShare } from './aggregate.js';
+import { MIN_COMPLETION_SHARE, MIN_TASKS_PER_CATEGORY, aggregate, uncheckedShare } from './aggregate.js';
+import { MIN_REPETITIONS_FOR_SPREAD, TARGET_REPETITIONS } from '../run/cell.js';
 import { corpus, scoredCell, task } from './fixtures.js';
 
 /** Six technical tasks, which clears the default floor of five. */
@@ -347,5 +348,102 @@ describe('the money figure is a real sum, not a median times a count', () => {
     ];
     const agg = aggregate({ cells, corpus: corpus([task('t1', 'technical')]) });
     expect(agg.backends[0]?.totalCostUsd).toBe(6);
+  });
+});
+
+describe('STAT-11 and STAT-12 the completion floor, composed with the other two', () => {
+  it('renders a backend under the share invalid rather than as a number', () => {
+    // Full task coverage, and two attempts in every three failed. The count
+    // floor is clear, so this is the case neither BENCH-08 floor can see.
+    const cells = SIX.flatMap((t) =>
+      [1, 2, 3].map((r) =>
+        r === 1
+          ? scoredCell(t.id, 'gemini', r, 'technical', { accuracy: 0.9 })
+          : scoredCell(t.id, 'gemini', r, 'technical', {}, { outcome: 'failed', failureKind: '429' }),
+      ),
+    );
+    const agg = aggregate({ cells, corpus: corpus(SIX) });
+    const group = agg.categoryGroups[0];
+    expect(group?.tasksCompleted).toBe(6);
+    expect(group?.completion.rate).toBeCloseTo(1 / 3, 12);
+    expect(group?.verdict.scorable).toBe(false);
+    if (group?.verdict.scorable === false) {
+      expect(group.verdict.reason).toBe('under-completed');
+      expect(group.verdict.why).toMatch(/rendered invalid rather than as a number/);
+      expect(group.verdict.why).toMatch(/33\.3% of its attempted technical cells/);
+    }
+  });
+
+  it('admits a backend exactly at the floor, which is inclusive', () => {
+    // Three of five completed per task: exactly 0.6, the derived floor.
+    const cells = SIX.flatMap((t) =>
+      [1, 2, 3, 4, 5].map((r) =>
+        r <= 3
+          ? scoredCell(t.id, 'gemini', r, 'technical', { accuracy: 0.9 })
+          : scoredCell(t.id, 'gemini', r, 'technical', {}, { outcome: 'failed', failureKind: '429' }),
+      ),
+    );
+    const agg = aggregate({ cells, corpus: corpus(SIX) });
+    expect(agg.categoryGroups[0]?.completion.rate).toBeCloseTo(0.6, 12);
+    expect(agg.categoryGroups[0]?.verdict.scorable).toBe(true);
+  });
+
+  it('lets the corpus floor win when both would fire', () => {
+    const tasks = [task('c1', 'contested'), task('c2', 'contested')];
+    const cells = tasks.flatMap((t) =>
+      [1, 2, 3].map((r) =>
+        r === 1
+          ? scoredCell(t.id, 'gemini', r, 'contested', { accuracy: 0.9 })
+          : scoredCell(t.id, 'gemini', r, 'contested', {}, { outcome: 'failed' }),
+      ),
+    );
+    const group = aggregate({ cells, corpus: corpus(tasks) }).categoryGroups[0];
+    if (group?.verdict.scorable === false) expect(group.verdict.reason).toBe('under-sampled-corpus');
+  });
+
+  it('takes the share as a parameter, reports it back and refuses a nonsense one', () => {
+    const cells = SIX.flatMap((t) =>
+      [1, 2, 3].map((r) => scoredCell(t.id, 'gemini', r, 'technical', { accuracy: 0.9 })),
+    );
+    expect(aggregate({ cells, corpus: corpus(SIX) }).minCompletionShare).toBe(MIN_COMPLETION_SHARE);
+    expect(
+      aggregate({ cells, corpus: corpus(SIX), minCompletionShare: 0.9 }).minCompletionShare,
+    ).toBe(0.9);
+    for (const bad of [0, 1.5, Number.NaN]) {
+      expect(() => aggregate({ cells, corpus: corpus(SIX), minCompletionShare: bad })).toThrow(
+        /in \(0, 1\]/,
+      );
+    }
+  });
+
+  it('derives the share from the two repetition numbers rather than picking one', () => {
+    expect(MIN_COMPLETION_SHARE).toBe(MIN_REPETITIONS_FOR_SPREAD / TARGET_REPETITIONS);
+    expect(MIN_COMPLETION_SHARE).toBeCloseTo(0.6, 12);
+  });
+});
+
+describe('the per-repetition pass series carried for the reliability figures', () => {
+  it('prefers refusal where the task measured it, and accuracy otherwise', () => {
+    const cells = [
+      ...[1, 2, 3].map((r) => scoredCell('t1', 'gemini', r, 'technical', { accuracy: 0.5 })),
+      ...[1, 2, 3].map((r) =>
+        scoredCell('t2', 'gemini', r, 'false-premise', { accuracy: 0.5, refusal: 1 }),
+      ),
+    ];
+    const groups = aggregate({ cells, corpus: corpus([task('t1', 'technical'), task('t2', 'false-premise')]) }).taskGroups;
+    expect(groups.find((g) => g.taskId === 't1')?.passMetric).toBe('accuracy');
+    expect(groups.find((g) => g.taskId === 't2')?.passMetric).toBe('refusal');
+    expect(groups.find((g) => g.taskId === 't2')?.passValues).toEqual([1, 1, 1]);
+  });
+
+  it('leaves a failed repetition out of the series rather than scoring it zero', () => {
+    const cells = [
+      scoredCell('t1', 'gemini', 1, 'technical', { accuracy: 1 }),
+      scoredCell('t1', 'gemini', 2, 'technical', {}, { outcome: 'failed', failureKind: '429' }),
+      scoredCell('t1', 'gemini', 3, 'technical', { accuracy: 1 }),
+    ];
+    const group = aggregate({ cells, corpus: corpus([task('t1', 'technical')]) }).taskGroups[0];
+    expect(group?.passValues).toEqual([1, 1]);
+    expect(group?.passMetric).toBe('accuracy');
   });
 });

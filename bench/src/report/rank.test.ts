@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { OVERLAP_NOTE, rankBackends, type RankCandidate } from './rank.js';
+import { OVERLAP_NOTE, PAIRED_NOTE, rankBackends, type RankCandidate } from './rank.js';
 import { summarise } from './spread.js';
 
 function candidate(
@@ -192,5 +192,64 @@ describe('a metric nobody measured is not a sample problem', () => {
       { provider: 'c', value: null, scorable: false, why: 'c ran nothing', completionRate: 0, repetitionsMet: false, repetitionsWhy: 'nothing ran' },
     ]);
     expect(ranking.note).toMatch(/Of the 2 backends with a value/);
+  });
+});
+
+describe('STAT-17 a paired verdict decides the tie where one exists', () => {
+  it('separates two backends whose spreads overlap, when the paired test measured a difference', () => {
+    // Overlapping interquartile ranges. The old rule ties these; the paired
+    // test, which uses the pairing the overlap check throws away, does not.
+    const ranking = rankBackends(
+      'accuracy',
+      OVERALL,
+      [candidate('gemini', [0.5, 0.6, 0.7]), candidate('openai', [0.45, 0.55, 0.65])],
+      true,
+      () => 'separated',
+    );
+    expect(ranking.entries?.map((e) => e.rank)).toEqual([1, 2]);
+    expect(ranking.entries?.[1]?.tiedWithPrevious).toBe(false);
+    expect(ranking.separation).toBe('paired');
+    expect(ranking.note).toBe(PAIRED_NOTE);
+  });
+
+  it('ties two backends whose spreads do not overlap, when the interval crosses zero', () => {
+    const ranking = rankBackends(
+      'accuracy',
+      OVERALL,
+      [candidate('gemini', [0.9, 0.91, 0.92]), candidate('openai', [0.1, 0.11, 0.12])],
+      true,
+      () => 'tied',
+    );
+    expect(ranking.entries?.map((e) => e.rank)).toEqual([1, 1]);
+    expect(ranking.entries?.[1]?.tiedWithPrevious).toBe(true);
+    expect(ranking.separation).toBe('paired');
+  });
+
+  it('falls back to overlap where the oracle has no answer, and says which ran', () => {
+    const withNoAnswer = rankBackends(
+      'accuracy',
+      OVERALL,
+      [candidate('gemini', [0.9, 0.91, 0.92]), candidate('openai', [0.1, 0.11, 0.12])],
+      true,
+      () => null,
+    );
+    const withNoOracle = rankBackends('accuracy', OVERALL, [
+      candidate('gemini', [0.9, 0.91, 0.92]),
+      candidate('openai', [0.1, 0.11, 0.12]),
+    ]);
+    expect(withNoAnswer.entries).toEqual(withNoOracle.entries);
+    expect(withNoAnswer.separation).toBe('overlap');
+    expect(withNoAnswer.note).toBe(OVERLAP_NOTE);
+  });
+
+  it('names no separation check on a withheld ranking', () => {
+    const ranking = rankBackends('citation-sources', OVERALL, []);
+    expect(ranking.separation).toBe('none');
+  });
+
+  it('keeps both notes honest about what they are', () => {
+    expect(OVERLAP_NOTE).toMatch(/not a significance test/);
+    expect(PAIRED_NOTE).toMatch(/excludes zero/);
+    expect(PAIRED_NOTE).toMatch(/resampled as units/);
   });
 });
