@@ -366,6 +366,28 @@ export function utcDayOrdinalFromIsoDate(iso: string): number {
 }
 
 /**
+ * The inverse: a whole UTC day back to `YYYY-MM-DD`.
+ *
+ * Here rather than beside its one caller so that both directions of the
+ * conversion share a definition of a day. A private inverse written elsewhere is
+ * how two modules come to disagree about which day an ordinal is, which is the
+ * duplication BENCH-15 exists to unpick.
+ *
+ * Throws on an ordinal no calendar day can hold, rather than returning an
+ * `Invalid Date` that poisons every comparison downstream (CP §6.14).
+ */
+export function isoDateFromUtcDayOrdinal(ordinal: number): string {
+  if (!Number.isInteger(ordinal)) {
+    throw new TypeError(`a UTC day ordinal must be a whole number; received ${String(ordinal)}`);
+  }
+  const at = new Date(ordinal * 86_400_000);
+  if (Number.isNaN(at.getTime())) {
+    throw new RangeError(`the UTC day ordinal ${String(ordinal)} is not a representable date`);
+  }
+  return at.toISOString().slice(0, 10);
+}
+
+/**
  * The task schema, as a factory over the reference date.
  *
  * `now` is a parameter rather than something read from the clock inside,

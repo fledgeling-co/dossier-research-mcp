@@ -19,6 +19,7 @@ import {
   type PageEvidence,
   type RegistryAnswer,
 } from './evidence.js';
+import { extractPublicationDate } from './published.js';
 import { crossrefGapMs, isRefusal, plan, type RegistryOptions, type RegistryTransport } from './registries.js';
 
 /**
@@ -227,6 +228,24 @@ async function collectPage(
   // answer is the same either way.
   const truncated = source.truncated || raw.length > MAX_PAGE_TEXT_CHARS;
 
+  // The publication date is read from the **raw** body rather than the extracted
+  // text, because every signal it uses lives in markup the text extractor
+  // deliberately strips: meta tags, JSON-LD script bodies and `<time>`
+  // attributes. It is also read here rather than at scoring time for the reason
+  // this whole slice exists: by the time a report is rendered the page is gone,
+  // and the fetch time that survives is not the publication time.
+  //
+  // Gated on the judged verdict rather than on the HTTP status, so a 404 page's
+  // own furniture cannot date the citation. That is `containment`'s rule too: a
+  // page that did not resolve is nowhere to look.
+  const published = extractPublicationDate({
+    url,
+    body: source.body,
+    checkedAt,
+    bodyRead: judged.verdict === 'live' && source.body !== '',
+    truncated,
+  });
+
   return {
     url,
     ...(source.url !== url ? { finalUrl: source.url } : {}),
@@ -236,6 +255,7 @@ async function collectPage(
     truncated,
     completeHtml: isCompleteHtml(source) && !truncated,
     anchors: isCompleteHtml(source) ? collectAnchors(source.body) : [],
+    published,
     checkedAt,
     ...(judged.note === undefined ? {} : { note: judged.note }),
   };

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { IDENTIFIER_KINDS } from '../score/identifiers.js';
+import { PUBLICATION_SIGNALS } from './published.js';
 import { REGISTRY_IDS } from './registries.js';
 
 /**
@@ -24,8 +25,17 @@ import { REGISTRY_IDS } from './registries.js';
  * than no score.
  */
 
-/** Bumped when a field changes meaning, so an old snapshot fails rather than misleads. */
-export const EVIDENCE_VERSION = 1;
+/**
+ * Bumped when a field changes meaning, so an old snapshot fails rather than misleads.
+ *
+ * **2, from 28 July 2026.** Every page now carries a publication date or an
+ * explicit reason there is not one. A version-1 snapshot cannot answer that
+ * question at all, and reading one as "no page carries a date" would print an
+ * undated share of 100% about a collection pass that never looked. Failing to
+ * parse instead reaches the report as a named pipeline gap, which is the honest
+ * outcome and costs a re-collection rather than a wrong number.
+ */
+export const EVIDENCE_VERSION = 2;
 
 /**
  * How much extracted page text one snapshot keeps per page.
@@ -59,6 +69,35 @@ export const RegistryAnswerSchema = z.strictObject({
 export type RegistryAnswer = z.infer<typeof RegistryAnswerSchema>;
 
 /**
+ * When a page says it was published, or why that could not be established.
+ *
+ * A discriminated union of three states rather than an optional string, and the
+ * shape is the point. An optional `publishedAt` has one absent state, so a
+ * caller reading it cannot tell a page that carries no date from a page nobody
+ * could read, and the two are different findings: the first is about the
+ * publisher, the second is about this collection pass. That is the same
+ * distinction `unchecked` draws for a registry answer, and it is the one this
+ * project keeps having to re-learn.
+ *
+ * `signal` is not decoration either. A wrong date can be traced to the thing
+ * that produced it rather than argued about, and `raw` keeps the string exactly
+ * as the page wrote it so a disputed reading can be re-read by hand.
+ */
+export const PublicationDateSchema = z.discriminatedUnion('status', [
+  z.strictObject({
+    status: z.literal('found'),
+    /** The calendar day the publisher stated, as whole UTC days see it. */
+    date: z.iso.date(),
+    signal: z.enum(PUBLICATION_SIGNALS),
+    raw: z.string().max(200),
+    detail: z.string().max(400),
+  }),
+  z.strictObject({ status: z.literal('absent'), detail: z.string().max(400) }),
+  z.strictObject({ status: z.literal('unchecked'), detail: z.string().max(400) }),
+]);
+export type PersistedPublicationDate = z.infer<typeof PublicationDateSchema>;
+
+/**
  * One cited page, as far as it could be established.
  *
  * `verdict` is `src/research/citations.ts`'s own vocabulary rather than a second
@@ -85,6 +124,19 @@ export const PageEvidenceSchema = z.strictObject({
   completeHtml: z.boolean(),
   /** Every `id` and `name` the HTML declared, decoded. */
   anchors: z.array(z.string().min(1).max(300)).max(20_000),
+  /**
+   * When the page says it was published, or why that is not known.
+   *
+   * Required, never optional. An optional field is a sentinel a caller can
+   * forget, and a caller that forgot this one would report every source undated
+   * while every test stayed green.
+   *
+   * Note what it is **not**: `checkedAt` below is when this pass read the page,
+   * which is a different fact. Deriving one from the other would grade every
+   * source fresh, which is precisely the failure the recency axis exists to
+   * catch.
+   */
+  published: PublicationDateSchema,
   checkedAt: isoTimestamp,
   note: z.string().max(600).optional(),
 });
