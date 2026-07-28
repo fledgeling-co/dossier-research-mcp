@@ -75,6 +75,7 @@ export {
   recencyHorizon,
   recencyInputs,
   scoreRecency,
+  scoreRecencyForReport,
 } from './recency.js';
 export type {
   DatedPage,
@@ -83,6 +84,7 @@ export type {
   DurabilityVerdict,
   Horizon,
   PublicationDateView,
+  RecencyForReport,
   RecencyInputs,
   RecencyNotApplicable,
   RecencyResult,

@@ -139,7 +139,8 @@ function renderValidity(agg: BenchAggregate, analysis: Analysis): string {
   const registryTotal =
     agg.registry.present + agg.registry.absent + agg.registry.unchecked + agg.registry.invalid;
   const undated = undatedShare(agg.dating);
-  const datingTotal = agg.dating.dated + agg.dating.absent + agg.dating.unchecked;
+  const datingTotal =
+    agg.dating.dated + agg.dating.absent + agg.dating.unchecked + agg.dating.afterHorizon;
 
   const parts = [
     '## Validity, before any score',
@@ -186,9 +187,9 @@ function renderValidity(agg: BenchAggregate, analysis: Analysis): string {
     '',
     datingTotal === 0
       ? '_No cited source was checked for a publication date, so the recency figures below rest on nothing. An absent date here is not evidence that anything was published recently._'
-      : `**${String(agg.dating.absent + agg.dating.unchecked)} of ${String(datingTotal)} cited sources could not be dated** (${undated === null ? 'n/a' : PERCENT(undated)}). Dated ${String(agg.dating.dated)}; read and carrying no date ${String(agg.dating.absent)}; never read, or read only as far as the byte cap, ${String(agg.dating.unchecked)}.`,
+      : `**${String(datingTotal - agg.dating.dated)} of ${String(datingTotal)} cited sources could not be dated** (${undated === null ? 'n/a' : PERCENT(undated)}). Dated ${String(agg.dating.dated)}; read and carrying no date ${String(agg.dating.absent)}; never read, or read only as far as the byte cap, ${String(agg.dating.unchecked)}; dated later than the task's as-of date, ${String(agg.dating.afterHorizon)}.`,
     '',
-    'The recency score is computed over the dated sources **only**. An undated source is never counted as fresh and never enters the denominator, which is why this count sits above it: a fresh share of 1.0 over one dated source in forty is arithmetic rather than a finding. The two undated causes are kept apart on purpose. A page read in full that states no date is a fact about the publisher; a page nobody could read is a fact about this pipeline, and only the second one is fixable by re-running the collection pass. Measured over 212 real cited URLs on 28 July 2026, 41 could be dated, 151 were read in full and state no date, and 20 were never read, so a large undated share is the ordinary condition of a technical corpus rather than a fault in this pipeline.',
+    'The recency score is computed over the dated sources **only**. An undated source is never counted as fresh and never enters the denominator, which is why this count sits above it: a fresh share of 1.0 over one dated source in forty is arithmetic rather than a finding. `Dated` is the denominator of the score and not simply the count that carries a date: a source stated as published after the task\'s own as-of date cannot be graded against a horizon it precedes, so it is counted apart. The undated causes are kept apart on purpose. A page read in full that states no date is a fact about the publisher; a page nobody could read is a fact about this pipeline, and only the second one is fixable by re-running the collection pass. Measured over 212 real cited URLs on 28 July 2026, 31 could be dated, 159 were read in full and state no date, and 22 were never read, so a large undated share is the ordinary condition of a technical corpus rather than a fault in this pipeline.',
   ];
 
   if (agg.pipelineGaps.length > 0) {
@@ -714,6 +715,8 @@ function renderReliability(analysis: Analysis): string {
 }
 
 function renderLimits(agg: BenchAggregate, analysis: Analysis): string {
+  const datedTotal =
+    agg.dating.dated + agg.dating.absent + agg.dating.unchecked + agg.dating.afterHorizon;
   return [
     '## What none of this can mean',
     '',
@@ -724,7 +727,9 @@ function renderLimits(agg: BenchAggregate, analysis: Analysis): string {
     `- **Cost is a reservation at the worst case of an estimate band**, never an invoice.`,
     `- **A stale task is still scored.** ${String(agg.corpus.staleTasks)} of ${String(agg.corpus.tasks)} tasks here have gold that has gone unverified for ${String(agg.corpus.staleAfterDays)} days or more.`,
     `- **Token containment is not entailment.** A cited page can contain a figure while saying something else about it entirely.`,
-    `- **Recency is measured over the sources that could be dated**, and ${String(agg.dating.absent + agg.dating.unchecked)} of ${String(agg.dating.dated + agg.dating.absent + agg.dating.unchecked)} cited sources could not be. An undated source never counts as fresh and never enters the denominator, exactly as an unchecked registry answer does not, so the share above is the number that says how much of the corpus the figure is about. A publication date is read from the page at fetch time and never approximated from the fetch time itself, which would grade every source fresh.`,
+    datedTotal === 0
+      ? `- **Recency was measured over nothing here**, because no cited source was checked for a publication date. That is not a recency of zero and not a corpus of undated publishers; it is a collection pass that did not run. A publication date is read from the page at fetch time and never approximated from the fetch time itself, which would grade every source fresh.`
+      : `- **Recency is measured over the sources that could be dated**, and ${String(datedTotal - agg.dating.dated)} of ${String(datedTotal)} cited sources could not be. An undated source never counts as fresh and never enters the denominator, exactly as an unchecked registry answer does not, so the share above is the number that says how much of the corpus the figure is about. A publication date is read from the page at fetch time and never approximated from the fetch time itself, which would grade every source fresh.`,
     `- **Nothing here re-ran research.** Every number is computed from cells already bought, which is what makes a metric added next month applicable to the runs in this file.`,
   ].join('\n');
 }

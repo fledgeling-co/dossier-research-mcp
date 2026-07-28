@@ -4,21 +4,22 @@
  "method": "the production path: collectCitationEvidence with the real fetchPage, so the byte cap, the SSRF refusals and the judged verdict all apply exactly as they would in a run",
  "checkedAt": "2026-07-28",
  "urls": 212,
- "dated": 41,
- "datedShare": 0.193,
+ "dated": 31,
+ "datedShare": 0.146,
  "byStatus": {
-  "absent": 151,
-  "unchecked": 20,
-  "found": 41
+  "absent": 159,
+  "unchecked": 22,
+  "found": 31
  },
  "bySignal": {
   "citation-meta": 12,
   "json-ld": 11,
-  "url-path": 12,
+  "url-path": 2,
   "meta-date": 3,
   "article-published-time": 2,
   "time-element": 1
  },
+ "redirectedAway": 66,
  "pages": [
   {
    "url": "https://ai.google.dev/gemini-api/docs/thinking",
@@ -112,12 +113,12 @@
   },
   {
    "url": "https://api.crossref.org/works/10.1038/s41586-026-10726-x",
-   "verdict": "unverified",
-   "httpStatus": 429,
+   "verdict": "live",
+   "httpStatus": 200,
    "truncated": false,
    "published": {
-    "status": "unchecked",
-    "detail": "nothing was read from this page, so whether it states a publication date is unknown. A date in its address is not read here: on a page that never resolved that is the cited report's own claim about a source nobody could reach."
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
    }
   },
   {
@@ -525,6 +526,7 @@
   },
   {
    "url": "https://chatgpt.com/codex/install.sh",
+   "finalUrl": "https://releases.openai.com/codex/install.sh",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
@@ -605,6 +607,7 @@
   },
   {
    "url": "https://developer.apple.com/safari/resources",
+   "finalUrl": "https://developer.apple.com/safari/resources/",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
@@ -625,6 +628,7 @@
   },
   {
    "url": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404",
+   "finalUrl": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status/404",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
@@ -761,6 +765,7 @@
   },
   {
    "url": "https://docs.x.ai/docs/models",
+   "finalUrl": "https://docs.x.ai/developers/models",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
@@ -774,6 +779,7 @@
   },
   {
    "url": "https://doi.org/10.1038/s41467-026-74880-6",
+   "finalUrl": "https://www.nature.com/articles/s41467-026-74880-6?error=cookies_not_supported&code=75043416-3d7c-4917-9e8d-f0f97fd35984",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
@@ -787,6 +793,7 @@
   },
   {
    "url": "https://doi.org/10.1038/s41586-026-10726-x",
+   "finalUrl": "https://www.nature.com/articles/s41586-026-10726-x?error=cookies_not_supported&code=a752b5a4-ada5-4374-9b23-0f726126e606",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
@@ -800,6 +807,7 @@
   },
   {
    "url": "https://doi.org/10.1073/pnas.2526461123",
+   "finalUrl": "https://pnas.org/doi/10.1073/pnas.2526461123",
    "verdict": "blocked",
    "httpStatus": 403,
    "truncated": false,
@@ -810,6 +818,7 @@
   },
   {
    "url": "https://doi.org/10.1073/pnas.2535317123",
+   "finalUrl": "https://pnas.org/doi/10.1073/pnas.2535317123",
    "verdict": "blocked",
    "httpStatus": 403,
    "truncated": false,
@@ -820,6 +829,7 @@
   },
   {
    "url": "https://doi.org/10.48550/arXiv.2509.04499",
+   "finalUrl": "https://arxiv.org/abs/2509.04499",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
@@ -843,6 +853,7 @@
   },
   {
    "url": "https://evals.report/benchmarks/search-arena",
+   "finalUrl": "https://evals.report/benchmarks/search-arena?tab=scores",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
@@ -1031,6 +1042,7 @@
   },
   {
    "url": "https://iclr-blogposts.github.io/2026/blog/2026/why-ai-evaluations-need-error-bars",
+   "finalUrl": "https://iclr-blogposts.github.io/2026/blog/2026/why-ai-evaluations-need-error-bars/",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
@@ -1041,6 +1053,7 @@
   },
   {
    "url": "https://knowledge.workspace.google.com/admin/generative-ai/gemini-app/turn-the-gemini-app-on-or-off",
+   "finalUrl": "https://knowledge.workspace.google.com/admin/generative-ai/gemini-app/turn-the-gemini-app-on-or-off?hl=pl",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
@@ -1061,19 +1074,16 @@
   },
   {
    "url": "https://lists.debian.org/debian-lts-announce/2021/12/msg00007.html",
-   "verdict": "live",
-   "httpStatus": 200,
+   "verdict": "unreachable",
    "truncated": false,
    "published": {
-    "status": "found",
-    "date": "2021-12-01",
-    "signal": "url-path",
-    "raw": "/2021/12/",
-    "detail": "read from a year and month in the URL path, with no day stated, so the first of that month was taken"
+    "status": "unchecked",
+    "detail": "nothing was read from this page, so whether it states a publication date is unknown. A date in its address is not read here: on a page that never resolved that is the cited report's own claim about a source nobody could reach."
    }
   },
   {
    "url": "https://lists.fedoraproject.org/archives/list/package-announce%40lists.fedoraproject.org/message/M5CSVUNV4HWZZXGOKNSK6L7RPM7BOKIB",
+   "finalUrl": "https://lists.fedoraproject.org/archives/list/package-announce@lists.fedoraproject.org/message/M5CSVUNV4HWZZXGOKNSK6L7RPM7BOKIB/",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
@@ -1084,6 +1094,7 @@
   },
   {
    "url": "https://lists.fedoraproject.org/archives/list/package-announce%40lists.fedoraproject.org/message/VU57UJDCFIASIO35GC55JMKSRXJMCDFM",
+   "finalUrl": "https://lists.fedoraproject.org/archives/list/package-announce@lists.fedoraproject.org/message/VU57UJDCFIASIO35GC55JMKSRXJMCDFM/",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
@@ -1094,6 +1105,7 @@
   },
   {
    "url": "https://logging.apache.org/log4j/2.x/security.html",
+   "finalUrl": "https://logging.apache.org/security.html",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
@@ -1134,15 +1146,16 @@
   },
   {
    "url": "https://msrc-blog.microsoft.com/2021/12/11/microsofts-response-to-cve-2021-44228-apache-log4j2",
+   "finalUrl": "https://www.microsoft.com/en-us/msrc/blog/2021/12/microsofts-response-to-cve-2021-44228-apache-log4j2",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
    "published": {
     "status": "found",
-    "date": "2021-12-11",
+    "date": "2021-12-01",
     "signal": "url-path",
-    "raw": "/2021/12/11/",
-    "detail": "read from a date in the URL path"
+    "raw": "/2021/12/",
+    "detail": "read from a year and month in the URL path, with no day stated, so the first of that month was taken"
    }
   },
   {
@@ -1157,6 +1170,7 @@
   },
   {
    "url": "https://nodejs.org/download/release/latest",
+   "finalUrl": "https://nodejs.org/download/release/latest/",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
@@ -1307,12 +1321,11 @@
   },
   {
    "url": "https://nvd.nist.gov/vuln/detail/CVE-2021-44228",
-   "verdict": "live",
-   "httpStatus": 200,
+   "verdict": "unreachable",
    "truncated": false,
    "published": {
-    "status": "absent",
-    "detail": "the page was read in full and states no publication date this extractor recognises."
+    "status": "unchecked",
+    "detail": "nothing was read from this page, so whether it states a publication date is unknown. A date in its address is not read here: on a page that never resolved that is the cited report's own claim about a source nobody could reach."
    }
   },
   {
@@ -1387,6 +1400,7 @@
   },
   {
    "url": "https://paperguide.ai/blog/ai-tools-for-narrative-review",
+   "finalUrl": "https://paperguide.ai/blog/ai-tools-for-narrative-review/",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
@@ -1400,6 +1414,7 @@
   },
   {
    "url": "https://paperguide.ai/deep-research-ai",
+   "finalUrl": "https://paperguide.ai/deep-research-ai/",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
@@ -1420,6 +1435,7 @@
   },
   {
    "url": "https://platform.claude.com/docs/en/docs/build-with-claude/effort",
+   "finalUrl": "https://platform.claude.com/docs/en/build-with-claude/effort",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
@@ -1460,6 +1476,7 @@
   },
   {
    "url": "https://pubmed.ncbi.nlm.nih.gov/42393087",
+   "finalUrl": "https://pubmed.ncbi.nlm.nih.gov/42393087/",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
@@ -1470,6 +1487,7 @@
   },
   {
    "url": "https://pubmed.ncbi.nlm.nih.gov/42446976",
+   "finalUrl": "https://pubmed.ncbi.nlm.nih.gov/42446976/",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
@@ -1653,6 +1671,7 @@
   },
   {
    "url": "https://support.apple.com/kb/HT213189",
+   "finalUrl": "https://support.apple.com/en-us/103238",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
@@ -1703,6 +1722,7 @@
   },
   {
    "url": "https://thinkingmachines.ai/blog/defeating-nondeterminism-in-llm-inference",
+   "finalUrl": "https://thinkingmachines.ai/blog/defeating-nondeterminism-in-llm-inference/",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
@@ -1716,6 +1736,7 @@
   },
   {
    "url": "https://tools.cisco.com/security/center/content/CiscoSecurityAdvisory/cisco-sa-apache-log4j-qRuKNEbd",
+   "finalUrl": "https://sec.cloudapps.cisco.com/security/center/content/CiscoSecurityAdvisory/cisco-sa-apache-log4j-qRuKNEbd",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
@@ -1739,6 +1760,7 @@
   },
   {
    "url": "https://twitter.com/kurtseifried/status/1469345530182455296",
+   "finalUrl": "https://x.com/kurtseifried/status/1469345530182455296",
    "verdict": "not_found",
    "httpStatus": 404,
    "truncated": false,
@@ -1749,6 +1771,7 @@
   },
   {
    "url": "https://webkit.org/blog/18136/introducing-the-safari-mcp-server-for-web-developers",
+   "finalUrl": "https://webkit.org/blog/18136/introducing-the-safari-mcp-server-for-web-developers/",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
@@ -1762,6 +1785,7 @@
   },
   {
    "url": "https://webkit.org/blog/6900/webdriver-support-in-safari-10",
+   "finalUrl": "https://webkit.org/blog/6900/webdriver-support-in-safari-10/",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
@@ -1788,6 +1812,7 @@
   },
   {
    "url": "https://bentley.com/en/common-vulnerability-exposure/be-2022-0001",
+   "finalUrl": "https://www.bentley.com/advisories/be-2022-0001/",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
@@ -1801,6 +1826,7 @@
   },
   {
    "url": "https://cisa.gov/known-exploited-vulnerabilities-catalog?field_cve=CVE-2021-44228",
+   "finalUrl": "https://www.cisa.gov/known-exploited-vulnerabilities-catalog",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
@@ -1811,6 +1837,7 @@
   },
   {
    "url": "https://cisa.gov/uscert/ed-22-02-apache-log4j-recommended-mitigation-measures",
+   "finalUrl": "https://www.cisa.gov/news-events/directives/ed-22-02-mitigate-apache-log4j-vulnerability-closed",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
@@ -1821,6 +1848,7 @@
   },
   {
    "url": "https://cjr.org/tow_center/we-compared-eight-ai-search-engines-theyre-all-bad-at-citing-news.php",
+   "finalUrl": "https://www.cjr.org/tow_center/we-compared-eight-ai-search-engines-theyre-all-bad-at-citing-news.php",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
@@ -1831,16 +1859,16 @@
   },
   {
    "url": "https://debian.org/security/2021/dsa-5020",
-   "verdict": "live",
-   "httpStatus": 200,
+   "verdict": "unreachable",
    "truncated": false,
    "published": {
-    "status": "absent",
-    "detail": "the page was read in full and states no publication date this extractor recognises."
+    "status": "unchecked",
+    "detail": "nothing was read from this page, so whether it states a publication date is unknown. A date in its address is not read here: on a page that never resolved that is the cited report's own claim about a source nobody could reach."
    }
   },
   {
    "url": "https://federalregister.gov/api/v1/documents.json?conditions[term]=",
+   "finalUrl": "https://www.federalregister.gov/api/v1/documents.json?conditions[term]=",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
@@ -1851,6 +1879,7 @@
   },
   {
    "url": "https://federalregister.gov/api/v1/documents/2026-13971.json",
+   "finalUrl": "https://www.federalregister.gov/api/v1/documents/2026-13971.json",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
@@ -1861,6 +1890,7 @@
   },
   {
    "url": "https://federalregister.gov/api/v1/documents/2026-13980.json",
+   "finalUrl": "https://www.federalregister.gov/api/v1/documents/2026-13980.json",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
@@ -1871,6 +1901,7 @@
   },
   {
    "url": "https://federalregister.gov/api/v1/documents/2026-13998.json",
+   "finalUrl": "https://www.federalregister.gov/api/v1/documents/2026-13998.json",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
@@ -1881,6 +1912,7 @@
   },
   {
    "url": "https://federalregister.gov/api/v1/documents/2026-14043.json",
+   "finalUrl": "https://www.federalregister.gov/api/v1/documents/2026-14043.json",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
@@ -1891,6 +1923,7 @@
   },
   {
    "url": "https://federalregister.gov/api/v1/documents/2026-14052.json",
+   "finalUrl": "https://www.federalregister.gov/api/v1/documents/2026-14052.json",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
@@ -1901,6 +1934,7 @@
   },
   {
    "url": "https://federalregister.gov/api/v1/documents/2026-14072.json",
+   "finalUrl": "https://www.federalregister.gov/api/v1/documents/2026-14072.json",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
@@ -1911,6 +1945,7 @@
   },
   {
    "url": "https://federalregister.gov/api/v1/documents/2026-14109.json",
+   "finalUrl": "https://www.federalregister.gov/api/v1/documents/2026-14109.json",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
@@ -1921,6 +1956,7 @@
   },
   {
    "url": "https://federalregister.gov/api/v1/documents/2026-14315.json",
+   "finalUrl": "https://www.federalregister.gov/api/v1/documents/2026-14315.json",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
@@ -1931,123 +1967,106 @@
   },
   {
    "url": "https://federalregister.gov/documents/2026/07/10/2026-13971/expansion-of-va-process-for-72-hour-notification-of-emergency-treatment",
+   "finalUrl": "https://unblock.federalregister.gov/",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
    "published": {
-    "status": "found",
-    "date": "2026-07-10",
-    "signal": "url-path",
-    "raw": "/2026/07/10/",
-    "detail": "read from a date in the URL path"
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
    }
   },
   {
    "url": "https://federalregister.gov/documents/2026/07/10/2026-13980/establishment-of-class-e-airspace-conneaut-oh",
+   "finalUrl": "https://unblock.federalregister.gov/",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
    "published": {
-    "status": "found",
-    "date": "2026-07-10",
-    "signal": "url-path",
-    "raw": "/2026/07/10/",
-    "detail": "read from a date in the URL path"
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
    }
   },
   {
    "url": "https://federalregister.gov/documents/2026/07/10/2026-13980/establishment-of-class-e-airspace-conneaut-oh/n/nBoth",
+   "finalUrl": "https://unblock.federalregister.gov/",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
    "published": {
-    "status": "found",
-    "date": "2026-07-10",
-    "signal": "url-path",
-    "raw": "/2026/07/10/",
-    "detail": "read from a date in the URL path"
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
    }
   },
   {
    "url": "https://federalregister.gov/documents/2026/07/10/2026-13998/facilitating-implementation-of-next-generation-911-services-ng911-improving-911-reliability",
+   "finalUrl": "https://unblock.federalregister.gov/",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
    "published": {
-    "status": "found",
-    "date": "2026-07-10",
-    "signal": "url-path",
-    "raw": "/2026/07/10/",
-    "detail": "read from a date in the URL path"
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
    }
   },
   {
    "url": "https://federalregister.gov/documents/2026/07/13/2026-14043/administrative-false-claims-and-procedures",
+   "finalUrl": "https://unblock.federalregister.gov/",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
    "published": {
-    "status": "found",
-    "date": "2026-07-13",
-    "signal": "url-path",
-    "raw": "/2026/07/13/",
-    "detail": "read from a date in the URL path"
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
    }
   },
   {
    "url": "https://federalregister.gov/documents/2026/07/13/2026-14052/natural-resource-damages-for-hazardous-substances",
+   "finalUrl": "https://unblock.federalregister.gov/",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
    "published": {
-    "status": "found",
-    "date": "2026-07-13",
-    "signal": "url-path",
-    "raw": "/2026/07/13/",
-    "detail": "read from a date in the URL path"
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
    }
   },
   {
    "url": "https://federalregister.gov/documents/2026/07/13/2026-14072/safety-zone-chicago-sanitary-and-ship-canal-chicago-il",
+   "finalUrl": "https://unblock.federalregister.gov/",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
    "published": {
-    "status": "found",
-    "date": "2026-07-13",
-    "signal": "url-path",
-    "raw": "/2026/07/13/",
-    "detail": "read from a date in the URL path"
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
    }
   },
   {
    "url": "https://federalregister.gov/documents/2026/07/14/2026-14109/airworthiness-directives-textron-aviation-inc-airplanes",
+   "finalUrl": "https://unblock.federalregister.gov/",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
    "published": {
-    "status": "found",
-    "date": "2026-07-14",
-    "signal": "url-path",
-    "raw": "/2026/07/14/",
-    "detail": "read from a date in the URL path"
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
    }
   },
   {
    "url": "https://federalregister.gov/documents/2026/07/16/2026-14315/special-local-regulations-marine-events-within-the-southwest-district",
+   "finalUrl": "https://unblock.federalregister.gov/",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
    "published": {
-    "status": "found",
-    "date": "2026-07-16",
-    "signal": "url-path",
-    "raw": "/2026/07/16/",
-    "detail": "read from a date in the URL path"
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
    }
   },
   {
    "url": "https://ietf.org/rfc/rfc2119.txt",
+   "finalUrl": "https://www.ietf.org/rfc/rfc2119.txt",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
@@ -2058,6 +2077,7 @@
   },
   {
    "url": "https://intel.com/content/www/us/en/security-center/advisory/intel-sa-00646.html",
+   "finalUrl": "https://www.intel.com/content/www/us/en/security-center/advisory/intel-sa-00646.html",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
@@ -2081,6 +2101,7 @@
   },
   {
    "url": "https://linkedin.com/feed",
+   "finalUrl": "https://www.linkedin.com/uas/login?session_redirect=https%3A%2F%2Fwww.linkedin.com%2Ffeed",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
@@ -2091,6 +2112,7 @@
   },
   {
    "url": "https://liveplan.com/blog/planning/deep-research-chatgpt-vs-gemini",
+   "finalUrl": "https://www.liveplan.com/blog/planning/deep-research-chatgpt-vs-gemini",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
@@ -2104,6 +2126,7 @@
   },
   {
    "url": "https://maragu.dev/blog/evaluate-llm-apps-in-go",
+   "finalUrl": "https://www.maragu.dev/blog/evaluate-llm-apps-in-go",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
@@ -2114,6 +2137,7 @@
   },
   {
    "url": "https://nature.com/articles/s41467-026-74880-6",
+   "finalUrl": "https://www.nature.com/articles/s41467-026-74880-6?error=cookies_not_supported&code=30dcd446-5086-4da2-a8fa-7012c7b59b1b",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
@@ -2127,6 +2151,7 @@
   },
   {
    "url": "https://nature.com/articles/s41586-026-10726-x",
+   "finalUrl": "https://www.nature.com/articles/s41586-026-10726-x?error=cookies_not_supported&code=916cbba0-2479-4fbb-a1b9-57c11a4fc39a",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
@@ -2140,6 +2165,7 @@
   },
   {
    "url": "https://npmjs.com/package/undici?activeTab=versions",
+   "finalUrl": "https://www.npmjs.com/package/undici?activeTab=versions",
    "verdict": "blocked",
    "httpStatus": 403,
    "truncated": false,
@@ -2150,6 +2176,7 @@
   },
   {
    "url": "https://nu11secur1ty.com/2021/12/cve-2021-44228.html",
+   "finalUrl": "https://www.nu11secur1ty.com/2021/12/cve-2021-44228.html",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
@@ -2163,6 +2190,7 @@
   },
   {
    "url": "https://oracle.com/security-alerts/alert-cve-2021-44228.html",
+   "finalUrl": "https://www.oracle.com/security-alerts/alert-cve-2021-44228.html",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
@@ -2173,6 +2201,7 @@
   },
   {
    "url": "https://oracle.com/security-alerts/cpuapr2022.html",
+   "finalUrl": "https://www.oracle.com/security-alerts/cpuapr2022.html",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
@@ -2183,6 +2212,7 @@
   },
   {
    "url": "https://oracle.com/security-alerts/cpujan2022.html",
+   "finalUrl": "https://www.oracle.com/security-alerts/cpujan2022.html",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
@@ -2193,6 +2223,7 @@
   },
   {
    "url": "https://promptfoo.dev/docs/configuration/expected-outputs",
+   "finalUrl": "https://www.promptfoo.dev/docs/configuration/expected-outputs/",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
@@ -2203,6 +2234,7 @@
   },
   {
    "url": "https://rfc-editor.org/rfc/rfc6265.txt",
+   "finalUrl": "https://www.rfc-editor.org/rfc/rfc6265.txt",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,
@@ -2213,6 +2245,7 @@
   },
   {
    "url": "https://sciencedirect.com/science/article/pii/S0004370223002102",
+   "finalUrl": "https://www.sciencedirect.com/science/article/pii/S0004370223002102",
    "verdict": "blocked",
    "httpStatus": 403,
    "truncated": false,
@@ -2223,6 +2256,7 @@
   },
   {
    "url": "https://sectionai.com/blog/chatgpt-vs-gemini-deep-research",
+   "finalUrl": "https://www.sectionai.com/blog/chatgpt-vs-gemini-deep-research",
    "verdict": "live",
    "httpStatus": 200,
    "truncated": false,

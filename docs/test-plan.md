@@ -947,11 +947,11 @@ The last scored dimension the design declares and the pipeline could not compute
 
 REPORT-21 above is a **correction rather than an addition** and is marked in place: it asserted that recency renders unavailable with the missing-publication-date reason, and that reason no longer exists.
 
-Every extraction rule below was derived from fetching the benchmark's own corpus of cited URLs on 28 July 2026 rather than from documentation. The two findings that shaped it: modification dates outnumber publication dates on the real web, and 43 of 72 pages carry no date signal at all.
+Every extraction rule below was derived from fetching 142 real cited URLs on 28 July 2026 rather than from documentation, recorded in [`bench/evidence/publication-date-signals.json`](../bench/evidence/publication-date-signals.json). The two findings that shaped it: `dateModified` outnumbers `datePublished` 13 to 4 in JSON-LD, and 106 of the 142 pages carry no date signal at all. What the finished extractor could then date, over 212 URLs through the production path, is [`bench/evidence/publication-dates.json`](../bench/evidence/publication-dates.json): 31 dated, 159 undated, 22 never read.
 
 | AC | Statement | Test | Status |
 |---|---|---|---|
-| **DATE-01** | A schema.org `datePublished` inside a JSON-LD block dates the page, and the recorded signal names it | unit: `published` | ✓ |
+| **DATE-01** | A schema.org `datePublished` inside a JSON-LD block dates the page, and the recorded signal names it. A `datePublished` on a comment, a review, a breadcrumb or a related-posts list is **not** the page's, and is refused | unit: `published` | ✓ |
 | **DATE-02** | `citation_publication_date`, `citation_date` and `citation_online_date` date an academic page, in the slash form arXiv actually serves | unit: `published` | ✓ |
 | **DATE-03** | `article:published_time` decides even with `article:modified_time` sitting beside it, and the modified one is never the answer | unit: `published` | ✓ |
 | **DATE-04** | A meta name containing a modification word is refused before its value is read, and the refusal is named on the result rather than dropped | unit: `published` | ✓ |
@@ -963,8 +963,8 @@ Every extraction rule below was derived from fetching the benchmark's own corpus
 | **DATE-10** | The signal order holds: where two signals disagree the more explicit one decides, and the result says which produced it. Every one of the seven is exercised, including `dublin-core`, which fired on none of the 212 measured pages | unit: `published` | ✓ |
 | **DATE-11** | Where one signal carries several dates the earliest is taken, which is the reading that cannot flatter a source | unit: `published` | ✓ |
 | **DATE-12** | Three states, not two: a page nobody read is `unchecked`, a page read in full carrying no date is `absent`, and a page cut short at the byte cap is `unchecked` rather than `absent` | unit: `published` | ✓ |
-| **DATE-13** | A page that did not resolve is never dated by its own address, because that is the report under test supplying the evidence it is graded on. A page that **did** resolve still is. Reversed by measurement after the first green gate: the only page the original rule dated that way was a fabricated URL from the detector corpus | unit: `published` | ✓ |
-| **DATE-14** | Page text is treated as hostile input: an unparseable, oversized or deeply nested JSON-LD block is skipped and named, and every scan is bounded | unit: `published` | ✓ |
+| **DATE-13** | A page is dated by its address only when that **address served**, so neither a page that failed to resolve nor one whose cited path redirected elsewhere is dated by the report's own claim. Reversed twice by evidence: first by measurement, where the only page the original rule dated was a fabricated URL from the detector corpus; then by an out-of-family review, where ten Federal Register documents were being dated from paths that answered from a bot wall | unit: `published`, `collect` | ✓ |
+| **DATE-14** | Page text is treated as hostile input: an unparseable, oversized, unclosed or deeply nested JSON-LD block is skipped and named, no input can make a scan super-linear, and a scan that stops at one of its own bounds reports `unchecked` rather than `absent` | unit: `published` | ✓ |
 | **DATE-15** | The written forms come from `score/dates.ts` rather than a third date parser, proven by a form only that module accepts | unit: `published` | ✓ |
 | **DATE-16** | Every persisted page carries a publication date or an explicit absence. The field is required, so a snapshot without one fails to parse rather than reading as undated | unit: `evidence` | ✓ |
 | **DATE-17** | A snapshot written before the field existed fails to parse, rather than reporting a collection pass that never looked as a corpus of publishers who date nothing | unit: `evidence`, `store` | ✓ |
@@ -973,5 +973,5 @@ Every extraction rule below was derived from fetching the benchmark's own corpus
 | **DATE-20** | **At the caller.** A cell whose cited pages are all undated reports the recency metric null with a reason, never zero and never fresh | unit: `harvest` | ✓ |
 | **DATE-21** | **At the caller.** A cell with one dated fresh page and one undated page scores a real figure over the dated one, and the undated page leaves the denominator rather than lowering the share | unit: `harvest` | ✓ |
 | **DATE-22** | The persisted publication type and the scorer's structural view agree at compile time, asserted as a type rather than by inspection | unit: `harvest` | ✓ |
-| **DATE-23** | The validity panel prints how many cited sources could be dated and how many could not, with the two undated causes kept apart | unit: `render`, `aggregate` | ✓ |
+| **DATE-23** | The validity panel prints how many cited sources could be dated and how many could not, with every cause kept apart, and `Dated` is the denominator of the score rather than the count carrying a date. The counts are summed per backend and overall, and an orphan cell reaches neither | unit: `render`, `aggregate` | ✓ |
 | **DATE-24** | The limits section no longer says recency is unavailable, and the metric caveat says what the figure is computed over | unit: `render`, `metrics` | ✓ |

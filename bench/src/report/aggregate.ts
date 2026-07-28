@@ -291,7 +291,7 @@ export interface AggregateInput {
 
 const EMPTY_REGISTRY: RegistryCounts = { present: 0, absent: 0, unchecked: 0, invalid: 0 };
 
-const EMPTY_DATING: DatingCounts = { dated: 0, absent: 0, unchecked: 0 };
+const EMPTY_DATING: DatingCounts = { dated: 0, absent: 0, unchecked: 0, afterHorizon: 0 };
 
 /**
  * The key two coordinates are grouped under.
@@ -330,8 +330,8 @@ export function uncheckedShare(counts: RegistryCounts): number | null {
  * collection pass that did not run.
  */
 export function undatedShare(counts: DatingCounts): number | null {
-  const total = counts.dated + counts.absent + counts.unchecked;
-  return total === 0 ? null : (counts.absent + counts.unchecked) / total;
+  const total = counts.dated + counts.absent + counts.unchecked + counts.afterHorizon;
+  return total === 0 ? null : (total - counts.dated) / total;
 }
 
 function addDating(a: DatingCounts, b: DatingCounts): DatingCounts {
@@ -339,6 +339,7 @@ function addDating(a: DatingCounts, b: DatingCounts): DatingCounts {
     dated: a.dated + b.dated,
     absent: a.absent + b.absent,
     unchecked: a.unchecked + b.unchecked,
+    afterHorizon: a.afterHorizon + b.afterHorizon,
   };
 }
 

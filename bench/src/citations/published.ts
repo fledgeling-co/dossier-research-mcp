@@ -34,18 +34,21 @@ import { decodeEntities } from '../verify/match.js';
  *
  * ## What was measured before any of this was designed
  *
- * The benchmark's own cited URLs were fetched on 28 July 2026 and their date
- * signals dumped. Three findings shaped the code below.
+ * 142 real cited URLs were fetched on 28 July 2026 and every date signal on
+ * them dumped, before a line of this was written. The dump is
+ * `bench/evidence/publication-date-signals.json`. Three findings shaped the
+ * code below.
  *
- * **The commonest date on a real page is not a publication date.** Modification
- * dates outnumbered publication dates in both probes, four to one in JSON-LD.
+ * **The commonest date on a real page is not a publication date.** In JSON-LD,
+ * `dateModified` outnumbered `datePublished` 13 to 4.
  * Oracle answers `Updated Date`, Intel answers `lastModifieddate`, and
  * bentley.com carries `article:modified_time` beside its published one. An
  * extractor taking the first date-shaped thing it found would date a page to its
  * last rebuild and grade every documentation site fresh forever.
  *
- * **Most of a real corpus is honestly undated.** JSON APIs, plain-text RFCs,
- * PDFs and rebuilt documentation carry nothing. That is a finding about the
+ * **Most of a real corpus is honestly undated.** 106 of the 142 carried no date
+ * signal of any kind: JSON APIs, plain-text RFCs, PDFs and rebuilt
+ * documentation. That is a finding about the
  * corpus rather than a defect here, which is why the share that could not be
  * dated is reported beside the score rather than hidden inside its denominator.
  *
@@ -56,9 +59,10 @@ import { decodeEntities } from '../verify/match.js';
  * ## What the finished thing could date
  *
  * Run over 212 distinct cited URLs through the production collection path:
- * **41 dated, 151 read in full and stating no date, 20 never read.** Six of the
+ * **31 dated, 159 read in full and stating no date, 22 never read.** Six of the
  * seven signals fired on a real page, so the ranking is a measured order rather
- * than a guess. `bench/evidence/publication-dates.json` has it page by page.
+ * than a guess. `bench/evidence/publication-dates.json` has it page by page,
+ * with the address that actually served each one.
  */
 
 /**
@@ -225,6 +229,15 @@ const EXPLICIT_PUBLISH_NAMES = [
 const TIME_PUBLISHED_CLASS =
   /(^|[\s_-])(published|pubdate|post-date|entry-date|article-date|date-published|publish-date)([\s_-]|$)/i;
 
+/**
+ * A class that says "published" about something that is not the page.
+ *
+ * `comment-published` matches the rule above, and a comment's timestamp is the
+ * one thing that rule exists to keep out. Checked first, so the more specific
+ * word wins over the more general one.
+ */
+const TIME_NOT_THE_PAGE_CLASS = /(comment|reply|review|related|sidebar|footer)/i;
+
 function clip(text: string, max: number): string {
   const flat = text.replace(/\s+/g, ' ').trim();
   return flat.length <= max ? flat : `${flat.slice(0, max - 1)}…`;
@@ -363,7 +376,10 @@ const ATTRIBUTE_PATTERNS = new Map<string, RegExp>();
 function attributePattern(name: string): RegExp {
   const existing = ATTRIBUTE_PATTERNS.get(name);
   if (existing !== undefined) return existing;
-  const built = new RegExp(String.raw`\b${name}\s*=\s*${ATTRIBUTE_VALUE}`, 'i');
+  // `(?:^|[\s"'/])` rather than `\b`: a word boundary sits happily between the
+  // hyphen and the `n` of `data-name`, so `\bname\s*=` matched `data-name=` and
+  // an arbitrary author-controlled attribute could impersonate the real one.
+  const built = new RegExp(String.raw`(?:^|[\s"'/])${name}\s*=\s*${ATTRIBUTE_VALUE}`, 'i');
   ATTRIBUTE_PATTERNS.set(name, built);
   return built;
 }
@@ -397,6 +413,17 @@ function namesAModification(name: string): boolean {
 interface SignalAttempt {
   readonly found?: PublicationFound | undefined;
   readonly rejected: readonly string[];
+  /**
+   * Set when a scan stopped at one of its own bounds rather than at the end of
+   * the document.
+   *
+   * It changes the verdict, not just the wording. A page whose date sat past a
+   * cap was not read to the end, which is the same position as a body cut short
+   * at the byte cap: `unchecked`, never `absent`. Reporting it as a publisher
+   * who states nothing is this file's own doctrine inverted, and an out-of-family
+   * review found all four caps doing exactly that.
+   */
+  readonly capped?: string | undefined;
 }
 
 function found(
@@ -488,16 +515,79 @@ function fromMetaNames(
   return { rejected };
 }
 
+/**
+ * The body of every JSON-LD block, found without a regular expression that can
+ * backtrack.
+ *
+ * The first version matched the whole block with `/<script ...>([\s\S]*?)<\/script>/g`
+ * and an out-of-family review measured what that costs on hostile input. A body
+ * of nothing but unclosed `<script type="application/ld+json">` openings makes
+ * the lazy group scan to end-of-file once per opening, and `MAX_JSON_LD_BLOCKS`
+ * caps only *successful* matches so the loop never reaches its own break:
+ *
+ * ```
+ *   128 KiB     70 ms
+ *   512 KiB   1117 ms
+ *  2048 KiB  17925 ms   <- exactly MAX_PAGE_BYTES
+ * ```
+ *
+ * Eighteen seconds of blocked event loop for one page, times a three-hundred
+ * page budget. And it is reachable by accident as well as on purpose: a
+ * legitimate page cut short at the byte cap loses its closing tag.
+ *
+ * This walks with `indexOf` instead. Every step advances a cursor that never
+ * moves backwards, so the whole scan is linear in the body and no input can
+ * make it otherwise. The only pattern left runs against a single tag, whose
+ * length is bounded by the distance to the next `>`.
+ */
+function jsonLdBlocks(html: string): {
+  readonly bodies: readonly string[];
+  readonly unclosed: number;
+  readonly capped: boolean;
+} {
+  const bodies: string[] = [];
+  let unclosed = 0;
+  let capped = false;
+  // One lower-cased copy for the searching, so the slices still come from the
+  // original and a `datePublished` value keeps its case.
+  const hay = html.toLowerCase();
+  let at = 0;
+  for (;;) {
+    const open = hay.indexOf('<script', at);
+    if (open === -1) break;
+    const tagEnd = hay.indexOf('>', open);
+    if (tagEnd === -1) break;
+    const tag = hay.slice(open, tagEnd + 1);
+    at = tagEnd + 1;
+    if (!/\btype\s*=\s*["']?application\/ld\+json/.test(tag)) continue;
+    if (bodies.length >= MAX_JSON_LD_BLOCKS) {
+      capped = true;
+      break;
+    }
+    const close = hay.indexOf('</script', at);
+    if (close === -1) {
+      unclosed += 1;
+      break;
+    }
+    bodies.push(html.slice(at, close));
+    at = close + '</script'.length;
+  }
+  return { bodies, unclosed, capped };
+}
+
 function fromJsonLd(html: string, bounds: PlausibleRange): SignalAttempt {
   const rejected: string[] = [];
   const values: string[] = [];
-  let blocks = 0;
-  for (const m of html.matchAll(
-    /<script\b[^>]*type\s*=\s*["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script\s*>/gi,
-  )) {
-    if (blocks >= MAX_JSON_LD_BLOCKS) break;
-    blocks += 1;
-    const body = m[1] ?? '';
+  const { bodies, unclosed, capped } = jsonLdBlocks(html);
+  let budgetSpent = false;
+
+  if (unclosed > 0) {
+    rejected.push(
+      'a JSON-LD block was opened and never closed, so whatever it holds was not read',
+    );
+  }
+
+  for (const body of bodies) {
     // Page text is untrusted input by any reading: the URL came out of a model
     // that was itself reading the open web (CP §4). Bounded in size, parsed
     // inside a `try`, and walked to a bounded depth and node count.
@@ -512,7 +602,9 @@ function fromJsonLd(html: string, bounds: PlausibleRange): SignalAttempt {
       rejected.push('a JSON-LD block was not valid JSON and was skipped');
       continue;
     }
-    collectDatePublished(parsed, 0, { nodes: MAX_JSON_LD_NODES }, values);
+    const budget = { nodes: MAX_JSON_LD_NODES, bound: false };
+    collectDatePublished(parsed, 0, budget, values);
+    if (budget.bound) budgetSpent = true;
   }
 
   const usable: { date: string; raw: string; why: string }[] = [];
@@ -536,31 +628,92 @@ function fromJsonLd(html: string, bounds: PlausibleRange): SignalAttempt {
       rejected,
     };
   }
-  return { rejected };
+  const capReason = capped
+    ? `more than ${String(MAX_JSON_LD_BLOCKS)} JSON-LD blocks were present and only the first were read`
+    : budgetSpent
+      ? 'a JSON-LD document was deeper or larger than this reader will walk, so part of it was never looked at'
+      : undefined;
+  return { rejected, ...(capReason === undefined ? {} : { capped: capReason }) };
 }
 
 /**
- * Every `datePublished` in a parsed JSON-LD document, at any depth.
+ * Keys whose contents describe something other than the page.
+ *
+ * A `Comment` and a `Review` carry `datePublished` in schema.org exactly as an
+ * article does, and `itemListElement` is where a related-posts widget puts its
+ * neighbours. Not descended into at all.
+ */
+const NOT_THE_PAGE_KEYS = new Set([
+  'comment',
+  'comments',
+  'review',
+  'reviews',
+  'itemlistelement',
+  'relatedlink',
+  'discussionurl',
+  'mentions',
+  'citation',
+]);
+
+/** `@type` values that are never the page whose date is wanted. */
+const NOT_THE_PAGE_TYPES = new Set([
+  'comment',
+  'usercomments',
+  'review',
+  'itemlist',
+  'breadcrumblist',
+  'listitem',
+  'question',
+  'answer',
+]);
+
+function typeNames(node: Record<string, unknown>): string[] {
+  const raw = node['@type'];
+  if (typeof raw === 'string') return [raw.toLowerCase()];
+  if (Array.isArray(raw)) return raw.filter((t) => typeof t === 'string').map((t) => t.toLowerCase());
+  return [];
+}
+
+/**
+ * Every `datePublished` in a parsed JSON-LD document that is about the page.
  *
  * `dateModified`, `dateCreated` and `uploadDate` are not collected, and that is
  * the whole reason this walks for one key rather than for anything date-shaped:
  * `dateModified` outnumbered `datePublished` four to one in the probe, so a
  * walker that took either would mostly take the wrong one.
+ *
+ * **It also refuses the page's furniture**, which an out-of-family review found
+ * it taking. A page carrying only `{"@type":"WebPage","comment":[{"@type":
+ * "Comment","datePublished":"..."}]}` was dated by the comment, and a related-
+ * posts `ItemList` dated it by whichever neighbour came first. That is the
+ * comment-timestamp objection the `<time>` rule is built around, arriving
+ * through the highest-ranked signal rather than the lowest, and it grades a page
+ * **fresher** than it is whenever the page's own date is missing. Two guards,
+ * because either alone leaks: a container key that is not about the page, and a
+ * node whose `@type` is not the page.
  */
 function collectDatePublished(
   node: unknown,
   depth: number,
-  budget: { nodes: number },
+  budget: { nodes: number; bound: boolean },
   out: string[],
 ): void {
-  if (budget.nodes <= 0 || depth > MAX_JSON_LD_DEPTH) return;
+  if (budget.nodes <= 0 || depth > MAX_JSON_LD_DEPTH) {
+    // Recorded rather than silently returning. Either bound means part of the
+    // document was never looked at, and the caller turns that into `unchecked`.
+    budget.bound = true;
+    return;
+  }
   budget.nodes -= 1;
   if (Array.isArray(node)) {
     for (const item of node) collectDatePublished(item, depth + 1, budget, out);
     return;
   }
   if (node === null || typeof node !== 'object') return;
-  for (const [key, value] of Object.entries(node)) {
+  const record = node as Record<string, unknown>;
+  if (typeNames(record).some((t) => NOT_THE_PAGE_TYPES.has(t))) return;
+  for (const [key, value] of Object.entries(record)) {
+    if (NOT_THE_PAGE_KEYS.has(key.toLowerCase())) continue;
     if (key === 'datePublished') {
       if (typeof value === 'string') out.push(value);
       else if (Array.isArray(value)) {
@@ -588,7 +741,8 @@ function fromTimeElement(html: string, bounds: PlausibleRange): SignalAttempt {
     const className = attribute(tag, ['class']) ?? '';
     const declaresPubdate = /\bpubdate\b/i.test(m[1] ?? '');
     const declares =
-      declaresPubdate || itemprop.includes('datepublished') || TIME_PUBLISHED_CLASS.test(className);
+      !TIME_NOT_THE_PAGE_CLASS.test(className) &&
+      (declaresPubdate || itemprop.includes('datepublished') || TIME_PUBLISHED_CLASS.test(className));
     if (!declares) {
       undeclared += 1;
       continue;
@@ -613,7 +767,14 @@ function fromTimeElement(html: string, bounds: PlausibleRange): SignalAttempt {
       `${String(undeclared)} \`<time>\` element(s) were present but none said it was the publication date, so none was used; a bare \`<time>\` is as likely to be a comment timestamp`,
     );
   }
-  return { rejected };
+  return {
+    rejected,
+    ...(seen >= MAX_TIME_TAGS
+      ? {
+          capped: `more than ${String(MAX_TIME_TAGS)} \`<time>\` elements were present and only the first were read`,
+        }
+      : {}),
+  };
 }
 
 /**
@@ -682,9 +843,18 @@ function fromUrlPath(url: string, bounds: PlausibleRange): SignalAttempt {
  * which got a fresh 2026 date out of its own path. That is the recency axis
  * being fed by the backend under test, which is the one input a measurement may
  * never take. A path on a page that *did* resolve is corroborated by something
- * having genuinely been served at that address, and that case is 14 of the 43
- * dates this extractor finds on the real corpus, so the line is drawn there
+ * having genuinely been served at that address, so the line is drawn there
  * rather than at the signal.
+ *
+ * **And "resolved" means the address that served, not the address that was
+ * cited.** An out-of-family review found the first fix incomplete: a cited path
+ * that 301s elsewhere, or answers 200 from a bot wall, still passes the `live`
+ * gate while serving nothing at the path it names. It is the same input through
+ * a different door, and it was not hypothetical. Ten of the twelve URL-path
+ * dates in the measured corpus were Federal Register documents whose cited
+ * `/documents/2026/07/10/...` path answered from `unblock.federalregister.gov`,
+ * a bot check with no date on it at all. `collect.ts` now passes the served
+ * address, and those ten are `absent` rather than confidently dated.
  *
  * It costs one real case, measured: a live MIT blog post behind a bot deterrent
  * whose path states its date. That page is now `unchecked`, which is the true
@@ -736,9 +906,16 @@ export function extractPublicationDate(input: PublicationInput): PublicationDate
     attempts.push(fromUrlPath(input.url, bounds));
   }
 
+  const caps: string[] = [];
   for (const attempt of attempts) {
     if (attempt.found !== undefined) return attempt.found;
     rejected.push(...attempt.rejected);
+    if (attempt.capped !== undefined) caps.push(attempt.capped);
+  }
+  if (bodyAvailable && readMetaTags(input.body).length >= MAX_META_TAGS) {
+    caps.push(
+      `more than ${String(MAX_META_TAGS)} \`<meta>\` tags were present and only the first were read`,
+    );
   }
 
   const seen = rejected.length === 0 ? '' : ` ${rejected.slice(0, 2).join('; ')}`;
@@ -756,6 +933,18 @@ export function extractPublicationDate(input: PublicationInput): PublicationDate
       status: 'unchecked',
       detail: clip(
         `the page was read only as far as the byte cap and no publication date appeared in that part, so a date further down was never seen.${seen}`,
+        MAX_DETAIL_CHARS,
+      ),
+    };
+  }
+  // A scan that stopped at one of its own bounds is in exactly the position of a
+  // body cut short: the rest of the document was never looked at, so nothing
+  // about it is known. `absent` here would be this file's own rule inverted.
+  if (caps.length > 0) {
+    return {
+      status: 'unchecked',
+      detail: clip(
+        `no publication date appeared in the part of this page that was scanned, and the scan stopped at one of its own bounds rather than at the end of the document: ${caps[0] ?? ''}.`,
         MAX_DETAIL_CHARS,
       ),
     };

@@ -19,7 +19,7 @@ import {
   type PageEvidence,
   type RegistryAnswer,
 } from './evidence.js';
-import { extractPublicationDate } from './published.js';
+import { extractPublicationDate, type PublicationDate } from './published.js';
 import { crossrefGapMs, isRefusal, plan, type RegistryOptions, type RegistryTransport } from './registries.js';
 
 /**
@@ -238,13 +238,33 @@ async function collectPage(
   // Gated on the judged verdict rather than on the HTTP status, so a 404 page's
   // own furniture cannot date the citation. That is `containment`'s rule too: a
   // page that did not resolve is nowhere to look.
-  const published = extractPublicationDate({
-    url,
-    body: source.body,
-    checkedAt,
-    bodyRead: judged.verdict === 'live' && source.body !== '',
-    truncated,
-  });
+  // The address the redirects actually landed on, not the one the report cited.
+  // The URL-path signal's whole claim is that something was genuinely served at
+  // that address, and a cited `/2026/07/made-up-slug` that 301s to `/home`
+  // serves nothing there: dating it from the cited path would be the report
+  // under test supplying the evidence it is graded on, which is the input the
+  // measured reversal already refused once through the other door.
+  const served = source.url === '' ? url : source.url;
+  // Guarded like the fetcher and the registry transport above, and for the same
+  // stated reason: a throw here must cost one page's evidence, never the whole
+  // report's. `plausibleRange` throws on an unreadable fetch time and
+  // `isoDateFromUtcDayOrdinal` on an unrepresentable day; neither is reachable
+  // from here today, and the asymmetry is what a later caller would trip over.
+  let published: PublicationDate;
+  try {
+    published = extractPublicationDate({
+      url: served,
+      body: source.body,
+      checkedAt,
+      bodyRead: judged.verdict === 'live' && source.body !== '',
+      truncated,
+    });
+  } catch (e: unknown) {
+    published = {
+      status: 'unchecked',
+      detail: `reading a publication date from this page failed: ${e instanceof Error ? e.message.slice(0, 200) : 'the extractor threw'}`,
+    };
+  }
 
   return {
     url,

@@ -136,27 +136,31 @@ The written forms come from [`bench/src/score/dates.ts`](../../bench/src/score/d
 
 ### What was measured before any of it was designed
 
-Every distinct URL cited by `bench/tasks/`, `bench/quarantine/` and `bench/detector/`, fetched 28 July 2026. 72 URLs, 60 answering. **43 carry no date signal of any kind**, and in a second probe over 70 URLs from this repo's research documents, JSON-LD `dateModified` outnumbered `datePublished` four to one. Both findings are load-bearing: the first is why the undated share is reported beside the score, and the second is why the modification refusal is a rule rather than a nicety. An extractor taking the first date-shaped thing it found would have dated most of this corpus to its last rebuild.
+142 real cited URLs, from `bench/tasks/`, `bench/quarantine/`, `bench/detector/` and this repo's own research documents, fetched 28 July 2026 with every date signal on them dumped. 126 answered. Recorded in [`bench/evidence/publication-date-signals.json`](../../bench/evidence/publication-date-signals.json).
+
+**106 carry no date signal of any kind**, and in JSON-LD `dateModified` outnumbered `datePublished` **13 to 4**. Both findings are load-bearing: the first is why the undated share is reported beside the score, and the second is why the modification refusal is a rule rather than a nicety. An extractor taking the first date-shaped thing it found would have dated most of this corpus to its last rebuild.
 
 ### What the finished extractor could actually date
 
-Run over 212 distinct cited URLs on 28 July 2026, through the production collection path so the byte cap, the SSRF refusals and the judged verdict all applied as they would in a run. The evidence is [`bench/evidence/publication-dates.json`](../../bench/evidence/publication-dates.json), page by page.
+Run over 212 distinct cited URLs on 28 July 2026, through the production collection path so the byte cap, the SSRF refusals, the redirect following and the judged verdict all applied as they would in a run. The evidence is [`bench/evidence/publication-dates.json`](../../bench/evidence/publication-dates.json), page by page, with the address that actually served each one.
 
 | | Count | Share |
 |---|---|---|
-| dated | 41 | 19.3% |
-| read in full, states no date | 151 | 71.2% |
-| never read, or read only as far as the cap | 20 | 9.4% |
+| dated | 31 | 14.6% |
+| read in full, states no date | 159 | 75.0% |
+| never read, or read only as far as the cap | 22 | 10.4% |
 
-By signal: `url-path` 12, `citation-meta` 12, `json-ld` 11, `meta-date` 3, `article-published-time` 2, `time-element` 1. Six of the seven fired on a real page, which is what makes the ranking a measured order rather than a guess; `dublin-core` fired on none and is kept because it costs nothing and the corpus is one corpus.
+By signal: `citation-meta` 12, `json-ld` 11, `meta-date` 3, `url-path` 2, `article-published-time` 2, `time-element` 1. Six of the seven fired on a real page, which is what makes the ranking a measured order rather than a guess; `dublin-core` fired on none and is kept because it costs nothing and the corpus is one corpus.
 
-**Four fifths of a technical corpus cannot be dated at all**, and that is the number a reader of a recency score needs more than the score. It is why the undated share is printed above every figure rather than folded into a denominator.
+**Five sixths of a technical corpus cannot be dated at all**, and that is the number a reader of a recency score needs more than the score. It is why the undated share is printed above every figure rather than folded into a denominator.
 
-### One rule this measurement reversed
+### Two rules this measurement reversed
 
-The first design read the URL path even when nothing was read, on the reasoning that an address is the one signal that survives a failed fetch. Running it refuted that. The only page it dated that way was `example-news.invalid/2026/07/quarterly-figures`, a **fabricated** URL from the detector corpus, handed a fresh 2026 date out of its own path. That is the backend under test supplying the evidence it is graded on, which is the one input a measurement may never take.
+**A page that did not resolve is never dated by its own address.** The first design read the URL path even when nothing was read, on the reasoning that an address survives a failed fetch. The only page it dated that way was `example-news.invalid/2026/07/quarterly-figures`, a **fabricated** URL from the detector corpus, handed a fresh 2026 date out of its own path. That is the backend under test supplying the evidence it is graded on, which is the one input a measurement may never take.
 
-The path is now read only when the page resolved, where something was genuinely served at that address. It costs one real case, a live MIT blog post behind a bot deterrent whose path states its date, which is now `unchecked`: the true statement about it, and exactly the distinction the three states exist for.
+**And "resolved" means the address that served, not the address that was cited.** An out-of-family review found the first fix incomplete: a cited path that redirects elsewhere, or answers 200 from a bot wall, passes the `live` gate while serving nothing at the path it names. That was not hypothetical here. Ten of the twelve URL-path dates in the first measured run were Federal Register documents whose cited `/documents/2026/07/10/...` path answered from `unblock.federalregister.gov`, a bot check carrying no date at all, and every one of them was recorded as confidently dated. The collector now hands over the served address, and those ten read `absent`.
+
+Between them the two reversals cost one real case, a live MIT blog post behind a bot deterrent whose path states its date, now `unchecked`: the true statement about it, and exactly the distinction the three states exist for.
 
 ### What it cannot mean
 

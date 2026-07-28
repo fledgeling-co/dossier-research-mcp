@@ -8,7 +8,7 @@ import { scoreRefusal } from '../score/refusal.js';
 import { scoreDueWeight } from '../score/due-weight/index.js';
 import { scoreCitationIntegrity, type CitationEvidenceView } from '../score/citations.js';
 import { scoreSourceQuality } from '../score/source-quality.js';
-import { recencyInputs, scoreRecency, type DatedPage, type DatingCounts } from '../score/recency.js';
+import { scoreRecencyForReport, type DatedPage, type DatingCounts } from '../score/recency.js';
 import { sourceUniverse } from '../score/matrix.js';
 import { METRIC_IDS, type MetricId } from './metrics.js';
 
@@ -42,7 +42,7 @@ export interface RegistryCounts {
 
 const NO_REGISTRY: RegistryCounts = { present: 0, absent: 0, unchecked: 0, invalid: 0 };
 
-const NO_DATING: DatingCounts = { dated: 0, absent: 0, unchecked: 0 };
+const NO_DATING: DatingCounts = { dated: 0, absent: 0, unchecked: 0, afterHorizon: 0 };
 
 /** Whether this cell had a citation evidence snapshot to score against. */
 export type EvidenceState = 'present' | 'absent';
@@ -297,11 +297,11 @@ export function harvestCell(input: HarvestInput): ScoredCell {
   // One pass builds both the graded source list and the counts printed beside
   // the score, so the denominator on the report can never disagree with the
   // figure above it.
-  const { sources: recencySources, dating } = recencyInputs(
+  const { result: recency, dating } = scoreRecencyForReport(
     cited,
     evidence === undefined ? [] : evidence.pages,
+    task.asOf,
   );
-  const recency = scoreRecency(recencySources, task.asOf);
   set(
     metrics,
     unmeasured,

@@ -1,0 +1,1400 @@
+{
+ "what": "which publication-date signals real pages actually carry, and in what proportion",
+ "why": "the design probe, run BEFORE the extractor was written, to rank the signals and to decide the refusals from evidence rather than from documentation",
+ "method": "a plain fetch of each URL and a dump of every meta name matching /date|time|pub|issued|created|modif/, every JSON-LD date key, every <time> tag and whether the path holds a year-month pair. Not the production path, which did not exist yet; the production run is publication-dates.json",
+ "checkedAt": "2026-07-28",
+ "urls": 142,
+ "answered": 126,
+ "noSignalAtAll": 106,
+ "tally": {
+  "meta:citation_date": 13,
+  "meta:citation_online_date": 13,
+  "time-element-present": 4,
+  "meta:octolytics-dimension-repository_public": 3,
+  "url-path-shape": 2,
+  "meta:msvalidate.01": 2,
+  "meta:date": 1,
+  "meta:article:published_time": 1,
+  "meta:article:modified_time": 1,
+  "meta:article:publisher": 1,
+  "jsonld:datePublished": 4,
+  "jsonld:dateModified": 13,
+  "meta:lastmodifieddate": 1,
+  "meta:sei_date_published": 1,
+  "meta:sei_year_published": 1,
+  "meta:published_at": 1,
+  "meta:updated date": 3
+ },
+ "pages": [
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://api.crossref.org/works/10.1038/s41467-026-74880-6",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://api.crossref.org/works/10.1038/s41586-026-10726-x",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://api.crossref.org/works/10.1073/pnas.2526461123",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://api.crossref.org/works/10.1073/pnas.2535317123",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://arxiv.org/abs/2509.04499",
+   "status": 200,
+   "meta": [
+    "citation_date=2025/09/02",
+    "citation_online_date=2025/09/02"
+   ],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://arxiv.org/html/2509.04499v1",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://cert-portal.siemens.com/productcert/pdf/ssa-397453.pdf",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://cert-portal.siemens.com/productcert/pdf/ssa-479842.pdf",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://cert-portal.siemens.com/productcert/pdf/ssa-661247.pdf",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://cert-portal.siemens.com/productcert/pdf/ssa-714170.pdf",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 1,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://doi.org/10.1038/s41467-026-74880-6",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://doi.org/10.1038/s41586-026-10726-x",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://doi.org/10.1073/pnas.2526461123",
+   "status": 403,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://doi.org/10.1073/pnas.2535317123",
+   "status": 403,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://doi.org/10.48550/arXiv.2509.04499",
+   "status": 200,
+   "meta": [
+    "citation_date=2025/09/02",
+    "citation_online_date=2025/09/02"
+   ],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://example-news.invalid/2026/07/quarterly-figures",
+   "status": 0,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://example.com/",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://github.com/cisagov/log4j-affected-db",
+   "status": 200,
+   "meta": [
+    "octolytics-dimension-repository_public=true"
+   ],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://github.com/cisagov/log4j-affected-db/blob/develop/SOFTWARE-LIST.md",
+   "status": 404,
+   "meta": [
+    "octolytics-dimension-repository_public=true"
+   ],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://github.com/nu11secur1ty/CVE-mitre/tree/main/CVE-2021-44228",
+   "status": 200,
+   "meta": [
+    "octolytics-dimension-repository_public=true"
+   ],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://lists.debian.org/debian-lts-announce/2021/12/msg00007.html",
+   "status": 0,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://lists.fedoraproject.org/archives/list/package-announce%40lists.fedoraproject.org/message/M5CSVUNV4HWZZXGOKNSK6L7RPM7BOKIB/",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://lists.fedoraproject.org/archives/list/package-announce%40lists.fedoraproject.org/message/VU57UJDCFIASIO35GC55JMKSRXJMCDFM/",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://logging.apache.org/log4j/2.x/security.html",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://msrc-blog.microsoft.com/2021/12/11/microsofts-response-to-cve-2021-44228-apache-log4j2/",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 1,
+   "urlPathShape": true
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://nodejs.org/dist/index.json",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://nvd.nist.gov",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2021-44228",
+   "status": 0,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://openlibrary.org/books/OL25718398M\\",
+   "status": 404,
+   "meta": [
+    "msvalidate.01=8BEBECBEF537077737975A49D55B857D"
+   ],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://psirt.global.sonicwall.com/vuln-detail/SNWLID-2021-0032",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://regex101.com/r/Ly7O1x/3/",
+   "status": 0,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://regex101.com/r/vkijKf/1/",
+   "status": 0,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://registry.npmjs.org/hono",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://registry.npmjs.org/promptfoo",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://registry.npmjs.org/typescript",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://registry.npmjs.org/undici",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://registry.npmjs.org/vitest",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://security.netapp.com/advisory/ntap-20211210-0007/",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://semver.org/",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=CVE-2026-14191",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=CVE-2026-41579",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=CVE-2026-53488",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=CVE-2026-54500",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=CVE-2026-54502",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=CVE-2026-54592",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://support.apple.com/kb/HT213189",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://tools.cisco.com/security/center/content/CiscoSecurityAdvisory/cisco-sa-apache-log4j-qRuKNEbd",
+   "status": 200,
+   "meta": [
+    "date=1/31/2022 9:16:10 PM"
+   ],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://twitter.com/kurtseifried/status/1469345530182455296",
+   "status": 404,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://www.bentley.com/en/common-vulnerability-exposure/be-2022-0001",
+   "status": 200,
+   "meta": [
+    "article:published_time=2025-05-14T08:17:15+00:00",
+    "article:modified_time=2025-05-14T08:17:15+00:00",
+    "article:publisher=https://www.facebook.com/BentleySystems/",
+    "msvalidate.01=54FF700CABF3569936DB6EA6D7C9C54F"
+   ],
+   "jsonld": [
+    "datePublished=2025-05-14T08:17:15+00:00",
+    "dateModified=2025-05-14T08:17:15+00:00"
+   ],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://www.cisa.gov/known-exploited-vulnerabilities-catalog?field_cve=CVE-2021-44228",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://www.cisa.gov/uscert/ed-22-02-apache-log4j-recommended-mitigation-measures",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 3,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://www.debian.org/security/2021/dsa-5020",
+   "status": 0,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://www.federalregister.gov/api/v1/documents/2026-13971.json",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://www.federalregister.gov/api/v1/documents/2026-13980.json",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://www.federalregister.gov/api/v1/documents/2026-13998.json",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://www.federalregister.gov/api/v1/documents/2026-14043.json",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://www.federalregister.gov/api/v1/documents/2026-14052.json",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://www.federalregister.gov/api/v1/documents/2026-14072.json",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://www.federalregister.gov/api/v1/documents/2026-14109.json",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://www.federalregister.gov/api/v1/documents/2026-14315.json",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://www.ietf.org/rfc/rfc2119.txt",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://www.intel.com/content/www/us/en/security-center/advisory/intel-sa-00646.html",
+   "status": 200,
+   "meta": [
+    "lastModifieddate=2022-01-12T18:26:48.682Z"
+   ],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://www.kb.cert.org/vuls/id/930724",
+   "status": 200,
+   "meta": [
+    "sei_date_published=2021-12-15",
+    "sei_year_published=2021",
+    "published_at=2021-12-15"
+   ],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://www.linkedin.com/feed/",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://www.nu11secur1ty.com/2021/12/cve-2021-44228.html",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 3,
+   "urlPathShape": true
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://www.oracle.com/security-alerts/alert-cve-2021-44228.html",
+   "status": 200,
+   "meta": [
+    "Updated Date=2021-12-10T23:54:59Z"
+   ],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://www.oracle.com/security-alerts/cpuapr2022.html",
+   "status": 200,
+   "meta": [
+    "Updated Date=2022-04-04T19:54:27Z"
+   ],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://www.oracle.com/security-alerts/cpujan2022.html",
+   "status": 200,
+   "meta": [
+    "Updated Date=2022-01-13T17:46:35Z"
+   ],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://www.rfc-editor.org/rfc/rfc6265.txt",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://www.sciencedirect.com/science/article/pii/S0004370223002102",
+   "status": 403,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "benchmark tasks, quarantine and detector",
+   "url": "https://x.com/home",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://ai.google.dev/gemini-api/docs/thinking",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://aimultiple.com/ai-deep-research",
+   "status": 200,
+   "meta": [],
+   "jsonld": [
+    "dateModified=2026-06-22T06:26:36-04:00",
+    "dateModified=2026-06-22T06:26:36-04:00"
+   ],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://antigravity.google/cli/install.ps1",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://antigravity.google/cli/install.sh",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://antigravity.google/docs/cli/using",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://antigravity.google/docs/mcp",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://antigravity.google/docs/plans",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://antigravity.google/pricing",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://api.crossref.org/works/10.1038/s41467-026-74880-6",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://api.crossref.org/works/10.1038/s41586-026-10726-x",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://api.crossref.org/works/10.1073/pnas.2526461123",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://api.crossref.org/works/10.1073/pnas.2535317123",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://api.github.com/repos/Ayanami0730/deep_research_bench",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://api.github.com/repos/bosun-ai/swiftide",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://api.github.com/repos/cloudwego/eino",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://api.github.com/repos/EleutherAI/lm-evaluation-harness",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://api.github.com/repos/genkit-ai/genkit",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://api.github.com/repos/lmarena/search-arena",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://api.github.com/repos/microsoft/livedrbench",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://api.github.com/repos/promptfoo/promptfoo",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://api.github.com/repos/promptfoo/promptfoo/releases",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://api.github.com/repos/scaleapi/researchrubrics",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://api.github.com/repos/texttron/BrowseComp-Plus",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://api.github.com/repos/UKGovernmentBEIS/inspect_ai",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://api.github.com/repos/zavora-ai/adk-rust",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://api.x.ai/v1/responses",
+   "status": 405,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://arxiv.org/abs/2506.05334",
+   "status": 200,
+   "meta": [
+    "citation_date=2025/06/05",
+    "citation_online_date=2026/03/02"
+   ],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://arxiv.org/abs/2506.06287",
+   "status": 200,
+   "meta": [
+    "citation_date=2025/05/06",
+    "citation_online_date=2025/05/06"
+   ],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://arxiv.org/abs/2506.11763",
+   "status": 200,
+   "meta": [
+    "citation_date=2025/06/13",
+    "citation_online_date=2025/06/13"
+   ],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://arxiv.org/abs/2506.21506",
+   "status": 200,
+   "meta": [
+    "citation_date=2025/06/26",
+    "citation_online_date=2025/07/03"
+   ],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://arxiv.org/abs/2508.06600",
+   "status": 200,
+   "meta": [
+    "citation_date=2025/08/08",
+    "citation_online_date=2025/08/08"
+   ],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://arxiv.org/abs/2509.04499",
+   "status": 200,
+   "meta": [
+    "citation_date=2025/09/02",
+    "citation_online_date=2025/09/02"
+   ],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://arxiv.org/abs/2511.07685",
+   "status": 200,
+   "meta": [
+    "citation_date=2025/11/10",
+    "citation_online_date=2025/11/10"
+   ],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://arxiv.org/abs/2602.16942",
+   "status": 200,
+   "meta": [
+    "citation_date=2026/02/18",
+    "citation_online_date=2026/02/18"
+   ],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://arxiv.org/abs/2603.09891",
+   "status": 200,
+   "meta": [
+    "citation_date=2026/03/10",
+    "citation_online_date=2026/03/10"
+   ],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://arxiv.org/abs/2606.00093",
+   "status": 200,
+   "meta": [
+    "citation_date=2026/05/25",
+    "citation_online_date=2026/05/25"
+   ],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://arxiv.org/abs/2606.19544",
+   "status": 200,
+   "meta": [
+    "citation_date=2026/06/17",
+    "citation_online_date=2026/06/17"
+   ],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://arxiv.org/html/2411.00640v1",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://arxiv.org/html/2509.04499#S4",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://arxiv.org/html/2509.04499v1",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://arxiv.org/html/2601.06112",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://arxiv.org/html/2602.24277v1",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://arxiv.org/html/2603.29231v1",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://chatgpt.com/codex/install.sh",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://code.claude.com/docs/en/costs",
+   "status": 200,
+   "meta": [],
+   "jsonld": [
+    "dateModified=2026-07-24T20:10:53.198Z",
+    "dateModified=2026-07-24T20:10:53.198Z"
+   ],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://crates.io/api/v1/crates/adk-eval",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://crates.io/api/v1/crates/rig-core",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://crates.io/api/v1/crates/swiftide",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://cursor.com/install",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://cursor.com/install?win32=true'",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://deepresearch-bench.github.io/",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://developer.apple.com/safari/resources/",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://developer.chrome.com/docs/devtools/agents",
+   "status": 200,
+   "meta": [],
+   "jsonld": [
+    "dateModified=2026-03-22"
+   ],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://developers.google.com/gemini-code-assist/docs/deprecations/code-assist-individuals",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://developers.openai.com/api/docs/guides/deep-research",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://developers.openai.com/api/docs/guides/reasoning",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://developers.openai.com/api/docs/models/o3-deep-research",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://docs.perplexity.ai/docs/agent-api/quickstart",
+   "status": 200,
+   "meta": [],
+   "jsonld": [
+    "dateModified=2026-07-23T17:11:22.921Z",
+    "dateModified=2026-07-23T17:11:22.921Z"
+   ],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://docs.perplexity.ai/docs/getting-started/integrations/mcp-server.md",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://docs.perplexity.ai/docs/sonar/models/sonar-deep-research",
+   "status": 200,
+   "meta": [],
+   "jsonld": [
+    "dateModified=2026-07-21T16:25:51.536Z",
+    "dateModified=2026-07-21T16:25:51.536Z"
+   ],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://docs.perplexity.ai/llms.txt",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://docs.rs/adk-eval/latest/adk_eval/llm_judge/index.html",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://docs.x.ai/api/mcp",
+   "status": 406,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://docs.x.ai/developers/pricing",
+   "status": 200,
+   "meta": [],
+   "jsonld": [
+    "dateModified=2026-07-03T00:00:00Z",
+    "datePublished=2026-07-03T00:00:00Z"
+   ],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://docs.x.ai/developers/tools/collections-search",
+   "status": 200,
+   "meta": [],
+   "jsonld": [
+    "dateModified=2026-02-12T00:00:00Z",
+    "datePublished=2026-02-12T00:00:00Z"
+   ],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://docs.x.ai/docs/models",
+   "status": 200,
+   "meta": [],
+   "jsonld": [
+    "dateModified=2026-07-09T00:00:00Z",
+    "datePublished=2026-07-09T00:00:00Z"
+   ],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://doi.org/10.1038/s41467-026-74880-6",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://doi.org/10.1038/s41586-026-10726-x",
+   "status": 200,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://doi.org/10.1073/pnas.2526461123",
+   "status": 403,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  },
+  {
+   "corpus": "this repo research documents",
+   "url": "https://doi.org/10.1073/pnas.2535317123",
+   "status": 403,
+   "meta": [],
+   "jsonld": [],
+   "timeTags": 0,
+   "urlPathShape": false
+  }
+ ]
+}

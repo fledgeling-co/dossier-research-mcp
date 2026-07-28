@@ -367,6 +367,123 @@ describe('DATE-12 three states, and the third is the one that matters', () => {
   });
 });
 
+describe('JSON-LD is read for the page, not for its furniture', () => {
+  // The `<time>` rule refuses a bare element because it may be a comment
+  // timestamp. schema.org defines `datePublished` on `Comment` and `Review` too,
+  // so the same objection applies to the HIGHEST-ranked signal and was not
+  // enforced there. Found by an out-of-family review.
+
+  it('does not date a page from a comment\'s own datePublished', () => {
+    const body = `<html><head><script type="application/ld+json">
+      {"@type":"WebPage","comment":[{"@type":"Comment","datePublished":"2026-07-20"}]}
+    </script></head></html>`;
+    expect(extract({ body }).status).toBe('absent');
+  });
+
+  it('does not date a page from a related-posts ItemList', () => {
+    const body = `<html><head><script type="application/ld+json">
+      {"@type":"ItemList","itemListElement":[{"@type":"NewsArticle","datePublished":"2026-07-25"}]}
+    </script></head></html>`;
+    expect(extract({ body }).status).toBe('absent');
+  });
+
+  it('does not date a page from a breadcrumb list', () => {
+    const body = `<html><head><script type="application/ld+json">
+      {"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","datePublished":"2026-07-25"}]}
+    </script></head></html>`;
+    expect(extract({ body }).status).toBe('absent');
+  });
+
+  it('still reads the page\'s own date with a comment sitting beside it', () => {
+    // The refusals must not be so broad that the ordinary case stops working.
+    const body = `<html><head><script type="application/ld+json">
+      {"@type":"Article","datePublished":"2024-03-15",
+       "comment":[{"@type":"Comment","datePublished":"2020-01-01"}]}
+    </script></head></html>`;
+    // 2020 is earlier, so "earliest wins" would have taken the comment.
+    expect(expectFound(extract({ body })).date).toBe('2024-03-15');
+  });
+
+  it('a <time> whose class names a comment is refused, however it spells published', () => {
+    const body = '<html><body><time class="comment-published" datetime="2026-07-20">x</time></body></html>';
+    expect(extract({ body }).status).toBe('absent');
+  });
+});
+
+describe('an attribute is the attribute, not a prefix of one', () => {
+  it('does not read `data-name` as `name`', () => {
+    // `\bname` sits happily after a hyphen, so an author-controlled attribute
+    // could impersonate the real one and slip past the modification filter.
+    const body =
+      '<html><head><meta data-name="citation_date" itemprop="dateModified" content="2026-07-27"></head></html>';
+    expect(extract({ body }).status).toBe('absent');
+  });
+
+  it('still reads the ordinary spellings', () => {
+    for (const tag of [
+      '<meta name="citation_date" content="2024-03-15">',
+      "<meta name='citation_date' content='2024-03-15'>",
+      '<meta itemprop="citation_date" content="2024-03-15">',
+      '<meta property="citation_date" content="2024-03-15">',
+    ]) {
+      expect(expectFound(extract({ body: `<html><head>${tag}</head></html>` })).date).toBe(
+        '2024-03-15',
+      );
+    }
+  });
+});
+
+describe('the refusals and bounds that had no test of their own', () => {
+  const bounds = plausibleRange(CHECKED);
+
+  it.each(['revis', 'lastmod', 'last-mod', 'edited', 'changed'])(
+    'refuses a meta name containing %s',
+    (word) => {
+      const body = `<html><head><meta name="date_${word}_at" content="2026-06-30"></head></html>`;
+      expect(extract({ body }).status).toBe('absent');
+    },
+  );
+
+  it('accepts a date exactly at the future grace boundary and refuses the day after', () => {
+    // CHECKED is 2026-07-28; the grace is two days.
+    expect(readPublicationDate('2026-07-30', bounds).date).toBe('2026-07-30');
+    expect(readPublicationDate('2026-07-31', bounds).date).toBeNull();
+  });
+
+  it('accepts 1900-01-01 and refuses the day before', () => {
+    expect(readPublicationDate('1900-01-01', bounds).date).toBe('1900-01-01');
+    expect(readPublicationDate('1899-12-31', bounds).date).toBeNull();
+  });
+
+  it('says an empty value was empty rather than unreadable', () => {
+    expect(readPublicationDate('   ', bounds).why).toMatch(/empty/);
+  });
+
+  it('does not throw on a URL it cannot parse', () => {
+    expect(() => extract({ url: 'not a url at all' })).not.toThrow();
+    expect(extract({ url: 'not a url at all' }).status).toBe('absent');
+  });
+
+  it('takes the earliest across two meta tags sharing one name', () => {
+    // The docstring says the first version of `earliestOf` got exactly this
+    // wrong, taking whichever the parser reached first, and it had no test.
+    const body = `<html><head>
+      <meta name="citation_date" content="2024-03-15">
+      <meta name="citation_date" content="2020-01-01">
+    </head></html>`;
+    const found = expectFound(extract({ body }));
+    expect(found.date).toBe('2020-01-01');
+    expect(found.detail).toMatch(/earliest/);
+  });
+
+  it.each(['og:article:published_time', 'og:published_time'])('reads %s', (name) => {
+    const body = `<html><head><meta property="${name}" content="2021-05-05"></head></html>`;
+    const found = expectFound(extract({ body }));
+    expect(found.date).toBe('2021-05-05');
+    expect(found.signal).toBe('article-published-time');
+  });
+});
+
 describe('DATE-13 a page that did not resolve is never dated by its own address', () => {
   // The first design read the path even with no body, on the reasoning that an
   // address survives a failed fetch. Running the real extractor over the real
@@ -386,9 +503,10 @@ describe('DATE-13 a page that did not resolve is never dated by its own address'
   });
 
   it('a page that DID resolve is still dated by its path, which is the common case', () => {
-    // 14 of the 43 dates found on the real corpus come from a path on a page
-    // that resolved, including every Federal Register document. Something was
-    // genuinely served at that address, which is what makes it evidence.
+    // A path on a page that genuinely served is still evidence: something was
+    // returned at that address. What is not evidence is a path that 301s
+    // elsewhere or answers from a bot wall, which the collector now excludes by
+    // passing the served address rather than the cited one.
     const found = expectFound(
       extract({
         url: 'https://example.test/2021/12/11/post',
@@ -416,14 +534,68 @@ describe('DATE-14 page text is hostile input and every scan is bounded', () => {
     expect(result.detail).toMatch(/larger than this reader will parse/);
   });
 
-  it('survives a deeply nested JSON-LD document without recursing forever', () => {
+  it('survives a deeply nested JSON-LD document, and calls the bound unchecked', () => {
     let node = '{"datePublished":"2024-03-15"}';
     for (let i = 0; i < 500; i += 1) node = `{"a":${node}}`;
     const body = `<html><head><script type="application/ld+json">${node}</script></head></html>`;
-    // Bounded depth means the date past the bound is simply not found, which is
-    // the safe direction: an absence, never a crash and never a wrong date.
     expect(() => extract({ body })).not.toThrow();
-    expect(extract({ body }).status).toBe('absent');
+    // `absent` here was this file's own doctrine inverted, and an out-of-family
+    // review caught it: the part past the bound was never looked at, which is
+    // the same position as a body cut short at the byte cap.
+    const result = extract({ body });
+    expect(result.status).toBe('unchecked');
+    expect(result.detail).toMatch(/stopped at one of its own bounds/);
+  });
+
+  it('an unclosed <script> tag cannot make the scan quadratic', () => {
+    // The lazy-quantifier version scanned to end-of-file once per unclosed
+    // opening: 18 seconds on a 2 MiB body, synchronously, times a 300-page
+    // budget. Measured at 128 KiB, 512 KiB and 2 MiB it was a clean 4x per
+    // doubling. This asserts the shape rather than a wall-clock number, which
+    // would be flaky, by checking that quadrupling the input does not quadruple
+    // the time.
+    const unclosed = (n: number): string => '<script type="application/ld+json">'.repeat(n);
+    const time = (body: string): number => {
+      const at = performance.now();
+      extract({ body });
+      return performance.now() - at;
+    };
+    const small = time(unclosed(4_000));
+    const large = time(unclosed(16_000));
+    // Linear would be about 4x; the quadratic version was about 16x. A generous
+    // bar, because this is a timing assertion and the defect it guards is three
+    // orders of magnitude, not a factor of two.
+    expect(large).toBeLessThan(Math.max(small * 8, 250));
+  });
+
+  it('reads a block that IS closed, so the linear scanner is not vacuously fast', () => {
+    const body = `<html><head>
+      <script type="application/ld+json">{"@type":"Article","datePublished":"2024-03-15"}</script>
+    </head></html>`;
+    expect(expectFound(extract({ body })).date).toBe('2024-03-15');
+  });
+
+  it('names an unclosed block rather than pretending the page carries nothing', () => {
+    const body = '<html><head><script type="application/ld+json">{"datePublished":"2024-03-15"</head>';
+    const result = extract({ body });
+    expect(result.status).toBe('absent');
+    expect(result.detail).toMatch(/opened and never closed/);
+  });
+
+  it('a page with more meta tags than the scan reads is unchecked, not absent', () => {
+    const filler = '<meta name="x" content="y">'.repeat(4001);
+    const body = `<html><head>${filler}<meta name="citation_date" content="2024-03-15"></head></html>`;
+    const result = extract({ body });
+    expect(result.status).toBe('unchecked');
+    expect(result.detail).toMatch(/`<meta>` tags were present and only the first were read/);
+  });
+
+  it('a page with more JSON-LD blocks than the scan reads is unchecked, not absent', () => {
+    const filler = '<script type="application/ld+json">{"a":1}</script>'.repeat(25);
+    const body = `<html><head>${filler}</head></html>`;
+    const result = extract({ body });
+    expect(result.status).toBe('unchecked');
+    expect(result.detail).toMatch(/JSON-LD blocks were present/);
   });
 
   it('bounds the meta scan on a page carrying tens of thousands of tags', () => {

@@ -450,9 +450,22 @@ export interface DatedPage {
  * publishers who date nothing.
  */
 export interface DatingCounts {
+  /**
+   * Dated **and** usable, which is exactly the denominator of the fresh share.
+   *
+   * Not simply "carries a date". A source stated as published after the task's
+   * as-of date carries a date and cannot be graded against a horizon it
+   * precedes, so `assessSourceRecency` answers `after-horizon` and
+   * `scoreRecency` leaves it out of the denominator. Counting it here would make
+   * the report's own sentence, that the score is computed over the dated
+   * sources, false. An out-of-family review found exactly that: two dated pages
+   * printed beside a share computed over one.
+   */
   readonly dated: number;
   readonly absent: number;
   readonly unchecked: number;
+  /** Carries a date later than the task's as-of. A transcription error, counted apart. */
+  readonly afterHorizon: number;
 }
 
 export interface RecencyInputs {
@@ -512,5 +525,36 @@ export function recencyInputs(
     }
   }
 
-  return { sources, dating: { dated, absent, unchecked } };
+  // `afterHorizon` is zero here and is settled by `scoreRecencyForReport`, which
+  // is the only place that knows the as-of date. This function is the join and
+  // nothing else.
+  return { sources, dating: { dated, absent, unchecked, afterHorizon: 0 } };
+}
+
+export interface RecencyForReport {
+  readonly result: RecencyResult;
+  readonly dating: DatingCounts;
+}
+
+/**
+ * The one call a report makes: the graded result and the counts printed beside
+ * it, from one pass.
+ *
+ * It exists because composing `recencyInputs` and `scoreRecency` by hand is a
+ * way to get the two out of step, and a caller did. `dated` has to mean the
+ * denominator of the share printed above it, and only this function can know
+ * that, because only this function has both the join and the as-of date.
+ */
+export function scoreRecencyForReport(
+  citedUrls: readonly string[],
+  pages: readonly DatedPage[],
+  asOf: string,
+): RecencyForReport {
+  const { sources, dating } = recencyInputs(citedUrls, pages);
+  const result = scoreRecency(sources, asOf);
+  const afterHorizon = result.status === 'not-applicable' ? 0 : result.counts['after-horizon'];
+  return {
+    result,
+    dating: { ...dating, dated: dating.dated - afterHorizon, afterHorizon },
+  };
 }

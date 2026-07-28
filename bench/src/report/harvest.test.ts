@@ -144,7 +144,7 @@ describe('DATE-20 and DATE-21 recency is computed at the caller, not only at the
     });
     expect(scored.metrics['recency-fresh-share']).toBeNull();
     expect(scored.unmeasured['recency-fresh-share']).toMatch(/readable publication date/);
-    expect(scored.dating).toEqual({ dated: 0, absent: 2, unchecked: 0 });
+    expect(scored.dating).toEqual({ dated: 0, absent: 2, unchecked: 0, afterHorizon: 0 });
   });
 
   it('DATE-21 scores a real figure over the sources it could date', () => {
@@ -160,7 +160,7 @@ describe('DATE-20 and DATE-21 recency is computed at the caller, not only at the
     // Both inside the 183-day journalism horizon against the task's 2026-07-01
     // as-of date, so both are fresh.
     expect(scored.metrics['recency-fresh-share']).toBe(1);
-    expect(scored.dating).toEqual({ dated: 2, absent: 0, unchecked: 0 });
+    expect(scored.dating).toEqual({ dated: 2, absent: 0, unchecked: 0, afterHorizon: 0 });
   });
 
   it('DATE-21 an undated source leaves the denominator rather than lowering the share', () => {
@@ -173,7 +173,7 @@ describe('DATE-20 and DATE-21 recency is computed at the caller, not only at the
     // One dated and fresh, one undated. The share is 1.0 over a denominator of
     // one, which is exactly why the dating counts are printed beside it.
     expect(scored.metrics['recency-fresh-share']).toBe(1);
-    expect(scored.dating).toEqual({ dated: 1, absent: 1, unchecked: 0 });
+    expect(scored.dating).toEqual({ dated: 1, absent: 1, unchecked: 0, afterHorizon: 0 });
   });
 
   it('an old dated source lowers the share, so the metric can actually move', () => {
@@ -189,13 +189,31 @@ describe('DATE-20 and DATE-21 recency is computed at the caller, not only at the
     expect(scored.metrics['recency-fresh-share']).toBe(0.5);
   });
 
+  it('a source dated after the task as-of date is counted apart, not as dated', () => {
+    // The printed `Dated` has to be the denominator of the printed share. This
+    // page carries a date and cannot be graded against a horizon it precedes,
+    // so `scoreRecency` drops it and the count has to agree. Found by an
+    // out-of-family review after the first green gate.
+    const scored = harvestCell({
+      cell: cell('t1', 'gemini', 1),
+      task: task('t1', 'technical'),
+      report: REPORT,
+      evidence: evidence({
+        a: { status: 'found', date: '2026-06-15' },
+        b: { status: 'found', date: '2026-07-20' },
+      }),
+    });
+    expect(scored.dating).toEqual({ dated: 1, absent: 0, unchecked: 0, afterHorizon: 1 });
+    expect(scored.metrics['recency-fresh-share']).toBe(1);
+  });
+
   it('a cell with no snapshot at all counts every cited source unchecked', () => {
     const scored = harvestCell({
       cell: cell('t1', 'gemini', 1),
       task: task('t1', 'technical'),
       report: REPORT,
     });
-    expect(scored.dating).toEqual({ dated: 0, absent: 0, unchecked: 2 });
+    expect(scored.dating).toEqual({ dated: 0, absent: 0, unchecked: 2, afterHorizon: 0 });
     expect(scored.metrics['recency-fresh-share']).toBeNull();
   });
 
@@ -204,7 +222,7 @@ describe('DATE-20 and DATE-21 recency is computed at the caller, not only at the
       cell: cell('t1', 'gemini', 1, { outcome: 'failed', failureKind: 'rate_limited' }),
       task: task('t1', 'technical'),
     });
-    expect(scored.dating).toEqual({ dated: 0, absent: 0, unchecked: 0 });
+    expect(scored.dating).toEqual({ dated: 0, absent: 0, unchecked: 0, afterHorizon: 0 });
     expect(scored.metrics['recency-fresh-share']).toBeNull();
   });
 });

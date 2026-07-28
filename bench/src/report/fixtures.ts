@@ -15,7 +15,7 @@ import type { DatingCounts } from '../score/recency.js';
 
 export const NO_REGISTRY: RegistryCounts = { present: 0, absent: 0, unchecked: 0, invalid: 0 };
 
-export const NO_DATING: DatingCounts = { dated: 0, absent: 0, unchecked: 0 };
+export const NO_DATING: DatingCounts = { dated: 0, absent: 0, unchecked: 0, afterHorizon: 0 };
 
 export function task(id: string, category: TaskCategory, stale = false): BenchTask {
   return {

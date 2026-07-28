@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { MIN_COMPLETION_SHARE, MIN_TASKS_PER_CATEGORY, aggregate, uncheckedShare } from './aggregate.js';
+import {
+  MIN_COMPLETION_SHARE,
+  MIN_TASKS_PER_CATEGORY,
+  aggregate,
+  uncheckedShare,
+  undatedShare,
+} from './aggregate.js';
 import { MIN_REPETITIONS_FOR_SPREAD, TARGET_REPETITIONS } from '../run/cell.js';
 import { corpus, scoredCell, task } from './fixtures.js';
 
@@ -445,5 +451,56 @@ describe('the per-repetition pass series carried for the reliability figures', (
     const group = aggregate({ cells, corpus: corpus([task('t1', 'technical')]) }).taskGroups[0];
     expect(group?.passValues).toEqual([1, 1]);
     expect(group?.passMetric).toBe('accuracy');
+  });
+});
+
+describe('DATE-23 the dating counts are aggregated, per backend and overall', () => {
+  // `BackendSummary.dating` reached a reader only through the JSON dump and was
+  // asserted nowhere, which an out-of-family review named: an AC row claiming
+  // `aggregate` coverage that did not exist.
+  const cells = [
+    scoredCell('t1', 'gemini', 1, 'technical', {}, { dating: { dated: 3, absent: 1, unchecked: 0, afterHorizon: 1 } }),
+    scoredCell('t2', 'gemini', 1, 'technical', {}, { dating: { dated: 2, absent: 0, unchecked: 4, afterHorizon: 0 } }),
+    scoredCell('t3', 'perplexity', 1, 'technical', {}, { dating: { dated: 0, absent: 7, unchecked: 0, afterHorizon: 0 } }),
+  ];
+  const agg = aggregate({
+    cells,
+    corpus: corpus(['t1', 't2', 't3'].map((id) => task(id, 'technical'))),
+  });
+
+  it('sums them per backend', () => {
+    const byProvider = new Map(agg.backends.map((b) => [b.provider, b.dating]));
+    expect(byProvider.get('gemini')).toEqual({ dated: 5, absent: 1, unchecked: 4, afterHorizon: 1 });
+    expect(byProvider.get('perplexity')).toEqual({
+      dated: 0,
+      absent: 7,
+      unchecked: 0,
+      afterHorizon: 0,
+    });
+  });
+
+  it('sums them across every counted cell', () => {
+    expect(agg.dating).toEqual({ dated: 5, absent: 8, unchecked: 4, afterHorizon: 1 });
+  });
+
+  it('reports the undated share over every cause, and null when nothing was checked', () => {
+    // 13 of 18 could not be dated, counting the after-horizon one, because the
+    // share has to be over the same population the panel prints.
+    expect(undatedShare(agg.dating)).toBeCloseTo(13 / 18, 10);
+    expect(undatedShare({ dated: 0, absent: 0, unchecked: 0, afterHorizon: 0 })).toBeNull();
+  });
+
+  it('does not count a cell whose task the corpus no longer holds', () => {
+    // The same rule the registry totals follow: an orphan is named, never
+    // silently folded into a denominator.
+    const withOrphan = aggregate({
+      cells: [
+        ...cells,
+        scoredCell('gone', 'gemini', 1, 'technical', {}, { dating: { dated: 99, absent: 0, unchecked: 0, afterHorizon: 0 } }),
+      ],
+      corpus: corpus(['t1', 't2', 't3'].map((id) => task(id, 'technical'))),
+    });
+    expect(withOrphan.dating.dated).toBe(5);
+    expect(withOrphan.orphanCells).toContain('gone/gemini/1');
   });
 });

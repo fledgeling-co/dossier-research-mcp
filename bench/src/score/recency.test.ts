@@ -310,7 +310,7 @@ describe('DATE-19 the join produces the graded list and the printed counts in on
       [{ url: 'https://a.test/x', published: { status: 'found', date: '2026-07-01' } }],
     );
     expect(sources).toEqual([{ url: 'https://a.test/x', publishedAt: '2026-07-01' }]);
-    expect(dating).toEqual({ dated: 1, absent: 0, unchecked: 0 });
+    expect(dating).toEqual({ dated: 1, absent: 0, unchecked: 0, afterHorizon: 0 });
   });
 
   it('keeps the two undated causes apart, because they have different fixes', () => {
@@ -321,7 +321,7 @@ describe('DATE-19 the join produces the graded list and the printed counts in on
         { url: 'https://b.test/y', published: { status: 'unchecked' } },
       ],
     );
-    expect(dating).toEqual({ dated: 0, absent: 1, unchecked: 1 });
+    expect(dating).toEqual({ dated: 0, absent: 1, unchecked: 1, afterHorizon: 0 });
   });
 
   it('counts a cited URL with no page record as unchecked, never as absent', () => {
@@ -329,7 +329,7 @@ describe('DATE-19 the join produces the graded list and the printed counts in on
     // at all. Reporting that as a publisher who omitted a date is the accusation
     // this whole distinction exists to prevent.
     const { sources, dating } = recencyInputs(['https://a.test/x'], []);
-    expect(dating).toEqual({ dated: 0, absent: 0, unchecked: 1 });
+    expect(dating).toEqual({ dated: 0, absent: 0, unchecked: 1, afterHorizon: 0 });
     expect(sources).toEqual([{ url: 'https://a.test/x' }]);
   });
 

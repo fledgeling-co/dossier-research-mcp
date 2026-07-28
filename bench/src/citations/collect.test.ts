@@ -307,3 +307,49 @@ describe('DATE-18 the collector dates the page it already holds', () => {
     expect(evidence.pages[0]?.published.status).toBe('unchecked');
   });
 });
+
+describe('the URL a date is read from is the one that served, not the one that was cited', () => {
+  const options = {
+    registryTransport: transportFor({}),
+    now: () => new Date('2026-07-28T00:00:00.000Z'),
+  };
+
+  it('does not date a citation from a path that redirected elsewhere', async () => {
+    // The measured reversal refused a fabricated URL that never resolved. A
+    // catch-all redirect is the same input through a different door: the cited
+    // `/2026/07/made-up-slug` resolves 200, so the verdict is `live`, and the
+    // path it names served nothing. Found by an out-of-family review.
+    const evidence = await collectCitationEvidence(
+      'See [a](https://realsite.test/2026/07/made-up-slug).',
+      {
+        ...options,
+        fetchPage: () =>
+          Promise.resolve(
+            page({
+              url: 'https://realsite.test/home',
+              body: '<html><head></head><body>the home page</body></html>',
+            }),
+          ),
+      },
+    );
+    expect(evidence.pages[0]?.verdict).toBe('live');
+    expect(evidence.pages[0]?.finalUrl).toBe('https://realsite.test/home');
+    expect(evidence.pages[0]?.published.status).toBe('absent');
+  });
+
+  it('still dates a citation whose own path served the page', async () => {
+    const evidence = await collectCitationEvidence(
+      'See [a](https://realsite.test/2021/12/11/post).',
+      {
+        ...options,
+        fetchPage: (url) =>
+          Promise.resolve(page({ url, body: '<html><head></head><body>a post</body></html>' })),
+      },
+    );
+    expect(evidence.pages[0]?.published).toMatchObject({
+      status: 'found',
+      date: '2021-12-11',
+      signal: 'url-path',
+    });
+  });
+});

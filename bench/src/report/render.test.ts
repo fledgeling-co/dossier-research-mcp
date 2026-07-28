@@ -277,10 +277,22 @@ describe('DATE-23 and DATE-24 the report prints what recency is computed over', 
   // place in `docs/test-plan.md`. The reason it named no longer exists.
 
   it('DATE-24 no longer claims recency is unavailable', () => {
-    const markdown = renderMarkdown(realistic());
+    const markdown = renderMarkdown(
+      realistic({ dating: { dated: 12, absent: 25, unchecked: 3, afterHorizon: 0 } }),
+    );
     expect(markdown).not.toMatch(/Recency is unavailable/);
     expect(markdown).not.toMatch(/no publication date is recorded/);
     expect(markdown).toMatch(/\*\*Recency is measured over the sources that could be dated\*\*/);
+  });
+
+  it('DATE-24 a report where nothing was dated says so in the limits too, rather than "0 of 0"', () => {
+    // Two sections ten apart said different things about the same emptiness:
+    // the panel said no source was checked, the limits said 0 of 0 could not be
+    // dated, which reads as a clean bill of health. Found by an out-of-family
+    // review.
+    const markdown = renderMarkdown(realistic());
+    expect(markdown).toMatch(/\*\*Recency was measured over nothing here\*\*/);
+    expect(markdown).not.toMatch(/0 of 0 cited sources could not be/);
   });
 
   it('DATE-24 the metric caveat says what the figure is over, not that it cannot be computed', () => {
@@ -290,11 +302,24 @@ describe('DATE-23 and DATE-24 the report prints what recency is computed over', 
 
   it('DATE-23 counts the sources it could and could not date, with the two causes apart', () => {
     const markdown = renderMarkdown(
-      realistic({ dating: { dated: 12, absent: 25, unchecked: 3 } }),
+      realistic({ dating: { dated: 12, absent: 25, unchecked: 3, afterHorizon: 0 } }),
     );
     expect(markdown).toMatch(/### Publication dates, and how many could not be established/);
     expect(markdown).toMatch(/\*\*28 of 40 cited sources could not be dated\*\* \(70\.0%\)/);
-    expect(markdown).toMatch(/Dated 12; read and carrying no date 25; never read, or read only as far as the byte cap, 3\./);
+    expect(markdown).toMatch(
+      /Dated 12; read and carrying no date 25; never read, or read only as far as the byte cap, 3; dated later than the task's as-of date, 0\./,
+    );
+  });
+
+  it('DATE-23 counts a source dated after the as-of date apart from the ones that could be graded', () => {
+    // `Dated` has to be the denominator of the share printed above it. A source
+    // stated as published after the task's own as-of date carries a date and
+    // cannot be graded against a horizon it precedes.
+    const markdown = renderMarkdown(
+      realistic({ dating: { dated: 3, absent: 1, unchecked: 0, afterHorizon: 2 } }),
+    );
+    expect(markdown).toMatch(/\*\*3 of 6 cited sources could not be dated\*\* \(50\.0%\)/);
+    expect(markdown).toMatch(/dated later than the task's as-of date, 2\./);
   });
 
   it('DATE-23 says plainly that nothing was checked rather than printing a zero share', () => {
