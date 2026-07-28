@@ -68,3 +68,29 @@ describe('the per-backend concurrency cap', () => {
     });
   });
 });
+
+describe('the advice in a rate-limit diagnosis', () => {
+  it('names environment variables the config actually reads', async () => {
+    // The first version told the operator to set `DOSSIER_PROVIDER_CONCURRENCY`,
+    // which does not exist. Zod strips unknown keys, so following that advice
+    // would have silently done nothing — worse than no advice, because it looks
+    // like a fix and reads like one in a bug report.
+    const { readFileSync } = await import('node:fs');
+    const runner = readFileSync(new URL('../src/research/runner.ts', import.meta.url), 'utf8');
+    const config = readFileSync(new URL('../src/config.ts', import.meta.url), 'utf8');
+
+    // Every DOSSIER_* name the runner puts in front of a user, template
+    // expressions included, has to resolve to a key the schema declares.
+    const named = new Set<string>();
+    for (const m of runner.matchAll(/DOSSIER_[A-Z_]+/g)) named.add(m[0]);
+    // The concurrency one is built by interpolation, so check its stem.
+    for (const name of named) {
+      if (!name.startsWith('DOSSIER_CONCURRENCY')) {
+        expect(config, `${name} is shown to users but not declared in the env schema`).toContain(name);
+      }
+    }
+    for (const backend of ['OPENAI', 'GEMINI', 'PERPLEXITY', 'XAI']) {
+      expect(config, `DOSSIER_CONCURRENCY_${backend}`).toContain(`DOSSIER_CONCURRENCY_${backend}`);
+    }
+  });
+});

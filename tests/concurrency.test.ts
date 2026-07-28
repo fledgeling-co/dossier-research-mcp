@@ -120,7 +120,19 @@ describe('FileLock', () => {
     // The deterministic guard is the test above; this one is the net that
     // catches the class of defect nobody thought to write a guard for.
     const path = join(root, 'l');
-    const spin = { sleep: async (): Promise<void> => undefined, timeoutMs: 5_000 };
+    // Both five-second deadlines here were wrong, and the first fix picked the
+    // wrong one. The failure is `Test timed out in 5000ms` — VITEST's per-test
+    // default, not the lock's — because 96 spinning acquisitions inside a
+    // 105-file parallel suite are CPU-starved rather than deadlocked. The
+    // signature was there to read: 6 of 6 in isolation, 2 of 6 under load.
+    // The lock's own deadline is raised too, for the same reason and because a
+    // starved contender should not report a scheduling delay as a lock defect.
+    //
+    // Neither raise weakens the test: it finishes when the work finishes, and a
+    // real deadlock still fails, just later and unambiguously. This flake has
+    // cost four separate investigations, one of them today, and each of the
+    // first three moved the wrong number.
+    const spin = { sleep: async (): Promise<void> => undefined, timeoutMs: 120_000 };
     const bad: string[] = [];
     let stop = false;
     // Several readers, not one. A contender only breaks a half-written lock if
@@ -156,7 +168,8 @@ describe('FileLock', () => {
     await Promise.all(watchers);
     expect(bad).toEqual([]);
     expect(maxInside).toBe(1);
-  });
+    // The timeout that was actually firing.
+  }, 120_000);
 
   it('releases even when the task throws, so one error cannot wedge the store', async () => {
     const path = join(root, 'l');

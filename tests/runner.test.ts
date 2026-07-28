@@ -742,19 +742,28 @@ describe('failure classification and the compensating release', () => {
       const held = new Promise<void>((r) => {
         release = r;
       });
+      // Signalled from INSIDE the summariser rather than waited for on a timer.
+      // The first version of this test slept 20ms hoping the poll had got that
+      // far, and failed two runs in five. A wall-clock guess about another
+      // task's progress is a coin toss, and a flaky test is worse than no test:
+      // it teaches the reader to re-run rather than to look.
+      let entered: (() => void) | undefined;
+      const hasEntered = new Promise<void>((r) => {
+        entered = r;
+      });
       let calls = 0;
 
       const client = scriptedClient([snapshot({ status: 'completed', markdown: '# Title\n\nBody.' })]);
       const runner = new Runner(store, config, () => client, async () => {
         calls += 1;
+        entered?.();
         await held;
       });
       const { run } = await runner.start(START);
 
       const first = runner.refresh(run.id);
-      // Let the first poll reach the held summariser.
-      await new Promise((r) => setTimeout(r, 20));
-      // Three more polls while it is still in there.
+      await hasEntered;
+      // Three more polls, now provably while the summariser is still inside.
       await Promise.all([runner.refresh(run.id), runner.refresh(run.id), runner.refresh(run.id)]);
       release?.();
       await first;

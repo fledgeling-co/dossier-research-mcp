@@ -1013,8 +1013,15 @@ export class Runner {
                 ? `, and the provider asked for ${String(facts.retryAfterSeconds)}s.`
                 : '.') +
               ' That is a capacity problem, not a research one: the fix is fewer runs against this ' +
-              'backend at once, or a higher limit on the account. `DOSSIER_PROVIDER_CONCURRENCY` ' +
-              'caps how many run on one backend simultaneously.'
+              'backend at once, or a higher limit on the account. ' +
+              `\`DOSSIER_CONCURRENCY_${run.provider.toUpperCase().replace(/-/g, '_')}\` caps how many ` +
+              'run on this backend simultaneously; it is currently ' +
+              `${String(this.config.providerConcurrency[run.provider] ?? 0) === '0' ? 'unset, so only the global cap applies' : String(this.config.providerConcurrency[run.provider])}.` +
+              (facts.limit !== undefined
+                ? ` At roughly ${(facts.used ?? 0).toLocaleString('en-US')} tokens for one run, a ` +
+                  `${facts.limit.toLocaleString('en-US')}-token budget supports about ` +
+                  `${String(Math.max(1, Math.floor(facts.limit / Math.max(1, facts.used ?? 1))))} at once.`
+                : '')
             : '';
         next = {
           ...next,
