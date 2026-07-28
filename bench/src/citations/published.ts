@@ -293,6 +293,12 @@ export interface DateReading {
  * one and reaching around it would put a second opinion about what a date is
  * into this file. It is refused by name in `why`, so a corpus that turns out to
  * carry year-only publication dates will say so rather than look empty.
+ *
+ * **A timestamp's zone offset does not move the day.** `2024-03-15T23:30:00-08:00`
+ * reads as 15 March, the calendar day the publisher wrote, rather than the 16th
+ * it would be in UTC. Against horizons measured in ninety days and upward the
+ * difference is immaterial, and taking the publisher's own day is the reading
+ * that can be checked by looking at the page.
  */
 export function readPublicationDate(raw: string, bounds: PlausibleRange): DateReading {
   const text = raw.trim();
@@ -344,9 +350,27 @@ interface MetaTag {
 
 const ATTRIBUTE_VALUE = String.raw`(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))`;
 
+/**
+ * Compiled once per attribute name, not once per tag.
+ *
+ * A hostile page is allowed four thousand `<meta>` tags and each one is asked
+ * about three attribute names, so building the pattern inside the loop compiled
+ * twelve thousand identical regexes for a page whose only crime was being long.
+ * The set of names is fixed and small, so a lazy cache is exact.
+ */
+const ATTRIBUTE_PATTERNS = new Map<string, RegExp>();
+
+function attributePattern(name: string): RegExp {
+  const existing = ATTRIBUTE_PATTERNS.get(name);
+  if (existing !== undefined) return existing;
+  const built = new RegExp(String.raw`\b${name}\s*=\s*${ATTRIBUTE_VALUE}`, 'i');
+  ATTRIBUTE_PATTERNS.set(name, built);
+  return built;
+}
+
 function attribute(tag: string, names: readonly string[]): string | undefined {
   for (const name of names) {
-    const m = new RegExp(String.raw`\b${name}\s*=\s*${ATTRIBUTE_VALUE}`, 'i').exec(tag);
+    const m = attributePattern(name).exec(tag);
     if (m !== null) return decodeEntities(m[1] ?? m[2] ?? m[3] ?? '');
   }
   return undefined;

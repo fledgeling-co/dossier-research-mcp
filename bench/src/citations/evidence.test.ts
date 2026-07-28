@@ -111,6 +111,28 @@ describe('the snapshot store (INTEG-43)', () => {
     expect(readEvidence(dir, 'task-a/gemini/1')?.pages).toHaveLength(1);
   });
 
+  it('DATE-16 carries the publication date through the disk unchanged', () => {
+    // The round trip above only counts pages. A field can survive a schema and
+    // still be dropped by the writer or flattened by the reader, and this is the
+    // field a whole scored dimension now rests on.
+    const dir = tempDir();
+    writeEvidence(dir, 'task-a/gemini/1', snapshot());
+    expect(readEvidence(dir, 'task-a/gemini/1')?.pages[0]?.published).toEqual({
+      status: 'found',
+      date: '2026-03-01',
+      signal: 'json-ld',
+      raw: '2026-03-01T09:00:00Z',
+      detail: 'read from a schema.org `datePublished` in a JSON-LD block',
+    });
+  });
+
+  it('DATE-17 refuses a snapshot on disk written before the field existed', () => {
+    const dir = tempDir();
+    const stale = { ...snapshot(), version: 1 };
+    writeFileSync(evidencePath(dir, 'old'), `${JSON.stringify(stale)}\n`, 'utf8');
+    expect(() => readEvidence(dir, 'old')).toThrow(/malformed/);
+  });
+
   it('hashes the cell key, so a task id with a slash does not become a directory tree', () => {
     const dir = tempDir();
     writeEvidence(dir, 'task-a/gemini/1', snapshot());

@@ -35,9 +35,21 @@ export { spreadsOverlap, summarise } from './spread.js';
 export type { SampleUnit, Spread, SpreadReport } from './spread.js';
 
 export { harvestCell } from './harvest.js';
-export type { EvidenceState, HarvestInput, RegistryCounts, ScoredCell } from './harvest.js';
+export type {
+  EvidenceState,
+  HarvestEvidenceView,
+  HarvestInput,
+  RegistryCounts,
+  ScoredCell,
+} from './harvest.js';
 
-export { MIN_COMPLETION_SHARE, MIN_TASKS_PER_CATEGORY, aggregate, uncheckedShare } from './aggregate.js';
+export {
+  MIN_COMPLETION_SHARE,
+  MIN_TASKS_PER_CATEGORY,
+  aggregate,
+  uncheckedShare,
+  undatedShare,
+} from './aggregate.js';
 export type {
   AggregateInput,
   BackendSummary,

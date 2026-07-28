@@ -225,6 +225,41 @@ describe('DATE-07 a year in a path is not a date unless a month is next to it', 
   });
 });
 
+describe('Dublin Core, the one signal the real corpus did not exercise', () => {
+  // It fired on none of the 212 URLs measured, which is a fact about that corpus
+  // rather than about the signal. An untested branch is worse than an unused
+  // one: nobody would notice it had stopped working.
+  it('reads dcterms.issued', () => {
+    const body = '<html><head><meta name="DCTERMS.issued" content="2020-04-04"></head></html>';
+    const found = expectFound(extract({ body }));
+    expect(found.date).toBe('2020-04-04');
+    expect(found.signal).toBe('dublin-core');
+  });
+
+  it('prefers the explicit `issued` over the bare `dc.date`, which does not say which date it is', () => {
+    const body = `<html><head>
+      <meta name="dc.date" content="2024-01-01">
+      <meta name="dcterms.issued" content="2020-04-04">
+    </head></html>`;
+    expect(expectFound(extract({ body })).date).toBe('2020-04-04');
+  });
+
+  it('still reads the bare dc.date when nothing more explicit is there', () => {
+    const body = '<html><head><meta name="dc.date" content="2024-01-01"></head></html>';
+    const found = expectFound(extract({ body }));
+    expect(found.date).toBe('2024-01-01');
+    expect(found.signal).toBe('dublin-core');
+  });
+
+  it('ranks below article:published_time, which is the more explicit statement', () => {
+    const body = `<html><head>
+      <meta name="dcterms.issued" content="2020-04-04">
+      <meta property="article:published_time" content="2021-05-05">
+    </head></html>`;
+    expect(expectFound(extract({ body })).signal).toBe('article-published-time');
+  });
+});
+
 describe('DATE-08 an undecidable field order is refused rather than guessed', () => {
   const bounds = plausibleRange(CHECKED);
 
