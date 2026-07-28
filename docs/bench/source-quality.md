@@ -24,7 +24,7 @@ Citations that are not resolvable web addresses are discarded **once, before eit
 
 Four domains carrying one wire story are four domains and one source. No amount of care about domain identity can see it, because the four domains genuinely are four domains.
 
-The detector is Broder's shingling. Each page's text is lowercased, stripped of punctuation, cut into overlapping runs of ten words, and each run hashed. Two pages are the same story when their **resemblance** (the shared runs over the combined runs) reaches 0.7, or when their **containment** (the shared runs over the smaller page's runs) reaches 0.9.
+The detector is Broder's shingling. Each page's text is Unicode-normalised to NFKC, lowercased, stripped of punctuation, cut into overlapping runs of ten words, and each run hashed. Two pages are the same story when their **resemblance** (the shared runs over the combined runs) reaches 0.7, or when their **containment** (the shared runs over the smaller page's runs) reaches 0.9.
 
 Domains are then merged transitively: two domains join when any page on one is the same story as any page on the other, and a chain of outlets joins as one source rather than as a series of pairs.
 
@@ -45,6 +45,26 @@ Recorded in full in the comment beside the constants, because a number nobody ca
 
 Measured on the module's own fixtures, four printings of one wire story score 0.83 to 0.86 and four independently written articles about the same event score 0.00. The bar is not finely balanced between them; it sits in a wide empty gap.
 
+### Why NFKC, and what it would cost somewhere else
+
+Added 28 July 2026. Until then this was the only text normaliser in the tree that did not normalise Unicode, and it **failed open**: two printings of one wire story differing only in typographic dress stayed two independent domains, so the report overstated source independence. That is the direction that flatters the backend, and it defeats the rule the whole product turns on.
+
+Measured on the same fixture, one printing against the same page as a typesetter would set it:
+
+| Costume | as shipped | with NFC | with NFKC |
+|---|---|---|---|
+| The ligature run `ﬁ ﬂ ﬀ ﬃ ﬄ` | not the same story, 0.632 | not the same story, 0.632 | **the same story, 1.000** |
+| Fullwidth digits | not the same story, 0.684 | not the same story, 0.684 | **the same story, 1.000** |
+| Precomposed against decomposed accents | not the same story, 0.000 | **the same story, 1.000** | **the same story, 1.000** |
+
+**The K is the point.** A ligature and a fullwidth digit are *compatibility* equivalences, not canonical ones, so NFC leaves the two commonest newswire costumes exactly where they were. A non-breaking space needs neither form: the punctuation strip already turns every run of non-alphanumerics into one separator, so it was never visible here.
+
+NFKC has a real cost and it is paid elsewhere rather than here. It rewrites characters that change what a figure says: `²` becomes `2`, `㎡` becomes `m2`. [`due-weight.md`](due-weight.md)'s matcher refuses NFKC for exactly that reason, and it is right to, because it reads numeric mentions back out of its normalised string. Nothing does that here: the output is joined into ten-word windows and hashed, and the only operation ever performed on the result is set intersection against another page fingerprinted the same way. **That is a condition on future callers, not a happy accident.** Anything that needs to read a value out of a page must take the raw text.
+
+So the rule the tree follows, which looks like a drift between two files and is not: NFKC where text is matched or fingerprinted, NFC where a figure is read back out of it.
+
+Nothing about the thresholds changed. The fix is upstream of them, and the four independently written articles still score 0.00 against each other, including when one of them is dressed in the same ligature costume.
+
 ### The objection that does not apply here
 
 Near-duplicate merging was declined once for `src/research/corroborate.ts`, and the reason was right: thresholds in this range are tuned against article titles and bodies, while that file holds one-sentence worker-written claims, and two workers summarising genuinely independent sources will write near-identical sentences. Merging those would destroy real corroboration.
@@ -57,6 +77,7 @@ That objection is about the **input**, not the number. This scorer is never give
 - **A merged domain may have contributed real evidence too.** An outlet that ran both the wire copy and its own original piece merges on the strength of the wire copy alone. That understates independence, the scorer says so in its notes, and the alternative (counting stories instead of domains) would answer a different question from the raw figure it sits beside.
 - **A publisher can bridge two unrelated stories into one component.** Because the merge is transitive over publishers rather than over stories, a domain carrying two different syndicated pieces joins the carriers of both, so two publishers sharing no story at all can be counted as one. Same direction as the case above: it understates independence, and it is the price of keeping the collapsed figure comparable with the raw one.
 - **Two domains serving the same third-party interstitial will merge.** A shared bot-check or consent page is long enough to pass the length floor and identical across hosts, and nothing here can tell it from real syndication. Every cluster is therefore reported with its URLs and its scores rather than folded silently into a count.
+- **Normalisation folds costume, not disguise.** NFKC collapses a ligature, a fullwidth digit and a decomposed accent onto their plain forms. It does not collapse a homoglyph: a Cyrillic `а` standing in for a Latin `a` is a different character to Unicode and to every normalisation form, and it breaks every ten-word window it sits in. Two printings of one story that differ that way are still counted as two sources. Same direction as the cases above, which is the safe one: it understates collapsing, so the gap between the raw and collapsed figures stays a lower bound.
 - **There is deliberately no blended score.** Citation volume and citation quality are close to orthogonal in current systems and human preference tracks the former, so a blended number systematically fails to penalise the failure being measured. See [`../deep-research/benchmark-prior-art.md`](../deep-research/benchmark-prior-art.md).
 
 ## What supplies the page text
