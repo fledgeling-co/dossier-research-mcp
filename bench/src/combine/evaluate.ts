@@ -22,6 +22,9 @@ import {
   type FrontierResult,
   type MeasureLabel,
 } from './frontier.js';
+import { combinationEligibility, type CombinationEligibility } from './eligibility.js';
+import type { ScorableVerdict } from '../report/aggregate.js';
+import type { SeparationOracle } from '../report/rank.js';
 
 /**
  * Evaluate every combination of a set of members, and say which are worth their
@@ -73,6 +76,27 @@ export interface EvaluateInput {
    */
   readonly measure: MeasureLabel;
   /**
+   * What this sample supports, from `bench/src/report/aggregate.ts`.
+   *
+   * **Required, not optional**, and that is the whole of this item's fix. An
+   * optional floor defaults to no floor, which is the state this module was in:
+   * `evaluateScopes` runs per task category, which is exactly the scope
+   * `MIN_TASKS_PER_CATEGORY` governs, and applied none of it, so a frontier
+   * calling a combination dominated on two single runs 0.001 apart was the
+   * ordinary output rather than the pathological one.
+   *
+   * Build it with `eligibilityFromAggregate`, which takes BENCH-08's verdicts
+   * wholesale. Nothing here recomputes one; see `eligibility.ts` for why.
+   */
+  readonly eligibility: CombinationEligibility;
+  /**
+   * BENCH-13's paired comparison over combination ids, injected exactly as
+   * `rank.ts` takes one. Optional, because nothing computes one over
+   * combinations yet; where it is absent the interquartile check decides and
+   * the frontier says which ran.
+   */
+  readonly separated?: SeparationOracle | undefined;
+  /**
    * An explicit list of combinations, each named by member ids.
    *
    * The escape hatch above the member ceiling: each listed combination is still
@@ -98,6 +122,21 @@ export interface CombinationEvaluation {
 export interface CombinationReport {
   readonly combinations: readonly CombinationEvaluation[];
   readonly frontier: FrontierResult;
+  /**
+   * The scope's own verdict, carried so a reader of the JSON never has to open
+   * the frontier to find out whether anything here may be scored.
+   */
+  readonly scope: ScorableVerdict;
+  /**
+   * Whether a frontier was actually stated.
+   *
+   * `false` does **not** mean every combination is equal or that the run
+   * failed. It means the sample cannot support the claim that any combination
+   * should never be bought, and `frontier.withheld` names which gate said so.
+   * The scores, costs and overlap profiles below are unaffected: the numbers
+   * are the numbers, and it is the ordering that is withheld.
+   */
+  readonly scorable: boolean;
   /**
    * The exact credit split, or a refusal naming the count.
    *
@@ -243,8 +282,14 @@ export function evaluateCombinations(input: EvaluateInput): CombinationReport {
     score: e.score,
     costUsd: e.costUsd,
     robustness: e.overlap.robustness.worstCaseSurvivingShare,
+    // Folded from the members, worst first. A combination is the union of its
+    // members, so it is only as scorable as the least scorable thing in it.
+    eligibility: combinationEligibility(e.memberIds, input.eligibility),
   }));
-  const frontier = paretoFrontier(candidates, input.measure);
+  const frontier = paretoFrontier(candidates, input.measure, {
+    scope: input.eligibility.scope,
+    ...(input.separated !== undefined ? { separated: input.separated } : {}),
+  });
 
   let marginal: MarginalResult | undefined;
   if (exhaustive) {
@@ -310,7 +355,17 @@ export function evaluateCombinations(input: EvaluateInput): CombinationReport {
       `The least reliable combination completed ${(worstCompletion * 100).toFixed(0)}% of its attempted ` +
         'runs. Completion rate is a validity metric rather than a footnote: failed runs are carried into ' +
         'the denominator, because scoring only the cells a backend happened to finish makes an ' +
-        'unreliable backend look better than a reliable one.',
+        'unreliable backend look better than a reliable one. Nothing here thresholds this number: the ' +
+        'completion floor is the fourth arm of the verdict bench/src/report/aggregate.ts already ' +
+        'computed, and it arrives through that verdict rather than as a second rule with its own answer.',
+    );
+  }
+  if (frontier.withheld !== null) {
+    notes.push(
+      `No frontier is stated: ${frontier.withheld.reason}. ${frontier.withheld.why} The scores, costs ` +
+        'and overlap profiles above are unchanged, and the per-member credit split below, where one was ' +
+        'computed, decomposes exactly those numbers and inherits the same limit: it says how the score ' +
+        'in hand divides between members, not that the sample can tell two members apart.',
     );
   }
   notes.push(
@@ -318,6 +373,11 @@ export function evaluateCombinations(input: EvaluateInput): CombinationReport {
       'standard errors clustered on topic here, and this corpus is exactly the shape where naive errors ' +
       'inflate. A frontier computed from point estimates over a small category must not authorise a ' +
       'routing change on its own; it is the input to that decision and not the decision.',
+    'Whether a frontier may be stated at all is decided by bench/src/report/aggregate.ts, whose verdicts ' +
+      'arrive here whole. All four floors travel inside them: the tasks a category needs, whether this ' +
+      'member completed anything, whether it completed enough distinct tasks, and what share of its ' +
+      'attempts it completed. Nothing in this directory recomputes any of them, because two answers to ' +
+      'whether a sample supports a claim is worse than either answer alone.',
   );
   if (exhaustive) {
     notes.push(
@@ -331,6 +391,8 @@ export function evaluateCombinations(input: EvaluateInput): CombinationReport {
   return {
     combinations: evaluations,
     frontier,
+    scope: input.eligibility.scope,
+    scorable: frontier.withheld === null,
     marginal,
     overlapCurve: overlapCurve(
       evaluations.map((e) => ({
@@ -348,6 +410,15 @@ export function evaluateCombinations(input: EvaluateInput): CombinationReport {
 export interface CombinationScope {
   readonly name: string;
   readonly members: readonly CombinationMember[];
+  /**
+   * What this scope's sample supports, from the aggregate.
+   *
+   * Per scope rather than once for the run, because that is where the floor
+   * actually bites: `MIN_TASKS_PER_CATEGORY` is a statement about one task
+   * category, and a corpus can hold enough `technical` tasks to score while
+   * holding two `contested` ones.
+   */
+  readonly eligibility: CombinationEligibility;
 }
 
 export interface ScopedCombinationReport {
@@ -377,7 +448,22 @@ export function evaluateScopes(
   scopes: readonly CombinationScope[],
   scoreCombination: (merged: MergedCombination, scope: string) => number,
   measure: MeasureLabel,
-  options: { readonly maxExactMembers?: number } = {},
+  options: {
+    /**
+     * The overall scope's own eligibility, from the aggregate's whole-backend
+     * verdicts rather than folded together from the per-category ones.
+     *
+     * Required, and supplied rather than derived, because BENCH-08 computes the
+     * overall verdict by the same four gates a category gets, over the
+     * completion of the scorable categories only. Combining the per-scope
+     * verdicts here would be a fifth way of answering it, and the last time two
+     * consumers derived that separately the scorecard called a backend invalid
+     * while the ranking ranked it.
+     */
+    readonly overallEligibility: CombinationEligibility;
+    readonly maxExactMembers?: number;
+    readonly separated?: SeparationOracle | undefined;
+  },
 ): ScopedCombinationReport {
   if (scopes.length === 0) {
     throw new TypeError('evaluateScopes needs at least one scope');
@@ -416,6 +502,8 @@ export function evaluateScopes(
       members: fill(scope.members),
       scoreCombination: (merged) => scoreCombination(merged, scope.name),
       measure,
+      eligibility: scope.eligibility,
+      ...(options.separated !== undefined ? { separated: options.separated } : {}),
       ...(options.maxExactMembers !== undefined ? { maxExactMembers: options.maxExactMembers } : {}),
     }),
   }));
@@ -432,6 +520,8 @@ export function evaluateScopes(
       members: overallMembers,
       scoreCombination: (merged) => scoreCombination(merged, 'overall'),
       measure,
+      eligibility: options.overallEligibility,
+      ...(options.separated !== undefined ? { separated: options.separated } : {}),
       ...(options.maxExactMembers !== undefined ? { maxExactMembers: options.maxExactMembers } : {}),
     }),
   };

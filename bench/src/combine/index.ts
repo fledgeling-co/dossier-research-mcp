@@ -78,16 +78,53 @@ export type {
 } from './marginal.js';
 
 export {
+  eligibilityOf,
   paretoFrontier,
   SEPARABILITY_CHECKED,
+  SEPARABILITY_MIXED,
+  SEPARABILITY_NOT_STATED,
   SEPARABILITY_UNCHECKED,
 } from './frontier.js';
 export type {
+  CandidateEligibility,
   DominatedCandidate,
   FrontierCandidate,
+  FrontierOptions,
   FrontierResult,
+  FrontierWithheld,
+  FrontierWithheldReason,
   MeasureLabel,
+  PairCounts,
 } from './frontier.js';
+
+/**
+ * The seam to `bench/src/report/`, and the only part of this directory that has
+ * ever seen a `BenchAggregate`.
+ *
+ * Exported because a caller cannot build an eligible lattice without it, and
+ * because the alternative is every caller hand-rolling the same map from
+ * verdicts to members, which is how a floor comes to mean two things.
+ */
+export {
+  combinationEligibility,
+  eligibilityFromAggregate,
+  memberCandidateEligibility,
+} from './eligibility.js';
+export type {
+  CombinationEligibility,
+  EligibilityScope,
+  MemberEligibility,
+  MemberProviders,
+} from './eligibility.js';
+
+/**
+ * A `SpreadReport` over a combination's per-repetition scores.
+ *
+ * Exported here from 28 July 2026. It existed before that and was reachable
+ * only from a test, which is half of why `spreadsOverlap` was dead on the
+ * production path and every real frontier took the unchecked branch.
+ */
+export { scoreSpread } from './spread-helpers.js';
 
 export { combinationId, evaluateCombinations, evaluateScopes } from './evaluate.js';
 export type {
