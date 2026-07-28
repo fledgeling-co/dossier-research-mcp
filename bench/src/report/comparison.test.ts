@@ -88,7 +88,9 @@ describe('STAT-16 a comparison inherits BENCH-08\'s gates', () => {
     const agg = aggregate({ cells, corpus: twoCategoryCorpus() });
     const list = comparisons(agg);
     expect(list.filter((c) => c.withheld === null)).toHaveLength(0);
-    expect(list.some((c) => c.withheld === 'scope-not-scorable')).toBe(true);
+    // The scope is fine; a candidate could not enter it, which leaves one
+    // eligible backend and is `rank.ts`'s own word for that.
+    expect(list.some((c) => c.withheld === 'too-few-candidates')).toBe(true);
   });
 
   it('never emits a comparison for a volume metric', () => {

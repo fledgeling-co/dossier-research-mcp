@@ -22,7 +22,12 @@ import {
   type Comparison,
   type ComparisonSummary,
 } from './comparison.js';
-import { NO_MEASURED_DIFFERENCE, type ReliabilityReport } from '../stats/index.js';
+import {
+  DEFAULT_CONFIDENCE,
+  DEFAULT_RESAMPLES,
+  NO_MEASURED_DIFFERENCE,
+  type ReliabilityReport,
+} from '../stats/index.js';
 
 /**
  * The aggregate, as something a person can act on.
@@ -329,6 +334,32 @@ function renderCitations(agg: BenchAggregate): string {
   ].join('\n');
 }
 
+/**
+ * What one matrix cell says when the backend may not be scored there.
+ *
+ * A switch with an exhaustiveness default rather than an if-chain, because a
+ * fifth withheld reason added later would otherwise print as the fourth one's
+ * wording and be wrong in a way nothing catches. BENCH-13 added the fourth and
+ * met exactly that shape.
+ */
+function withheldCell(group: CategoryGroup): string {
+  if (group.verdict.scorable) throw new TypeError('a scorable group has no withheld cell');
+  const { reason } = group.verdict;
+  switch (reason) {
+    case 'nothing-completed':
+      return 'nothing completed';
+    case 'under-completed':
+      return `invalid (completed ${group.completion.rate === null ? 'nothing' : PERCENT(group.completion.rate)})`;
+    case 'under-sampled-corpus':
+    case 'under-sampled-completed':
+      return `withheld (${String(group.tasksCompleted)}/${String(group.tasksInCorpus)} tasks)`;
+    default: {
+      const exhaustive: never = reason;
+      return exhaustive;
+    }
+  }
+}
+
 /** One category matrix per rankable metric. Categories down, backends across. */
 function renderMatrix(agg: BenchAggregate, metric: MetricDescriptor): string {
   const byKey = new Map<string, CategoryGroup>();
@@ -352,13 +383,7 @@ function renderMatrix(agg: BenchAggregate, metric: MetricDescriptor): string {
       ...agg.providers.map((provider) => {
         const group = byKey.get(`${provider} ${category}`);
         if (group === undefined) return 'not run';
-        if (!group.verdict.scorable) {
-          if (group.verdict.reason === 'nothing-completed') return 'nothing completed';
-          if (group.verdict.reason === 'under-completed') {
-            return `invalid (completed ${group.completion.rate === null ? 'nothing' : PERCENT(group.completion.rate)})`;
-          }
-          return `withheld (${String(group.tasksCompleted)}/${String(group.tasksInCorpus)} tasks)`;
-        }
+        if (!group.verdict.scorable) return withheldCell(group);
         const value = formatValue(group.metrics[metric.id], formatterFor(metric));
         // A figure whose tasks were each run too few times still has a real
         // spread across tasks, and that spread says nothing about how much
@@ -591,7 +616,7 @@ function renderComparisons(analysis: Analysis): string {
   return [
     '## Differences between backends',
     '',
-    `Every comparison here is **paired**: it uses only the tasks both backends answered, because an unpaired test throws away the pairing that makes the comparison powerful. The interval is a percentile bootstrap over ${String(analysis.comparisons.find((c) => c.result?.interval)?.result?.interval?.resamples ?? 5000)} resamples that draws **categories** as units, so two tasks in one category are not counted as two independent observations.`,
+    `Every comparison here is **paired**: it uses only the tasks both backends answered, because an unpaired test throws away the pairing that makes the comparison powerful. The interval is a percentile bootstrap over ${String(DEFAULT_RESAMPLES)} resamples that draws **categories** as units, so two tasks in one category are not counted as two independent observations. A difference is in the metric's own units, so a difference of 0.1 on a share is ten percentage points.`,
     '',
     `**A difference whose interval contains zero is reported as ${NO_MEASURED_DIFFERENCE}, in those words, and never as a smaller number.** The point estimate is in the JSON for a downstream consumer; it is off this page because a number here would be read as an ordering.`,
     '',
@@ -665,7 +690,7 @@ function renderLimits(agg: BenchAggregate, analysis: Analysis): string {
   return [
     '## What none of this can mean',
     '',
-    `- **A spread is not an interval.** Spreads in the tables are observed interquartile ranges over the results in hand. The paired differences carry a real ${String(Math.round((analysis.comparisons.find((c) => c.result?.interval)?.result?.interval?.confidence ?? 0.95) * 100))}% bootstrap interval, and the two are different things: only the second says anything about how much of a gap survives resampling.`,
+    `- **A spread is not an interval.** Spreads in the tables are observed interquartile ranges over the results in hand. The paired differences carry a real ${String(Math.round(DEFAULT_CONFIDENCE * 100))}% bootstrap interval, and the two are different things: only the second says anything about how much of a gap survives resampling.`,
     `- **An interval that contains zero is ${NO_MEASURED_DIFFERENCE}**, not a small one. ${String(analysis.summary.measured)} of ${String(analysis.summary.ran)} comparisons that could be run produced one.`,
     `- **Clustering is on category and on nothing else.** Two tasks in different categories that share a source, an entity or a week are still treated as independent observations, and a corpus this size is small enough that they might not be.`,
     `- **A ranking withheld is not a tie.** It means the sample cannot order the backends, which is a different statement from their being equal.`,

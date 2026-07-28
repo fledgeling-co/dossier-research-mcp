@@ -210,7 +210,12 @@ export function comparisons(agg: BenchAggregate): readonly Comparison[] {
                 scope,
                 a.provider,
                 b.provider,
-                'scope-not-scorable',
+                // Not `scope-not-scorable`: the scope is fine and a candidate
+                // could not enter it, which leaves one eligible backend and is
+                // exactly what `rank.ts` calls too few candidates. Naming it
+                // the same way is what makes the two withheld tables readable
+                // side by side.
+                'too-few-candidates',
                 blocked.map((c) => c.why).join(' '),
               ),
             );
