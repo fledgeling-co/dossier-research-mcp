@@ -129,6 +129,14 @@ export type ParsedArgs =
  * every refusal test while leaving the script dead.
  */
 export interface FailCheckIo {
+  /**
+   * Usage, and only usage.
+   *
+   * Everything else this command says is a diagnostic and goes to `err`, but a
+   * `--help` a caller asked for is the command's output and belongs where they
+   * can redirect it. `bench/src/detector/cli.ts` splits them the same way.
+   */
+  readonly out: (text: string) => void;
   readonly err: (text: string) => void;
   /**
    * Ask the backend one question. The only thing here that spends.
@@ -242,6 +250,9 @@ function askViaSpawn(question: string, options: Options, binPath: string): Promi
 /** The real sinks: stderr, a spawned CLI, the product's own probe, and a file. */
 export function realIo(): FailCheckIo {
   return {
+    out: (text) => {
+      process.stdout.write(text);
+    },
     err: (text) => {
       process.stderr.write(text);
     },
@@ -290,7 +301,7 @@ async function pooled<T, R>(
  */
 export async function runFailCheck(argv: readonly string[], io: FailCheckIo): Promise<number> {
   if (argv.includes('--help') || argv.includes('-h')) {
-    io.err(USAGE);
+    io.out(USAGE);
     return 0;
   }
 

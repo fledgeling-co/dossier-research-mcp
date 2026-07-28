@@ -84,6 +84,7 @@ const READY: CliStatus = {
 
 interface Ran {
   readonly code: number;
+  readonly stdout: string;
   readonly stderr: string;
   /** Every question the command asked. Empty is the assertion that matters most. */
   readonly asked: string[];
@@ -99,6 +100,7 @@ async function run(
   args: readonly string[],
   over: { readonly answer?: string; readonly status?: CliStatus } = {},
 ): Promise<Ran> {
+  let stdout = '';
   let stderr = '';
   const asked: string[] = [];
   const spawnedPaths: string[] = [];
@@ -106,6 +108,9 @@ async function run(
   const written: { path: string; text: string }[] = [];
 
   const io: FailCheckIo = {
+    out: (text) => {
+      stdout += text;
+    },
     err: (text) => {
       stderr += text;
     },
@@ -123,7 +128,7 @@ async function run(
     },
   };
   const code = await runFailCheck(args, io);
-  return { code, stderr, asked, spawnedPaths, identified, written };
+  return { code, stdout, stderr, asked, spawnedPaths, identified, written };
 }
 
 describe('GATE-01 nothing is spawned without --confirm', () => {
@@ -343,9 +348,18 @@ describe('GATE-08 usage', () => {
   it('prints usage naming the confirmation flag and what it spends', async () => {
     const ran = await run(['--help']);
     expect(ran.code).toBe(0);
-    expect(ran.stderr).toContain('--confirm');
-    expect(ran.stderr).toContain('spends that CLI');
+    // Usage is the command's output, so it goes to stdout where a caller can
+    // redirect it. Every other line this command writes is a diagnostic.
+    expect(ran.stdout).toContain('--confirm');
+    expect(ran.stdout).toContain('spends that CLI');
+    expect(ran.stderr).toBe('');
     expect(ran.asked).toEqual([]);
+  });
+
+  it('a refusal is a diagnostic and stays off stdout', async () => {
+    const ran = await run(['--dir', corpusOf(1)]);
+    expect(ran.stdout).toBe('');
+    expect(ran.stderr).toContain('--confirm');
   });
 });
 
