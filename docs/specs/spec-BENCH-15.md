@@ -200,3 +200,21 @@ Not re-derived: `report/aggregate.ts` already keeps four distinct reasons precis
 `npm run gate` (typecheck, lint, `lint:source`, `lint:docs`, `test:all`, build), run twice, plus a stdio smoke against `dist/index.js`. There is no UI and no Playwright; the substitution is `ORCHESTRATOR.md`'s.
 
 The two behaviour claims that matter are proved by **execution against the pre-change code**, not by assertion: the spurious `1200000000`, and the blanked figure in `novel 2026`. Both have a test that fails against `main` and passes after.
+
+## Progress
+
+Delivered on `ai/bench-15`, worktree `.worktrees/BENCH-15`. Gate green twice (2,409 tests, 2 skipped), plus a stdio smoke against `dist/index.js`: initialize, 37 tools, `research_plan` returns 9,701 characters with no stdout noise.
+
+Every acceptance criterion DUP-01 to DUP-14 has a test. The two behaviour claims are proved by **mutation**: with `bench/src/score/numbers.ts` restored from `main`, five cases in `shared-primitives.test.ts` and three in `accuracy.test.ts` fail, including `scoreAccuracy` recovering a gold of 26 from `03/04/26`, a gold of 30 from a timestamp, and a gold of 1.2 billion from `1.2 ... billion` split by a date. The callers changed, not only the primitive.
+
+### Found while implementing, and fixed here
+
+- **The month pattern had no left boundary.** With only the right-hand guard the alternation could start matching one character in, so `smarch 2026` masked from the `m` and `undecember 2026` from the `d`. Caught by the test that asserts the closure, not by reading.
+- **The clock shape had no right-hand digit guard.** `a 3:100 ratio` masked `3:10` and left a bare `0`, a figure the report never wrote. Neither copy had the guard, and it could not bite while only one of them carried the clock shape.
+
+### Found while implementing, recorded for an owner rather than fixed
+
+- **A hyphenated token still yields a number on the accuracy path.** `covid-19 killed 26` reads `[19, 26]` there and `[26]` in the due-weight scorer, whose `REJECT_BEFORE` rule catches it. A different rule from date masking, living in the extraction functions this item deliberately kept apart.
+- **`endsWithMagnitude` reads any word ending in a magnitude letter as a magnitude.** `MAGNITUDE_TAIL` holds `t`, `m`, `b` and `k`, so `gpt-4` looks like the right-hand side of a range and the due-weight scorer reads `4` out of it. Pre-existing, unchanged by this item, and confirmed by executing both readers side by side.
+- **`stripComments` in `bench/src/import-graph.ts` cannot see a regular-expression literal.** A file holding one with a quote inside it, such as `due-weight/numbers.ts`'s `/[\s([{<"']/u`, leaks its later comments into the stripped text. The direction is safe, since it can only ever produce a false positive on a guard, but a guard written as a bare word search fires on a comment. Worked around where it bites, with the reason.
+- **The transitive purity walk follows an `import type` edge.** That statement is erased under `verbatimModuleSyntax`, so it is not a runtime edge. `combine/eligibility.ts` takes three types from `report/aggregate.ts`, and following that edge reports seven files in `bench/src/combine/` as reaching `node:fs`, `node:fs/promises` and `node:child_process` eight hops out through `src/local/cli.ts`. That is why `bench/src/combine/` and `bench/src/report/` stay on the text check while `bench/src/stats/` and the task loader moved to the walk. Teaching the walk to skip a type-only statement would reverse a decision BENCH-19 took deliberately and pinned with its own test, and would change its exact-reach assertion for `detector/report.ts`, two of whose six modules are reachable only that way. It needs an owner.
