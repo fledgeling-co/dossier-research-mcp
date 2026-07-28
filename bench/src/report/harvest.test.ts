@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { CitationEvidenceView } from '../score/citations.js';
+import type { PublicationDateView } from '../score/recency.js';
 import { METRIC_IDS } from './metrics.js';
-import { harvestCell } from './harvest.js';
+import { harvestCell, type HarvestEvidenceView } from './harvest.js';
 import { cell, task } from './fixtures.js';
 
 const REPORT = [
@@ -25,7 +25,10 @@ function longPage(prefix: string): string {
   return `${prefix} ${filler}`;
 }
 
-function evidence(): CitationEvidenceView {
+function evidence(published: {
+  readonly a?: PublicationDateView;
+  readonly b?: PublicationDateView;
+} = {}): HarvestEvidenceView {
   return {
     pages: [
       {
@@ -35,6 +38,7 @@ function evidence(): CitationEvidenceView {
         verdict: 'live',
         completeHtml: true,
         anchors: [],
+        published: published.a ?? { status: 'absent' },
       },
       {
         url: 'https://other.test/b',
@@ -43,6 +47,7 @@ function evidence(): CitationEvidenceView {
         verdict: 'live',
         completeHtml: true,
         anchors: [],
+        published: published.b ?? { status: 'absent' },
       },
     ],
     registry: [

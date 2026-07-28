@@ -148,7 +148,7 @@ const DESCRIPTORS: readonly MetricDescriptor[] = [
     direction: 'higher',
     unit: 'share',
     caveat:
-      'needs a publication date per source, which nothing in the stored results records. Reported unavailable rather than approximated from a fetch time, which would grade every source fresh.',
+      'the share of **datable** sources published inside their durability horizon. An undated source leaves the denominator and never counts as fresh, so read it beside the count of sources whose date could not be established.',
   },
   {
     id: 'citation-accuracy',

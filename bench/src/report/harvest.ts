@@ -8,6 +8,7 @@ import { scoreRefusal } from '../score/refusal.js';
 import { scoreDueWeight } from '../score/due-weight/index.js';
 import { scoreCitationIntegrity, type CitationEvidenceView } from '../score/citations.js';
 import { scoreSourceQuality } from '../score/source-quality.js';
+import { recencyInputs, scoreRecency, type DatedPage, type DatingCounts } from '../score/recency.js';
 import { sourceUniverse } from '../score/matrix.js';
 import { METRIC_IDS, type MetricId } from './metrics.js';
 
@@ -41,6 +42,8 @@ export interface RegistryCounts {
 
 const NO_REGISTRY: RegistryCounts = { present: 0, absent: 0, unchecked: 0, invalid: 0 };
 
+const NO_DATING: DatingCounts = { dated: 0, absent: 0, unchecked: 0 };
+
 /** Whether this cell had a citation evidence snapshot to score against. */
 export type EvidenceState = 'present' | 'absent';
 
@@ -62,6 +65,16 @@ export interface ScoredCell {
   /** Why each null is null. Keyed identically, so an absence always has a reason. */
   readonly unmeasured: Readonly<Record<MetricId, string>>;
   readonly registry: RegistryCounts;
+  /**
+   * How many of this cell's cited sources could be dated, and why the rest
+   * could not.
+   *
+   * A count rather than a metric, exactly as `registry` is, because it describes
+   * the instrument rather than the backend's quality. It is what makes the
+   * recency figure readable: a fresh share of 1.0 over one dated source in forty
+   * is not a finding, and only the denominator beside it says so.
+   */
+  readonly dating: DatingCounts;
   readonly evidence: EvidenceState;
   /** Anything about this cell the pipeline could not do, as opposed to the backend. */
   readonly gaps: readonly string[];
@@ -80,7 +93,20 @@ export interface HarvestInput {
    */
   readonly report?: string | undefined;
   /** BENCH-03's snapshot for this cell, when one was collected. */
-  readonly evidence?: CitationEvidenceView | undefined;
+  readonly evidence?: HarvestEvidenceView | undefined;
+}
+
+/**
+ * The snapshot, as this file needs to see it.
+ *
+ * Wider than `CitationEvidenceView` by exactly one field: each page's
+ * publication date, which the citation scorer has no use for and recency cannot
+ * work without. **Required, not optional.** An optional field is a sentinel a
+ * caller can forget, and a caller that forgot this one would silently report
+ * every source undated while every test stayed green.
+ */
+export interface HarvestEvidenceView extends CitationEvidenceView {
+  readonly pages: readonly (CitationEvidenceView['pages'][number] & DatedPage)[];
 }
 
 type MutableMetrics = Record<MetricId, number | null>;
@@ -97,28 +123,33 @@ function blank(reason: string): { metrics: MutableMetrics; unmeasured: MutableRe
 }
 
 /**
- * Recency, permanently unavailable, with the reason on every cell.
+ * Recency, computed rather than withheld, from 28 July 2026.
  *
- * BENCH-06 built the durability axis and it needs a publication date per
- * source. Nothing in the stored results has one: the cell record carries a
- * source count, and BENCH-03's `PageEvidence` carries url, verdict, text,
- * truncation, anchors and the time it was *checked*, which is not the time it
- * was published. Approximating one from the other would grade every source
- * fresh and make the whole dimension a lie in the direction that flatters
- * every backend.
+ * It was declared permanently unavailable here, and the reason was true: BENCH-06
+ * built the durability axis, the axis needs a publication date per source, and
+ * nothing recorded one. `PageEvidence` carried the time a page was *checked*,
+ * which is a different fact, and approximating one from the other would have
+ * graded every source fresh.
  *
- * Reported as unavailable with the missing input named, which is the shape
- * BENCH-03 established for a dimension it could not compute. It is a real gap
- * in the pipeline and is written up in `docs/bench/reporting.md`.
+ * BENCH-16 closed that at the only point where it can be closed: the collector
+ * now extracts a publication date from the fetched page, or records explicitly
+ * that it could not, and `PageEvidence.published` persists the answer. What is
+ * left here is the join, and it is deliberately thin: `recencyInputs` builds the
+ * source list and the counts from one pass so the printed denominator cannot
+ * disagree with the score above it.
+ *
+ * **A source with no date never scores as fresh**, and that is enforced by
+ * `assessSourceRecency` rather than restated here: an undated source is graded
+ * `undated` and leaves the denominator entirely. A report where nothing could be
+ * dated comes back `unmeasurable` with its own reason, which lands as `null` and
+ * never as a zero.
  */
-const RECENCY_UNAVAILABLE =
-  'no publication date is recorded for any source, in the cell store or in the citation evidence snapshot, so the durability axis cannot be fed from stored results. Approximating one from the fetch time would grade every source fresh.';
-
 function record(
   input: HarvestInput,
   metrics: MutableMetrics,
   unmeasured: MutableReasons,
   registry: RegistryCounts,
+  dating: DatingCounts,
   evidence: EvidenceState,
   gaps: readonly string[],
 ): ScoredCell {
@@ -137,6 +168,7 @@ function record(
     metrics,
     unmeasured,
     registry,
+    dating,
     evidence,
     gaps,
   };
@@ -184,14 +216,14 @@ export function harvestCell(input: HarvestInput): ScoredCell {
     const { metrics, unmeasured } = blank(
       'the cell failed and produced no report, so nothing about this backend was measured here. It counts against the completion rate and reaches no metric denominator.',
     );
-    return record(input, metrics, unmeasured, NO_REGISTRY, 'absent', []);
+    return record(input, metrics, unmeasured, NO_REGISTRY, NO_DATING, 'absent', []);
   }
 
   if (report === undefined || report === '') {
     const { metrics, unmeasured } = blank(
       'the cell completed but its report could not be read from the store, so this is a gap in the reporting pipeline rather than a result about the backend.',
     );
-    return record(input, metrics, unmeasured, NO_REGISTRY, 'absent', [
+    return record(input, metrics, unmeasured, NO_REGISTRY, NO_DATING, 'absent', [
       `${cell.key}: the report at ${cell.reportPath} could not be read`,
     ]);
   }
@@ -261,7 +293,22 @@ export function harvestCell(input: HarvestInput): ScoredCell {
     dueWeight.falseBalance.measured ? '' : dueWeight.falseBalance.reason,
   );
 
-  set(metrics, unmeasured, 'recency-fresh-share', null, RECENCY_UNAVAILABLE);
+  const cited = sourceUniverse(report);
+  // One pass builds both the graded source list and the counts printed beside
+  // the score, so the denominator on the report can never disagree with the
+  // figure above it.
+  const { sources: recencySources, dating } = recencyInputs(
+    cited,
+    evidence === undefined ? [] : evidence.pages,
+  );
+  const recency = scoreRecency(recencySources, task.asOf);
+  set(
+    metrics,
+    unmeasured,
+    'recency-fresh-share',
+    recency.status === 'scored' ? recency.freshShare : null,
+    recency.status === 'scored' ? '' : recency.why,
+  );
   set(metrics, unmeasured, 'report-chars', cell.reportChars, '');
 
   // Citation integrity and source quality both need the snapshot. Scored with
@@ -344,7 +391,6 @@ export function harvestCell(input: HarvestInput): ScoredCell {
         }
       : NO_REGISTRY;
 
-  const cited = sourceUniverse(report);
   const pages = evidence === undefined ? [] : evidence.pages.map((p) => ({ url: p.url, text: p.text }));
   const sourceQuality = scoreSourceQuality(cited, pages);
   if (sourceQuality.status === 'scored') {
@@ -367,5 +413,5 @@ export function harvestCell(input: HarvestInput): ScoredCell {
     set(metrics, unmeasured, 'independent-domains-collapsed', null, sourceQuality.why);
   }
 
-  return record(input, metrics, unmeasured, registry, evidenceState, gaps);
+  return record(input, metrics, unmeasured, registry, dating, evidenceState, gaps);
 }

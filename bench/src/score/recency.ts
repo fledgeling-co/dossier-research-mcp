@@ -417,3 +417,100 @@ export function scoreRecency(
     notes,
   };
 }
+
+/**
+ * A page's publication date as this scorer needs to see it.
+ *
+ * Declared **structurally** rather than imported from `bench/src/citations/`,
+ * exactly as `containment.ts` declares `SourceEvidence`, so nothing in
+ * `bench/src/score/` carries a dependency on the collector and its purity guard
+ * is unaffected. The collector's own persisted type satisfies this by shape, and
+ * a type-level assertion in the tests proves the two agree at compile time
+ * rather than by inspection.
+ */
+export type PublicationDateView =
+  | { readonly status: 'found'; readonly date: string }
+  | { readonly status: 'absent' }
+  | { readonly status: 'unchecked' };
+
+export interface DatedPage {
+  /** Canonical form, which is the key this joins on. */
+  readonly url: string;
+  readonly published: PublicationDateView;
+}
+
+/**
+ * How many of a report's sources could be dated, and why the rest could not.
+ *
+ * Three counts rather than "dated and undated", because the two undated cases
+ * have different causes and different fixes. `absent` is a publisher who states
+ * no date, which is a fact about the source. `unchecked` is a page this pipeline
+ * never read, or read only as far as a cap, which is a fact about us. Collapsing
+ * them would let a collection pass that fetched nothing report a corpus of
+ * publishers who date nothing.
+ */
+export interface DatingCounts {
+  readonly dated: number;
+  readonly absent: number;
+  readonly unchecked: number;
+}
+
+export interface RecencyInputs {
+  readonly sources: readonly RecencySource[];
+  readonly dating: DatingCounts;
+}
+
+/**
+ * Join a report's cited URLs to the pages that were fetched for them.
+ *
+ * One function so the list `scoreRecency` grades and the counts the report
+ * prints beside it are derived from the same pass. Computed separately they
+ * would eventually disagree, and a fresh share whose printed denominator says
+ * something different is worse than either number alone.
+ *
+ * **A cited URL with no page record counts `unchecked`**, not `absent`. It was
+ * never fetched, whether because the collector's page budget bound or because no
+ * snapshot exists at all, and that is the same absence as a page that would not
+ * load. Nothing here may report it as a publisher who omitted a date.
+ */
+export function recencyInputs(
+  citedUrls: readonly string[],
+  pages: readonly DatedPage[],
+): RecencyInputs {
+  const byUrl = new Map<string, DatedPage>();
+  for (const page of pages) byUrl.set(page.url, page);
+
+  const sources: RecencySource[] = [];
+  let dated = 0;
+  let absent = 0;
+  let unchecked = 0;
+
+  for (const url of citedUrls) {
+    const published = byUrl.get(url)?.published;
+    if (published === undefined) {
+      unchecked += 1;
+      sources.push({ url });
+      continue;
+    }
+    switch (published.status) {
+      case 'found':
+        dated += 1;
+        sources.push({ url, publishedAt: published.date });
+        break;
+      case 'absent':
+        absent += 1;
+        sources.push({ url });
+        break;
+      case 'unchecked':
+        unchecked += 1;
+        sources.push({ url });
+        break;
+      default: {
+        const exhaustive: never = published;
+        return exhaustive;
+      }
+    }
+  }
+
+  return { sources, dating: { dated, absent, unchecked } };
+}

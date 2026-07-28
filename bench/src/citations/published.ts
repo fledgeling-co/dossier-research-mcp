@@ -383,6 +383,39 @@ function found(
 }
 
 /**
+ * The earliest of several usable readings of one key.
+ *
+ * Split out because "the earliest wins" has to hold **across** the values a
+ * single key carries as well as inside one of them, and the first version of
+ * this file only did the second. A page emitting two `datePublished` values
+ * would then have been dated by whichever the parser reached first, which is
+ * document order and not a judgement at all.
+ *
+ * Preference between two *names* is a different question and is decided by the
+ * order the name lists declare, because `citation_publication_date` saying one
+ * thing and `citation_online_date` saying another is a publisher being specific
+ * rather than a page carrying two dates.
+ */
+function earliestOf(
+  candidates: readonly { readonly date: string; readonly raw: string; readonly why: string }[],
+): { readonly date: string; readonly raw: string; readonly why: string } | undefined {
+  let best: { date: string; raw: string; why: string } | undefined;
+  for (const candidate of candidates) {
+    if (best === undefined || candidate.date < best.date) best = { ...candidate };
+  }
+  if (best === undefined) return undefined;
+  return candidates.length > 1
+    ? {
+        ...best,
+        why:
+          best.why === ''
+            ? 'several dates were stated and the earliest was taken, which is the reading that cannot flatter a source'
+            : best.why,
+      }
+    : best;
+}
+
+/**
  * Try one list of meta names, in order, and report what was refused on the way.
  *
  * The refusals are carried rather than dropped because "a date was present and
@@ -397,21 +430,27 @@ function fromMetaNames(
 ): SignalAttempt {
   const rejected: string[] = [];
   for (const name of names) {
+    const usable: { date: string; raw: string; why: string }[] = [];
     for (const meta of metas) {
       if (meta.name !== name) continue;
       const reading = readPublicationDate(meta.content, bounds);
       if (reading.date !== null) {
-        return {
-          found: found(
-            signal,
-            reading.date,
-            meta.content,
-            `read from the \`${name}\` meta tag${reading.why === '' ? '' : `; ${reading.why}`}`,
-          ),
-          rejected,
-        };
+        usable.push({ date: reading.date, raw: meta.content, why: reading.why });
+        continue;
       }
       rejected.push(`the \`${name}\` meta tag was not usable: ${reading.why}`);
+    }
+    const best = earliestOf(usable);
+    if (best !== undefined) {
+      return {
+        found: found(
+          signal,
+          best.date,
+          best.raw,
+          `read from the \`${name}\` meta tag${best.why === '' ? '' : `; ${best.why}`}`,
+        ),
+        rejected,
+      };
     }
   }
   return { rejected };
@@ -444,20 +483,26 @@ function fromJsonLd(html: string, bounds: PlausibleRange): SignalAttempt {
     collectDatePublished(parsed, 0, { nodes: MAX_JSON_LD_NODES }, values);
   }
 
+  const usable: { date: string; raw: string; why: string }[] = [];
   for (const value of values) {
     const reading = readPublicationDate(value, bounds);
     if (reading.date !== null) {
-      return {
-        found: found(
-          'json-ld',
-          reading.date,
-          value,
-          `read from a schema.org \`datePublished\` in a JSON-LD block${reading.why === '' ? '' : `; ${reading.why}`}`,
-        ),
-        rejected,
-      };
+      usable.push({ date: reading.date, raw: value, why: reading.why });
+      continue;
     }
     rejected.push(`a JSON-LD \`datePublished\` was not usable: ${reading.why}`);
+  }
+  const best = earliestOf(usable);
+  if (best !== undefined) {
+    return {
+      found: found(
+        'json-ld',
+        best.date,
+        best.raw,
+        `read from a schema.org \`datePublished\` in a JSON-LD block${best.why === '' ? '' : `; ${best.why}`}`,
+      ),
+      rejected,
+    };
   }
   return { rejected };
 }

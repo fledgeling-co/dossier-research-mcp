@@ -73,12 +73,17 @@ export {
   DURABLE_FLOOR,
   PERISHABLE_CEILING,
   recencyHorizon,
+  recencyInputs,
   scoreRecency,
 } from './recency.js';
 export type {
+  DatedPage,
+  DatingCounts,
   Durability,
   DurabilityVerdict,
   Horizon,
+  PublicationDateView,
+  RecencyInputs,
   RecencyNotApplicable,
   RecencyResult,
   RecencyScored,

@@ -35,6 +35,13 @@ function snapshot(over: Partial<CitationEvidence> = {}): CitationEvidence {
         truncated: false,
         completeHtml: true,
         anchors: ['results'],
+        published: {
+          status: 'found',
+          date: '2026-03-01',
+          signal: 'json-ld',
+          raw: '2026-03-01T09:00:00Z',
+          detail: 'read from a schema.org `datePublished` in a JSON-LD block',
+        },
         checkedAt: '2026-07-27T00:00:00.000Z',
       },
     ],

@@ -24,13 +24,40 @@ export {
   EVIDENCE_VERSION,
   MAX_PAGE_TEXT_CHARS,
   PageEvidenceSchema,
+  PublicationDateSchema,
   RegistryAnswerSchema,
   emptyEvidence,
   pagesByUrl,
   parseEvidence,
   registryByIdentifier,
 } from './evidence.js';
-export type { CitationEvidence, PageEvidence, RegistryAnswer } from './evidence.js';
+export type {
+  CitationEvidence,
+  PageEvidence,
+  PersistedPublicationDate,
+  RegistryAnswer,
+} from './evidence.js';
+
+export {
+  EARLIEST_PUBLICATION,
+  EARLIEST_URL_YEAR,
+  FUTURE_GRACE_DAYS,
+  PUBLICATION_SIGNALS,
+  extractPublicationDate,
+  plausibleRange,
+  readMetaTags,
+  readPublicationDate,
+} from './published.js';
+export type {
+  DateReading,
+  PlausibleRange,
+  PublicationAbsent,
+  PublicationDate,
+  PublicationFound,
+  PublicationInput,
+  PublicationSignal,
+  PublicationUnchecked,
+} from './published.js';
 
 export { MAX_PAGE_BYTES, MAX_REGISTRY_BYTES, fetchPage, fetchRegistry } from './fetch.js';
 export type { FetchedPage } from './fetch.js';

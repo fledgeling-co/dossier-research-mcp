@@ -4,6 +4,7 @@ import type { CellRecord } from '../run/cell.js';
 import { cellKey } from '../run/cell.js';
 import { METRIC_IDS, type MetricId } from './metrics.js';
 import type { RegistryCounts, ScoredCell } from './harvest.js';
+import type { DatingCounts } from '../score/recency.js';
 
 /**
  * Fixtures the report tests build their inputs from.
@@ -13,6 +14,8 @@ import type { RegistryCounts, ScoredCell } from './harvest.js';
  */
 
 export const NO_REGISTRY: RegistryCounts = { present: 0, absent: 0, unchecked: 0, invalid: 0 };
+
+export const NO_DATING: DatingCounts = { dated: 0, absent: 0, unchecked: 0 };
 
 export function task(id: string, category: TaskCategory, stale = false): BenchTask {
   return {
@@ -108,6 +111,7 @@ export function cell(
 export interface ScoredOptions extends CellOptions {
   readonly stale?: boolean;
   readonly registry?: RegistryCounts;
+  readonly dating?: DatingCounts;
   readonly gaps?: readonly string[];
 }
 
@@ -149,6 +153,7 @@ export function scoredCell(
     metrics,
     unmeasured,
     registry: options.registry ?? NO_REGISTRY,
+    dating: options.dating ?? NO_DATING,
     evidence: 'absent',
     gaps: options.gaps ?? [],
   };

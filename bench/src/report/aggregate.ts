@@ -4,6 +4,7 @@ import { METRIC_IDS, type MetricId } from './metrics.js';
 import { MIN_REPETITIONS_FOR_SPREAD, TARGET_REPETITIONS } from '../run/cell.js';
 import { summarise, type SampleUnit, type SpreadReport } from './spread.js';
 import type { RegistryCounts, ScoredCell } from './harvest.js';
+import type { DatingCounts } from '../score/recency.js';
 
 /**
  * Cells in, an aggregate out. Both refusal rules live here.
@@ -219,6 +220,15 @@ export interface BackendSummary {
   readonly wallClockMs: SpreadReport | null;
   readonly totalCostUsd: number;
   readonly registry: RegistryCounts;
+  /**
+   * How many of this backend's cited sources could be dated.
+   *
+   * Beside the recency figure for the same reason the registry `unchecked`
+   * count sits beside the citation figures: the score is computed over what
+   * could be measured, and only this says how much of the corpus that was. A
+   * fresh share of 1.0 over one dated source in forty is not a finding.
+   */
+  readonly dating: DatingCounts;
 }
 
 export interface CorpusFacts {
@@ -249,6 +259,8 @@ export interface BenchAggregate {
   }[];
   readonly overall: CompletionCounts;
   readonly registry: RegistryCounts;
+  /** Publication dates across every counted cell: found, absent, never looked. */
+  readonly dating: DatingCounts;
   /** Cells whose stored report or snapshot was missing. Ours, not a backend's. */
   readonly pipelineGaps: readonly string[];
   /** Cells naming a task that is not in the corpus. Counted, never silently dropped. */
@@ -279,6 +291,8 @@ export interface AggregateInput {
 
 const EMPTY_REGISTRY: RegistryCounts = { present: 0, absent: 0, unchecked: 0, invalid: 0 };
 
+const EMPTY_DATING: DatingCounts = { dated: 0, absent: 0, unchecked: 0 };
+
 /**
  * The key two coordinates are grouped under.
  *
@@ -304,6 +318,28 @@ function addRegistry(a: RegistryCounts, b: RegistryCounts): RegistryCounts {
 export function uncheckedShare(counts: RegistryCounts): number | null {
   const total = counts.present + counts.absent + counts.unchecked + counts.invalid;
   return total === 0 ? null : counts.unchecked / total;
+}
+
+/**
+ * The share of a report's cited sources whose publication date could not be
+ * established. Null when nothing was cited.
+ *
+ * Both undated causes are in the numerator, because from the score's point of
+ * view they are one thing: neither can be graded. The two counts stay apart on
+ * the record so a reader can tell a corpus of undated publishers from a
+ * collection pass that did not run.
+ */
+export function undatedShare(counts: DatingCounts): number | null {
+  const total = counts.dated + counts.absent + counts.unchecked;
+  return total === 0 ? null : (counts.absent + counts.unchecked) / total;
+}
+
+function addDating(a: DatingCounts, b: DatingCounts): DatingCounts {
+  return {
+    dated: a.dated + b.dated,
+    absent: a.absent + b.absent,
+    unchecked: a.unchecked + b.unchecked,
+  };
 }
 
 function completion(cells: readonly ScoredCell[]): CompletionCounts {
@@ -706,6 +742,7 @@ function buildBackends(
   categoryGroups: readonly CategoryGroup[],
   providers: readonly string[],
   minCompletionShare: number,
+  cells: readonly ScoredCell[],
 ): BackendSummary[] {
   return providers.map((provider) => {
     const mine = categoryGroups.filter((g) => g.provider === provider);
@@ -728,6 +765,16 @@ function buildBackends(
     for (const group of mine) {
       registry = addRegistry(registry, group.registry);
       totalCostUsd += group.totalCostUsd;
+    }
+
+    // Taken straight from the cells rather than threaded through the two group
+    // stages. `registry` rides on `TaskGroup` and `CategoryGroup` because the
+    // JSON emits it per group; nothing needs a per-task dating count, and adding
+    // one to two more record types to reach a number already available here
+    // would be surface for its own sake.
+    let dating = EMPTY_DATING;
+    for (const cell of cells) {
+      if (cell.provider === provider) dating = addDating(dating, cell.dating);
     }
 
     const wholeCompletion = mergeCompletion(mine.map((g) => g.completion));
@@ -767,6 +814,7 @@ function buildBackends(
       ),
       totalCostUsd: Number(totalCostUsd.toFixed(4)),
       registry,
+      dating,
     };
   });
 }
@@ -826,10 +874,14 @@ export function aggregate(input: AggregateInput): BenchAggregate {
     minTasksPerCategory,
     minCompletionShare,
   );
-  const backends = buildBackends(categoryGroups, providers, minCompletionShare);
+  const backends = buildBackends(categoryGroups, providers, minCompletionShare, cells);
 
   let registry = EMPTY_REGISTRY;
-  for (const cell of cells) registry = addRegistry(registry, cell.registry);
+  let dating = EMPTY_DATING;
+  for (const cell of cells) {
+    registry = addRegistry(registry, cell.registry);
+    dating = addDating(dating, cell.dating);
+  }
 
   const underSampledCategories = TASK_CATEGORIES.filter(
     (c) => tasksByCategory[c] > 0 && tasksByCategory[c] < minTasksPerCategory,
@@ -859,6 +911,7 @@ export function aggregate(input: AggregateInput): BenchAggregate {
     underSampledCategories,
     overall: completion(cells),
     registry,
+    dating,
     pipelineGaps,
     orphanCells,
   };
