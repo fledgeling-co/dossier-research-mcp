@@ -3,7 +3,7 @@ import { dirname, resolve } from 'node:path';
 import { safeFetch } from '../../../src/net/safe-fetch.js';
 import { isEntryPoint } from '../entry.js';
 import { loadCorpusFromDirectory } from '../tasks/index.js';
-import { verifyCorpus, type FetchedSource, type VerificationReport } from './verify.js';
+import { verifyCorpus, type FetchedSource, type SourceFetcher, type VerificationReport } from './verify.js';
 
 /**
  * `npm run bench:verify` — prove the gold set against its own sources.
@@ -71,6 +71,35 @@ function isoDay(now: Date): string {
   return now.toISOString().slice(0, 10);
 }
 
+/**
+ * Where this command's output goes, and everything in it that touches outside.
+ *
+ * Injected on the same shape as `FailCheckIo` and `DetectorIo`. The **write**
+ * seam is not tidiness: `--out` defaults to a committed evidence file, so a
+ * test that drove this command over a temp corpus without redirecting it would
+ * overwrite `bench/evidence/gold-verification.json` with an empty report, and
+ * the gate would go green while destroying the record of what was proven.
+ */
+export interface VerifyIo {
+  readonly err: (text: string) => void;
+  readonly fetcher: SourceFetcher;
+  readonly writeEvidence: (path: string, text: string) => void;
+}
+
+/** The real sinks: stderr, an SSRF-safe fetch, and a file. */
+export function realIo(): VerifyIo {
+  return {
+    err: (text) => {
+      process.stderr.write(text);
+    },
+    fetcher: fetchSource,
+    writeEvidence: (path, text) => {
+      mkdirSync(dirname(path), { recursive: true });
+      writeFileSync(path, text, 'utf8');
+    },
+  };
+}
+
 function summarise(report: VerificationReport): string {
   const lines: string[] = [];
   for (const check of report.checks) {
@@ -82,7 +111,13 @@ function summarise(report: VerificationReport): string {
   return lines.join('\n');
 }
 
-export async function main(argv: readonly string[] = []): Promise<number> {
+/**
+ * The whole command, over the arguments that follow the script name.
+ *
+ * Returns the exit code rather than setting `process.exitCode`, so a suite can
+ * call it twice without the second call inheriting the first one's answer.
+ */
+export async function runVerify(argv: readonly string[], io: VerifyIo): Promise<number> {
   const quiet = argv.includes('--quiet');
   const flag = (name: string): string | undefined => {
     const i = argv.indexOf(name);
@@ -96,29 +131,27 @@ export async function main(argv: readonly string[] = []): Promise<number> {
   const now = new Date();
   const corpus = loadCorpusFromDirectory(resolve(corpusDir), { now });
 
-  process.stderr.write(
+  io.err(
     `Verifying ${String(corpus.tasks.length)} task(s) from ${corpusDir} against their cited sources.\n`,
   );
 
   const report = await verifyCorpus(corpus.tasks, {
-    fetcher: fetchSource,
+    fetcher: io.fetcher,
     checkedAt: isoDay(now),
     onCheck: (check) => {
       if (quiet) return;
       const mark = check.verdict === 'proven' ? 'ok  ' : 'FAIL';
-      process.stderr.write(`  ${mark} ${check.taskId} · ${check.factId} · ${check.verdict}\n`);
+      io.err(`  ${mark} ${check.taskId} · ${check.factId} · ${check.verdict}\n`);
     },
   });
 
-  const out = resolve(evidenceFile);
-  mkdirSync(dirname(out), { recursive: true });
-  writeFileSync(out, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
+  io.writeEvidence(resolve(evidenceFile), `${JSON.stringify(report, null, 2)}\n`);
 
-  process.stderr.write(
+  io.err(
     `\n${String(report.proven)}/${String(report.checks.length)} source checks proven; ${String(report.unreachable)} unreachable.\nEvidence written to ${evidenceFile}\n`,
   );
   if (report.unproven > 0) {
-    process.stderr.write(`\nUnproven:\n${summarise(report)}\n`);
+    io.err(`\nUnproven:\n${summarise(report)}\n`);
     return 1;
   }
   return 0;
@@ -127,7 +160,7 @@ export async function main(argv: readonly string[] = []): Promise<number> {
 // Run only when this file is the process entry point, so importing it from a
 // test cannot fire a live network run.
 if (isEntryPoint(import.meta.url)) {
-  main(process.argv.slice(2))
+  runVerify(process.argv.slice(2), realIo())
     .then((code) => {
       process.exitCode = code;
     })

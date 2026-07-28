@@ -1,12 +1,16 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
+import { resolveTsx, spawnEntry, TSX_MISSING } from '../spawn-entry.js';
 import { appendCell } from '../run/store.js';
 import { evidencePath, writeEvidence } from '../citations/store.js';
 import { emptyEvidence } from '../citations/evidence.js';
 import { parseArgs, renderFromDisk } from './cli.js';
 import { cell } from './fixtures.js';
+
+const REPORT_CLI = fileURLToPath(new URL('./cli.ts', import.meta.url));
 
 const roots: string[] = [];
 function temp(): string {
@@ -321,5 +325,52 @@ describe('an evidence snapshot collected from another report is not scored again
     });
     expect(warnings.join(' ')).toMatch(/not valid JSON/);
     expect(markdown).toContain('# Benchmark report');
+  });
+});
+
+/**
+ * The one thing the nineteen cases above cannot see.
+ *
+ * Every one of them calls `renderFromDisk` or `parseArgs` directly, which
+ * proves the command logic and proves nothing about whether anything invokes
+ * it. `cli.ts` guards its own invocation with an `invokedDirectly` check, and a
+ * guard that silently evaluated false would make `npm run bench:report` print
+ * nothing and exit 0 while all nineteen stayed green.
+ *
+ * `ORCHESTRATOR.md` records this as the surviving gap after BENCH-14: it was
+ * first written down as "report/cli.ts has no wiring test", corrected to
+ * "nineteen cases, but nothing exercises the guard and nothing spawns
+ * bench:report". This is that. Free and offline, so it costs a subprocess and
+ * nothing else.
+ */
+describe('GATE-12 the report entry point is wired', () => {
+  it('the real CLI, spawned over its real argv, prints a report to stdout', async (ctx) => {
+    const tsx = resolveTsx();
+    if (tsx === undefined) {
+      ctx.skip(TSX_MISSING);
+      return;
+    }
+    const s = scaffold();
+    const ran = await spawnEntry(tsx, REPORT_CLI, [
+      '--cells',
+      s.cellsPath,
+      '--tasks',
+      s.tasksDir,
+      '--store',
+      s.storeDir,
+      '--evidence',
+      s.evidenceDir,
+    ]);
+
+    expect(ran.code, ran.stderr).toBe(0);
+    // The report goes to stdout so it can be redirected into a file, which is
+    // exactly how the docs say to run it.
+    expect(ran.stdout).toContain('# Benchmark report');
+    expect(ran.stdout.length).toBeGreaterThan(500);
+  }, 60_000);
+
+  it('names the missing binary and the fix in its skip reason', () => {
+    expect(TSX_MISSING).toContain('tsx');
+    expect(TSX_MISSING).toContain('npm install');
   });
 });
