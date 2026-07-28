@@ -3,6 +3,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { z } from 'zod';
 import type { Config } from '../config.js';
+import { loopProvider } from './loop.js';
 import type { CreateRunArgs, DeepResearchClient } from '../gemini/client.js';
 import type { CostBand, DurationOptions } from '../gemini/cost.js';
 import type { InteractionSnapshot } from '../gemini/types.js';
@@ -186,6 +187,18 @@ function rank(id: CliId): number {
 export function localProviders(config: Config): ResearchProvider[] {
   const wanted = config.localCli ? CLI_ORDER.filter((a) => a.id === config.localCli) : CLI_ORDER;
   return wanted.map((adapter) => localProvider(config, adapter));
+}
+
+/**
+ * The same admitted CLIs, wrapped in the caller-driven loop.
+ *
+ * Shares `localProviders`' selection exactly, including `DOSSIER_LOCAL_CLI`, so
+ * pinning one CLI pins both halves of the pair rather than leaving the loop
+ * running against a backend the direct lane no longer uses.
+ */
+export function loopProviders(config: Config): ResearchProvider[] {
+  const wanted = config.localCli ? CLI_ORDER.filter((a) => a.id === config.localCli) : CLI_ORDER;
+  return wanted.map((adapter) => loopProvider(config, adapter));
 }
 
 export function localCost(): CostBand {

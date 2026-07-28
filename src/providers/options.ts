@@ -2,7 +2,15 @@ import type { Window } from '../research/shapes.js';
 import { windowEnforcement, windowToFromDate, windowToRecency } from '../research/shapes.js';
 import { encodeOpenAiOptions } from './openai.js';
 import { encodeFilters } from './perplexity.js';
-import { isLocalProviderId, LEGACY_LOCAL_ID, type LocalProviderId, type ProviderId, type Shape } from './types.js';
+import {
+  isLocalProviderId,
+  isLoopProviderId,
+  LEGACY_LOCAL_ID,
+  type LocalProviderId,
+  type LoopProviderId,
+  type ProviderId,
+  type Shape,
+} from './types.js';
 import { encodeXaiOptions } from './xai.js';
 
 /**
@@ -49,7 +57,7 @@ export interface ShapedRequest {
  * Keyed on the paid ids only, and exhaustively, so adding an API backend is a
  * compile error here rather than a silent cap of zero.
  */
-const DOMAIN_CAP: Record<Exclude<ProviderId, LocalProviderId | typeof LEGACY_LOCAL_ID>, number> = {
+const DOMAIN_CAP: Record<Exclude<ProviderId, LocalProviderId | LoopProviderId | typeof LEGACY_LOCAL_ID>, number> = {
   gemini: 0,
   perplexity: 20,
   openai: 100,
@@ -62,7 +70,7 @@ const DOMAIN_CAP: Record<Exclude<ProviderId, LocalProviderId | typeof LEGACY_LOC
  * by predicate rather than by a row per CLI, so adding a CLI needs no edit here.
  */
 function domainCap(provider: ProviderId): number {
-  if (isLocalProviderId(provider) || provider === LEGACY_LOCAL_ID) return 0;
+  if (isLocalProviderId(provider) || isLoopProviderId(provider) || provider === LEGACY_LOCAL_ID) return 0;
   return DOMAIN_CAP[provider];
 }
 

@@ -31,6 +31,24 @@ export type LocalProviderId = `local-${CliId}`;
 export const LOCAL_PROVIDER_IDS: readonly LocalProviderId[] = CLI_IDS.map((id): LocalProviderId => `local-${id}`);
 
 /**
+ * The same CLIs again, driving this product's own research loop instead of
+ * answering directly.
+ *
+ * Derived from the same `CLI_IDS` for the same reason, and paired with the
+ * `local-` ids on purpose: `loop-claude` against `local-claude` is one binary,
+ * one subscription and one web search, differing only in whether Dossier's
+ * method sits in between. That difference is the only thing the pair measures,
+ * which is what makes it worth an id rather than a flag.
+ */
+export type LoopProviderId = `loop-${CliId}`;
+export const LOOP_PROVIDER_IDS: readonly LoopProviderId[] = CLI_IDS.map((id): LoopProviderId => `loop-${id}`);
+
+/** True for a backend that drives the caller-driven loop over a CLI. */
+export function isLoopProviderId(id: string): id is LoopProviderId {
+  return (LOOP_PROVIDER_IDS as readonly string[]).includes(id);
+}
+
+/**
  * `local` is retained as a legacy id. It is no longer the id of any provider
  * instance, but records and ledger lines written before the split carry it, and
  * `ProviderRegistry.get` still resolves it to the leading local backend so
@@ -43,6 +61,7 @@ export const PROVIDER_IDS = [
   'xai',
   'local',
   ...LOCAL_PROVIDER_IDS,
+  ...LOOP_PROVIDER_IDS,
 ] as const;
 export type ProviderId = (typeof PROVIDER_IDS)[number];
 

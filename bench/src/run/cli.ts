@@ -3,6 +3,7 @@ import { argv } from 'node:process';
 import { pathToFileURL } from 'node:url';
 import { UTILITY_CALL_BAND } from '../../../src/gemini/cost.js';
 import { buildDeps } from '../../../src/server.js';
+import { NO_SEARCH_CLIS } from '../../../src/providers/loop.js';
 import { PROVIDER_IDS, type ProviderId } from '../../../src/providers/types.js';
 import type { StartRunArgs } from '../../../src/research/runner.js';
 import { loadCorpusFromDirectory, type BenchTask } from '../tasks/index.js';
@@ -69,7 +70,29 @@ const USAGE = `Usage: bench-run --providers <a,b> --repeat <n> --ceiling <usd> [
  * A stale list here would print a reassurance that is false, so
  * `cli.test.ts` re-derives it from the provider sources.
  */
-export const HONOURS_TOOLS: ReadonlySet<string> = new Set(['openai', 'perplexity', 'xai']);
+export const HONOURS_TOOLS: ReadonlySet<string> = new Set([
+  'openai',
+  'perplexity',
+  'xai',
+  // The loop backends control their own argv, so they can deny a CLI its tools
+  // where the CLI supports it. Derived from the provider rather than restated,
+  // because listing them here was wrong within an hour of being written: the
+  // flag reached `loop-claude` while this file reported that it did not.
+  ...NO_SEARCH_CLIS.map((cli) => `loop-${cli}`),
+]);
+
+/**
+ * Loop backends that REFUSE a no-search run rather than ignoring the request.
+ *
+ * The third state, and the one worth planning around. `gemini` ignores the flag
+ * and answers anyway; `loop-codex` throws in `createRun`, because a CLI with no
+ * documented way to deny its tools must not be run with search on under a
+ * closed-book label. Both are "does not honour it", and treating them alike
+ * would queue a batch whose every cell is going to fail one at a time.
+ */
+export function refusesNoSearch(provider: string): boolean {
+  return provider.startsWith('loop-') && !HONOURS_TOOLS.has(provider);
+}
 
 /** Flags taking a value, and flags that are switches. Nothing else is accepted. */
 const VALUE_FLAGS = new Set(['providers', 'ceiling', 'repeat', 'tasks', 'out', 'concurrency']);
@@ -251,13 +274,27 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
     // no-search contains cells that searched, and a reader who assumes
     // otherwise is comparing a closed-book column against an open-book one.
     const reached = args.providers.filter((p) => HONOURS_TOOLS.has(p));
-    const ignored = args.providers.filter((p) => !HONOURS_TOOLS.has(p));
+    const refuses = args.providers.filter((p) => refusesNoSearch(p));
+    const ignored = args.providers.filter((p) => !HONOURS_TOOLS.has(p) && !refusesNoSearch(p));
     say(`No search: reaches ${reached.length === 0 ? 'NONE of the chosen backends' : reached.join(', ')}`);
     if (ignored.length > 0) {
       say(
         `           ${ignored.join(', ')} ignore the declared tools and use their own built-in search; ` +
           'their cells are NOT closed-book',
       );
+    }
+    if (refuses.length > 0) {
+      // Refused here rather than cell by cell. The provider throws for each of
+      // these, so queueing them buys a batch that fails one spawn at a time and
+      // reports a completion rate nobody can interpret.
+      say('');
+      say(
+        `Batch refused before starting: ${refuses.join(', ')} cannot run without search. ` +
+          'Those CLIs have no documented way to deny their tools, and running them with search on under a ' +
+          'closed-book label would be the benchmark misreporting its own conditions. ' +
+          'Drop them from --providers, or drop --no-search.',
+      );
+      return 2;
     }
   }
   if (plan.rollingWindowWarning !== '') say(`Note:      ${plan.rollingWindowWarning}`);

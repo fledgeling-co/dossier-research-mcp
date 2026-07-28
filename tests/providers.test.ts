@@ -3,7 +3,7 @@ import { loadConfig } from '../src/config.js';
 import { CLI_IDS } from '../src/local/cli.js';
 import { AmbiguousSpendError } from '../src/net/retry.js';
 import { ProviderRegistry, routeAmong } from '../src/providers/registry.js';
-import { isLocalProviderId } from '../src/providers/types.js';
+import { isLoopProviderId, isLocalProviderId } from '../src/providers/types.js';
 import type {
   Capabilities,
   CredentialStatus,
@@ -20,7 +20,11 @@ const withKeys = (env: Record<string, string>) =>
   new ProviderRegistry(loadConfig({ DOSSIER_STORE_DIR: '/tmp/x', ...env }), () => null);
 
 /** Backends detected from a key, as opposed to from a binary on PATH. */
-const keyed = (ids: readonly ProviderId[]): ProviderId[] => ids.filter((id) => !isLocalProviderId(id));
+// Both CLI families are excluded for one reason: they are detected from a
+// binary on PATH, so an assertion over them passes or fails on what the
+// developer happens to have installed.
+const keyed = (ids: readonly ProviderId[]): ProviderId[] =>
+  ids.filter((id) => !isLocalProviderId(id) && !isLoopProviderId(id));
 
 describe('provider detection', () => {
   it('reports every backend, configured or not, so a gap is visible', () => {
@@ -62,9 +66,33 @@ describe('provider detection', () => {
     // PATH rather than a key, so asserting over one here would make this test
     // pass or fail depending on whether the developer has Claude Code
     // installed, and a machine-dependent assertion is worse than no assertion.
-    for (const p of r.list().filter((x) => !isLocalProviderId(x.id))) {
+    for (const p of r.list().filter((x) => !isLocalProviderId(x.id) && !isLoopProviderId(x.id))) {
       expect(p.detect().state, p.id).toBe('not-configured');
     }
+  });
+
+  it('pairs every CLI with a loop backend, so the method can be measured against it', () => {
+    // The pairing is what makes the comparison worth anything: `loop-claude`
+    // and `local-claude` are one binary, one subscription and one web search,
+    // differing only in whether Dossier's own method sits in between. A CLI
+    // with no loop twin is a backend whose method contribution cannot be
+    // measured at all, so this is derived from the adapter table rather than
+    // written out, exactly as CLI-16 above is.
+    const ids = withKeys({ GEMINI_API_KEY: 'g' }).list().map((p) => p.id);
+    for (const cli of CLI_IDS) expect(ids, cli).toContain(`loop-${cli}`);
+    expect(ids.filter((id) => isLoopProviderId(id))).toHaveLength(CLI_IDS.length);
+  });
+
+  it('reports the loop backend as costing nothing, like the CLI it drives', () => {
+    // It spawns the CLI several times rather than once, so the temptation is to
+    // price it higher. There is no API charge either way: what it spends more of
+    // is subscription quota, which Dossier cannot see or meter, and inventing a
+    // dollar figure for it would put a number on the ledger that no invoice
+    // will ever match.
+    const r = withKeys({});
+    const est = r.get('loop-claude')?.estimate({ tier: 'fast' });
+    expect(est?.cost.highUsd).toBe(0);
+    expect(est?.cost.basis).toMatch(/subscription/);
   });
 
   it('honours an explicit allow-list over mere key presence', () => {

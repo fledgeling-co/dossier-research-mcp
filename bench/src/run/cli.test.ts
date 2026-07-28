@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { HONOURS_TOOLS, parseArgs } from './cli.js';
+import { NO_SEARCH_CLIS } from '../../../src/providers/loop.js';
+import { HONOURS_TOOLS, parseArgs, refusesNoSearch } from './cli.js';
 
 /**
  * Argument parsing, tested on its own because every defect in it is a spend
@@ -90,6 +91,17 @@ describe('parseArgs', () => {
       expect(parseArgs(['--providers', 'openai', '--ceiling', '5', '--no-search']).noSearch).toBe(true);
     });
 
+    it('separates a backend that refuses a no-search run from one that ignores the flag', () => {
+      // Three states, not two. `gemini` ignores the request and answers with
+      // search on; `loop-codex` throws. Both fail to honour it, and collapsing
+      // them queues a batch that dies one spawn at a time instead of being
+      // refused once, up front, with a reason.
+      expect(refusesNoSearch('loop-codex')).toBe(true);
+      expect(refusesNoSearch('loop-claude')).toBe(false);
+      expect(refusesNoSearch('gemini')).toBe(false);
+      expect(refusesNoSearch('local-claude')).toBe(false);
+    });
+
     it('HONOURS_TOOLS names exactly the providers whose source reads args.tools', () => {
       // The printed reassurance is only as true as this set. A provider that
       // grows tool support and is not added here would be reported as
@@ -105,6 +117,13 @@ describe('parseArgs', () => {
         const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
         if (/\btools\b/.test(code)) reads.add(id);
       }
+      // The loop backends read the declared tools too, and act on them by
+      // choosing the CLI's argv, so they belong in the set for the CLIs that
+      // can be denied their tools and nowhere else. This half was wrong when
+      // first written: the flag reached `loop-claude` while the run printed
+      // that it did not, which is the same false reassurance in the opposite
+      // direction. It is derived from the provider now.
+      for (const cli of NO_SEARCH_CLIS) reads.add(`loop-${cli}`);
       expect([...reads].sort()).toEqual([...HONOURS_TOOLS].sort());
     });
   });

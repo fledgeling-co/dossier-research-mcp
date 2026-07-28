@@ -9,7 +9,7 @@ import {
 } from '../local/model-cache.js';
 import type { ProfileSignal, QuestionProfile } from '../research/profile.js';
 import { geminiProvider } from './gemini.js';
-import { localProviders } from './local.js';
+import { localProviders, loopProviders } from './local.js';
 import { openAiProvider } from './openai.js';
 import { perplexityProvider } from './perplexity.js';
 import { xaiProvider } from './xai.js';
@@ -17,6 +17,7 @@ import {
   isLocalProviderId,
   LEGACY_LOCAL_ID,
   type LocalProviderId,
+  type LoopProviderId,
   type ProviderId,
   type ResearchProvider,
   type Shape,
@@ -76,6 +77,9 @@ export class ProviderRegistry {
       // and the CLIs behave the same way, so `list()` and `get()` do not depend
       // on what happens to be on the developer's PATH.
       ...localProviders(config),
+      // And each of them again driving Dossier's own loop. Built unconditionally
+      // for the same reason as the line above.
+      ...loopProviders(config),
     ];
     // An explicit allow-list is a deliberate operator choice and overrides
     // detection: a key present in the environment for some other tool should
@@ -764,7 +768,7 @@ function paidJoinReason(p: ResearchProvider, need: PanelNeed, cost: CostBand): s
       // 'local'` was: a new id that is not a local one fails to assign, so
       // adding a paid backend is a compile error rather than a silent omission
       // from every panel.
-      const cli: LocalProviderId | typeof LEGACY_LOCAL_ID = p.id;
+      const cli: LocalProviderId | LoopProviderId | typeof LEGACY_LOCAL_ID = p.id;
       void cli;
       return null;
     }
