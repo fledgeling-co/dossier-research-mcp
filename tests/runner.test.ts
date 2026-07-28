@@ -763,4 +763,29 @@ describe('failure classification and the compensating release', () => {
       expect((await store.getRun(run.id))?.state).toBe('completed');
     });
   });
+
+  describe('a run cancelled upstream', () => {
+    it('is terminal, not stalled', async () => {
+      // The live API returns `cancelled` and the status enum did not contain
+      // it, so it fell through `.catch('unknown')` and the run was marked
+      // stalled with "may still be executing and billing". Observed on a real
+      // $7 run that had been over for hours: the watchdog kept polling it and
+      // the caller was told it might still recover.
+      const client = scriptedClient([snapshot({ status: 'cancelled' })]);
+      const runner = new Runner(store, config, () => client);
+      const { run } = await runner.start(START);
+      const after = await runner.refresh(run.id);
+      expect(after?.state).toBe('cancelled');
+      expect(after?.error).toMatch(/cancelled/i);
+    });
+
+    it('is not polled again once it is cancelled', async () => {
+      const client = scriptedClient([snapshot({ status: 'cancelled' })]);
+      const runner = new Runner(store, config, () => client);
+      const { run } = await runner.start(START);
+      await runner.refresh(run.id);
+      const again = await runner.refresh(run.id);
+      expect(again?.state).toBe('cancelled');
+    });
+  });
 });

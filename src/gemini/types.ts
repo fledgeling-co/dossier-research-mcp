@@ -24,7 +24,17 @@ export const AGENT_BY_TIER: Record<ResearchTier, string> = {
  * a renamed terminal state or a malformed payload produced a run that polled
  * forever while the paid job had already finished.
  */
-export const INTERACTION_STATUSES = ['in_progress', 'completed', 'failed', 'unknown'] as const;
+// `cancelled` is a status the live API really returns and this list did not
+// contain, so it fell through `.catch('unknown')` and the runner reported a
+// definitively-over run as "may still be executing and billing", polled it
+// forever, and left it looking recoverable. Observed on a real $7 run.
+export const INTERACTION_STATUSES = [
+  'in_progress',
+  'completed',
+  'failed',
+  'cancelled',
+  'unknown',
+] as const;
 export type InteractionStatus = (typeof INTERACTION_STATUSES)[number];
 
 const ContentItemSchema = z.union([

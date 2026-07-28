@@ -1096,6 +1096,31 @@ export class Runner {
         );
         break;
       }
+      case 'cancelled': {
+        // Terminal, and the opposite of the `unknown` case below it. A run
+        // cancelled upstream — through the provider console, an org policy, or
+        // a quota action — is over, and reporting it as possibly-still-billing
+        // leaves the caller watching a corpse and the watchdog polling it.
+        //
+        // The reservation stays, exactly as a caller-requested cancel leaves
+        // it: the provider may have done billable work before stopping, and
+        // this server cannot know how much. The ledger records what the gate
+        // counted, which is the one thing it can be right about.
+        next = {
+          ...next,
+          state: 'cancelled',
+          error:
+            'The provider reports this run as cancelled. It was not cancelled through this server, so it was ' +
+            'stopped upstream — check the provider console. The reservation stays on the ledger, because work ' +
+            'done before the cancellation may still have been billed.',
+        };
+        await this.store.appendJournal(
+          run.id,
+          'cancelled',
+          'The provider reports this run as cancelled; it was not cancelled through this server.',
+        );
+        break;
+      }
       default: {
         const _exhaustive: never = snapshot.status;
         return _exhaustive;
