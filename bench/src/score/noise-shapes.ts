@@ -123,8 +123,11 @@ export const NOISE_SHAPE_SOURCES: readonly string[] = [
   // `2026-2030` and `1150-1200` ranges: both numbers in a range are real.
   String.raw`\d{4}-(?:0[1-9]|1[0-2])(?!\d)`,
   // `10:30`, `10:30:00`. Left behind when dates were masked, so
-  // `2026-07-27T10:30:00Z` was yielding the figure 30.
-  String.raw`(?<!\d)\d{1,2}:\d{2}(?::\d{2})?`,
+  // `2026-07-27T10:30:00Z` was yielding the figure 30. Guarded on both sides:
+  // without the trailing one, `a 3:100 ratio` masks `3:10` and leaves a bare
+  // `0`, which is a figure the report never wrote. Neither copy had it, and it
+  // did not bite while only one of them carried this shape.
+  String.raw`(?<!\d)\d{1,2}:\d{2}(?::\d{2})?(?!\d)`,
 ];
 
 const NOISE_SHAPES = new RegExp(NOISE_SHAPE_SOURCES.join('|'), 'giu');

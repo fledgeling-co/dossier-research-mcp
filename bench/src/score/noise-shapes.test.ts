@@ -96,6 +96,21 @@ describe('what the mask must never blank, because both numbers are real', () => 
   it('leaves a ratio alone, since a clock time needs two digits after the colon', () => {
     expect(kept('a 3:1 ratio')).toBe('a 3:1 ratio');
   });
+
+  // DUP-02
+  it('leaves a ratio with three digits alone rather than masking half of it', () => {
+    // Found on a second read of this change. Without a trailing digit guard the
+    // clock shape matched `3:10` out of `3:100` and left a bare `0`, which is a
+    // figure the report never wrote. Neither of the two masks this one replaces
+    // had the guard, and it could not bite while only one of them carried the
+    // clock shape at all.
+    expect(kept('a 3:100 ratio')).toBe('a 3:100 ratio');
+    expect(kept('quarter 1:2026')).toBe('quarter 1:2026');
+    // And a real time is still masked, seconds or not.
+    expect(blanked('10:30')).toBe(true);
+    expect(blanked('10:30:00')).toBe(true);
+    expect(kept('at 10:30:00Z')).toBe('at ########Z');
+  });
 });
 
 describe('MONTH names months rather than starting like one', () => {
