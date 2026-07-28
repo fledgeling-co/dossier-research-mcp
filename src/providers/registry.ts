@@ -15,6 +15,7 @@ import { perplexityProvider } from './perplexity.js';
 import { xaiProvider } from './xai.js';
 import {
   isLocalProviderId,
+  isLoopProviderId,
   LEGACY_LOCAL_ID,
   type LocalProviderId,
   type LoopProviderId,
@@ -331,6 +332,22 @@ export function screenByCapability(
   });
 
   const eligible = capable.filter((p) => {
+    // The loop backends are opt-in, and this is a policy rather than a
+    // limitation. Each one spawns its CLI once per search task plus once to
+    // draft — roughly six processes per run against the direct lane's one — so
+    // adding them automatically would double the CLI members of every panel and
+    // multiply the subscription quota it burns by about six, silently, because
+    // that quota is the one thing Dossier cannot meter.
+    //
+    // They stay fully available by name, which is how the benchmark uses them
+    // and how the `loop-claude` against `local-claude` comparison is run.
+    if (isLoopProviderId(p.id)) {
+      rejected.push({
+        id: p.id,
+        why: 'opt-in: it runs Dossier’s own loop over this CLI, roughly six spawns per run, so it joins a panel only when named',
+      });
+      return false;
+    }
     if (p.capabilities.billedTo === 'subscription' && p.detect().signedIn !== true) {
       rejected.push({ id: p.id, why: 'installed but not signed in, so it cannot run' });
       return false;

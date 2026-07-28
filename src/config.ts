@@ -132,7 +132,26 @@ const EnvSchema = z.object({
    * Restricts the free lane to one CLI. Derived from `CLI_IDS` so the adapter
    * table stays the single place a CLI is declared.
    */
-  DOSSIER_LOCAL_CLI: z.enum(CLI_IDS).optional(),
+  DOSSIER_LOCAL_CLI: z
+    .string()
+    .trim()
+    .max(200)
+    .optional()
+    .transform((v, ctx) => {
+      const raw = (v ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+      const bad = raw.filter((s) => !(CLI_IDS as readonly string[]).includes(s));
+      if (bad.length > 0) {
+        // Refused rather than ignored. A typo that silently widens the lane back
+        // to every CLI is the failure that costs subscription quota nobody
+        // asked to spend, and quota is the one cost Dossier cannot meter.
+        ctx.addIssue({
+          code: 'custom',
+          message: `unknown CLI ${bad.map((b) => JSON.stringify(b)).join(', ')}; expected ${CLI_IDS.join(', ')}`,
+        });
+        return z.NEVER;
+      }
+      return raw;
+    }),
 });
 
 export type AuthMode = 'api-key' | 'vertex' | 'none';
@@ -198,7 +217,18 @@ export interface Config {
    * installed and signed in. It restricts; it no longer selects, because with
    * one backend per CLI there is nothing left to select between.
    */
-  readonly localCli: string;
+  /**
+   * CLIs the free lane may use, in the order given. Empty means every one that
+   * is installed and signed in.
+   *
+   * A list rather than a single id, because the useful answer is often neither
+   * "one" nor "all". Two distinct models give a cross-model check — a claim only
+   * one of them found is visibly weaker than one both found, which is the single
+   * most useful signal for catching an invented finding — while a third and
+   * fourth mostly widen web coverage rather than adding checks, and every one of
+   * them spends subscription quota Dossier cannot see.
+   */
+  readonly localCli: readonly string[];
   readonly hermetic: boolean;
 }
 
@@ -277,7 +307,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       .map((s) => s.trim())
       .filter(Boolean)
       .map((s) => resolve(s.startsWith('~') ? join(homedir(), s.slice(1)) : s)),
-    localCli: e.DOSSIER_LOCAL_CLI ?? '',
+    localCli: e.DOSSIER_LOCAL_CLI ?? [],
     hermetic: e.DOSSIER_HERMETIC,
   };
 }

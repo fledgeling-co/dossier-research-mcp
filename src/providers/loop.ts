@@ -48,7 +48,14 @@ import {
   type Session,
   type TaskOutcome,
 } from '../research/local-loop.js';
-import { type CliAdapter, cliWorkDir, probeCli, resolveHeadless, resolveOnPath } from '../local/cli.js';
+import {
+  type CliAdapter,
+  cliWorkDir,
+  hasSignInFile,
+  probeCli,
+  resolveHeadless,
+  resolveOnPath,
+} from '../local/cli.js';
 import { localCost } from './local.js';
 import type { Capabilities, CredentialStatus, ProviderEstimate, ResearchProvider } from './types.js';
 
@@ -482,12 +489,19 @@ export function loopProvider(config: Config, adapter: CliAdapter): ResearchProvi
       if (config.hermetic) {
         return { state: 'not-configured', detail: 'hermetic mode: no subprocesses are spawned' };
       }
-      return resolveOnPath(adapter.bin) === null
-        ? { state: 'not-configured', detail: `\`${adapter.bin}\` is not on PATH` }
-        : {
-            state: 'configured-unverified',
-            detail: `${adapter.label} is on PATH; the loop drives it once per search task.`,
-          };
+      if (resolveOnPath(adapter.bin) === null) {
+        return { state: 'not-configured', detail: `\`${adapter.bin}\` is not on PATH` };
+      }
+      // Reported truthfully, matching the direct lane. Omitting it did not keep
+      // this backend out of panels cleanly — it kept it out with the reason
+      // "installed but not signed in", which is false and would send someone
+      // debugging a sign-in that is fine. Panel membership is decided
+      // deliberately in the registry instead.
+      return {
+        state: 'configured-unverified',
+        detail: `${adapter.label} is on PATH; the loop drives it once per search task.`,
+        signedIn: hasSignInFile(adapter),
+      };
     },
     estimate(): ProviderEstimate {
       return {

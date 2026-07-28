@@ -114,8 +114,21 @@ describe('the local CLI backend', () => {
   });
 
   // CLI-18. The operator override narrows; it no longer chooses.
-  it('restricts the lane to one CLI when DOSSIER_LOCAL_CLI names one', () => {
-    expect(localProviders({ ...config, localCli: 'codex' }).map((p) => p.id)).toEqual(['local-codex']);
+  it('restricts the lane to the CLIs DOSSIER_LOCAL_CLI names', () => {
+    expect(localProviders({ ...config, localCli: ['codex'] }).map((p) => p.id)).toEqual(['local-codex']);
+    // A list, because the useful answer is often neither one nor all: two
+    // distinct models give a cross-model check on a claim, where a third and
+    // fourth mostly widen coverage and each spends quota Dossier cannot meter.
+    expect(localProviders({ ...config, localCli: ['claude', 'codex'] }).map((p) => p.id)).toEqual([
+      'local-claude',
+      'local-codex',
+    ]);
+    // The operator's order wins over the preference order: naming codex first
+    // says which one should lead.
+    expect(localProviders({ ...config, localCli: ['codex', 'claude'] }).map((p) => p.id)).toEqual([
+      'local-codex',
+      'local-claude',
+    ]);
     // Unset is the new default: every CLI is offered, and detection decides.
     expect(localProviders(config).length).toBeGreaterThan(1);
   });

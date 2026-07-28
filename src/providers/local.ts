@@ -185,7 +185,14 @@ function rank(id: CliId): number {
  * that empties it and says so in `research_doctor`.
  */
 export function localProviders(config: Config): ResearchProvider[] {
-  const wanted = config.localCli ? CLI_ORDER.filter((a) => a.id === config.localCli) : CLI_ORDER;
+  // Ordered by the operator's list where they gave one, not by preference: a
+  // caller who names `codex,claude` has said which they want leading.
+  const wanted =
+    config.localCli.length > 0
+      ? config.localCli
+          .map((id) => CLI_ORDER.find((a) => a.id === id))
+          .filter((a): a is CliAdapter => a !== undefined)
+      : CLI_ORDER;
   return wanted.map((adapter) => localProvider(config, adapter));
 }
 
@@ -197,7 +204,14 @@ export function localProviders(config: Config): ResearchProvider[] {
  * running against a backend the direct lane no longer uses.
  */
 export function loopProviders(config: Config): ResearchProvider[] {
-  const wanted = config.localCli ? CLI_ORDER.filter((a) => a.id === config.localCli) : CLI_ORDER;
+  // Ordered by the operator's list where they gave one, not by preference: a
+  // caller who names `codex,claude` has said which they want leading.
+  const wanted =
+    config.localCli.length > 0
+      ? config.localCli
+          .map((id) => CLI_ORDER.find((a) => a.id === id))
+          .filter((a): a is CliAdapter => a !== undefined)
+      : CLI_ORDER;
   return wanted.map((adapter) => loopProvider(config, adapter));
 }
 
