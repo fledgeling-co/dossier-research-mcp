@@ -1,4 +1,5 @@
 import { spreadEligibility, type SpreadEligibility } from '../run/cell.js';
+import { quantile } from '../stats/quantile.js';
 
 /**
  * A median, and the spread it is only sometimes allowed to carry.
@@ -45,28 +46,14 @@ export interface SpreadReport {
 }
 
 /**
- * The quartile definition, named so nobody later "fixes" it to a different one.
+ * The quartile definition lives in `bench/src/stats/quantile.ts`.
  *
- * Linear interpolation between order statistics: R's type 7, which is also
- * Excel's `PERCENTILE.INC` and NumPy's default. Chosen because it is the most
- * widely implemented, so a reader reproducing a number in a spreadsheet gets
- * the same answer. On a sample of one it returns that one value, which is why
- * it never divides by zero.
+ * It was private here until BENCH-13 needed the same function for bootstrap
+ * interval endpoints. Two implementations of a quantile is how two tables in
+ * one report come to disagree about the 25th percentile of one sample, and this
+ * fleet already carries a ledger row for three primitives that came to exist
+ * twice. The definition, and the reason for choosing it, are stated there.
  */
-function quantile(sorted: readonly number[], p: number): number {
-  const last = sorted.length - 1;
-  if (last < 0) throw new TypeError('quantile needs at least one value');
-  const position = p * last;
-  const lowerIndex = Math.floor(position);
-  const upperIndex = Math.ceil(position);
-  const lower = sorted[lowerIndex];
-  const upper = sorted[upperIndex];
-  if (lower === undefined || upper === undefined) {
-    throw new TypeError('quantile indexed outside its own sample');
-  }
-  if (lowerIndex === upperIndex) return lower;
-  return lower + (upper - lower) * (position - lowerIndex);
-}
 
 /**
  * What the sample is made of, so a withheld spread names the right noun.

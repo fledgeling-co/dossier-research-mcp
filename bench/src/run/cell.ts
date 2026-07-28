@@ -28,6 +28,18 @@ export const MAX_REPETITIONS = 1000;
 export const MIN_REPETITIONS_FOR_SPREAD = 3;
 
 /**
+ * How many repetitions the design asks for per cell.
+ *
+ * Five, from the same sentence in `docs/plan/benchmark.md` that gives the floor
+ * above: "`n = 5` is the target; `n = 3` is the floor at which a spread is
+ * reported at all". It sits here rather than in the run CLI's default because
+ * BENCH-13 derives the completion floor from the ratio of the two, and a floor
+ * derived from a number that lives in one place is defensible where a floor
+ * somebody picked is a floor somebody else will lower.
+ */
+export const TARGET_REPETITIONS = 5;
+
+/**
  * Separator for the cell key.
  *
  * A task id is a slug and a provider id is an enum member, so neither can
