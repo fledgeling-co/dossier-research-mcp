@@ -532,6 +532,11 @@ export function evaluateScopes(
     return allIds.map((id) => byId.get(id) ?? template.get(id)!);
   };
 
+  // Bound once rather than asserted non-null inside two closures. The narrowing
+  // does not survive into a callback, and `!` in a lambda is the shape that
+  // stops being true the day somebody makes `options` mutable.
+  const spreadOf = options.scoreSpread;
+
   const byScope = scopes.map((scope) => ({
     scope: scope.name,
     report: evaluateCombinations({
@@ -539,9 +544,9 @@ export function evaluateScopes(
       scoreCombination: (merged) => scoreCombination(merged, scope.name),
       measure,
       eligibility: scope.eligibility,
-      ...(options.scoreSpread !== undefined
-        ? { scoreSpread: (merged: MergedCombination) => options.scoreSpread!(merged, scope.name) }
-        : {}),
+      ...(spreadOf === undefined
+        ? {}
+        : { scoreSpread: (merged: MergedCombination) => spreadOf(merged, scope.name) }),
       ...(options.separated !== undefined ? { separated: options.separated } : {}),
       ...(options.maxExactMembers !== undefined ? { maxExactMembers: options.maxExactMembers } : {}),
     }),
@@ -560,9 +565,9 @@ export function evaluateScopes(
       scoreCombination: (merged) => scoreCombination(merged, 'overall'),
       measure,
       eligibility: options.overallEligibility,
-      ...(options.scoreSpread !== undefined
-        ? { scoreSpread: (merged: MergedCombination) => options.scoreSpread!(merged, 'overall') }
-        : {}),
+      ...(spreadOf === undefined
+        ? {}
+        : { scoreSpread: (merged: MergedCombination) => spreadOf(merged, 'overall') }),
       ...(options.separated !== undefined ? { separated: options.separated } : {}),
       ...(options.maxExactMembers !== undefined ? { maxExactMembers: options.maxExactMembers } : {}),
     }),
