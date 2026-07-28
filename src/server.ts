@@ -1508,6 +1508,28 @@ export function createServer(deps: ServerDeps): FastMCP {
       );
       const derivativeUsd = derivativeSpend.reduce((sum, e) => sum + e.estimatedCostUsd, 0);
 
+      // What the window is holding for runs that produced nothing.
+      //
+      // Not released, and deliberately: these runs WERE created, so the
+      // provider may have billed for work before failing, and `boughtNothing`
+      // only covers a refusal that provably created nothing. But an operator
+      // whose ceiling is gone needs to know where it went, and "six runs failed
+      // mid-flight holding $54" is the answer that was previously invisible —
+      // the failure is on each record and nothing added them up.
+      const barren: { runId: string; usd: number; label: string; why: string }[] = [];
+      for (const e of entries) {
+        if (e.kind === 'release') continue;
+        const rec = await store.getRun(e.runId).catch(() => null);
+        if (!rec || rec.state !== 'failed' || (rec.reportChars ?? 0) > 0) continue;
+        barren.push({
+          runId: e.runId,
+          usd: e.estimatedCostUsd,
+          label: e.label ?? '',
+          why: (rec.error ?? '').split('\n')[0]?.slice(0, 80) ?? rec.failureKind ?? 'failed',
+        });
+      }
+      const barrenUsd = barren.reduce((s, b) => s + b.usd, 0);
+
       const top = entries
         .filter((e) => e.kind !== 'release')
         .sort((a, b) => b.estimatedCostUsd - a.estimatedCostUsd)
@@ -1524,6 +1546,18 @@ export function createServer(deps: ServerDeps): FastMCP {
           : '',
         snapshot.budgetUsd === 0 ? '- ⚠ The budget gate is DISABLED (DOSSIER_BUDGET_USD=0).' : '',
         '',
+        barren.length > 0
+          ? `> [!NOTE]\n> **$${barrenUsd.toFixed(2)} of this window is held by ${String(barren.length)} run(s) that failed without producing a report.**\n` +
+            '> Not released: each of these runs was created, so the provider may have billed for work done before it failed, ' +
+            'and a reservation is only given back when the provider proved it created nothing. ' +
+            'Listed so an exhausted ceiling is explicable rather than mysterious:\n' +
+            barren
+              .slice(0, 8)
+              .map((b) => `> - $${b.usd.toFixed(2)} · \`${b.runId}\`${b.label ? `, ${b.label}` : ''} — ${b.why}`)
+              .join('\n') +
+            (barren.length > 8 ? `\n> - …and ${String(barren.length - 8)} more` : '') +
+            '\n'
+          : '',
         derivativeSpend.length > 0
           ? `> [!CAUTION]\n> **$${derivativeUsd.toFixed(2)} of this window was committed by runs a CLI started, not by you.**\n` +
             '> Those runs were authored by a backend Dossier had spawned, which had already seen the brief. ' +
