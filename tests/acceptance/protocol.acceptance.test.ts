@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { McpHarness, makeRun } from './harness.js';
 
@@ -94,6 +95,33 @@ describe('PROTO-01: every tool registers', () => {
         'research_verify_claims', 'research_wide',
       ].sort(),
     );
+  });
+
+  it('the README states the number of tools that actually register', async () => {
+    // This drifted silently and shipped: the README said "thirty-four tools"
+    // through two releases that had added three. The surface test above
+    // enumerates every name, so a *new* tool cannot be missed, but the count
+    // written out in prose two files away had nothing holding it to reality,
+    // and `lint:docs` checks that links resolve, not that sentences are true.
+    //
+    // Spelled out rather than numeric because that is how the README reads, and
+    // a guard that only accepts a digit would push the prose toward the guard.
+    const WORDS = [
+      'twenty-five', 'twenty-six', 'twenty-seven', 'twenty-eight', 'twenty-nine',
+      'thirty', 'thirty-one', 'thirty-two', 'thirty-three', 'thirty-four',
+      'thirty-five', 'thirty-six', 'thirty-seven', 'thirty-eight', 'thirty-nine',
+      'forty', 'forty-one', 'forty-two', 'forty-three', 'forty-four', 'forty-five',
+    ];
+    const readme = await readFile(new URL('../../README.md', import.meta.url), 'utf8');
+    const live = (await mcp.listTools()).length;
+    const expected = WORDS[live - 25];
+    expect(expected, `no spelled-out form for ${String(live)} tools; extend WORDS`).toBeDefined();
+
+    const claims = [...readme.matchAll(/([a-z]+(?:-[a-z]+)?) tools\b/g)].map((m) => m[1]);
+    expect(claims.length, 'README no longer states a tool count anywhere').toBeGreaterThan(0);
+    for (const claim of claims) {
+      expect(claim, `README says "${String(claim)} tools"; ${String(live)} register`).toBe(expected);
+    }
   });
 
   it('every tool carries a non-trivial description', async () => {
