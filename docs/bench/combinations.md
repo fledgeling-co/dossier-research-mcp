@@ -184,6 +184,8 @@ Failed cells are carried into the combination rather than dropped. They contribu
 
 That is a validity metric rather than a footnote, and this repo's own ledger is the argument: `local-codex` was 0-for-3 and `openai` 0-for-2, and both would have silently vanished from a naive average. A combination scorer that merged only the successes would make an unreliable backend look better by scoring only the cells it happened to finish.
 
+**An empty denominator is `null`, not zero, corrected 28 July 2026 by BENCH-15.** This returned 0 until then, so a member holding no runs printed as "completed 0% of its attempted runs" for a member that had nothing fail, which is the worst possible result reported for the one state that is not a result at all. `bench/src/report/aggregate.ts` already keeps four distinct refusal reasons precisely to separate "never ran" from "failed everything", and `bench/src/stats/reliability.ts` follows it; this is now the third implementation agreeing with the first two rather than a fourth answer. A combination whose every run failed still reads 0, which was never the disagreement, and the note about the least reliable combination excludes a null rather than folding it in as the worst figure on the board.
+
 ## What this feeds back into, and what it does not authorise
 
 The panel routing in `src/providers/registry.ts` joins a paid backend on question profile plus a measurement of 4% overlap from **one** panel run, and everywhere it is written down says so. This slice is what replaces that with evidence: per category, which combination is on the frontier, and therefore what the join conditions should be.

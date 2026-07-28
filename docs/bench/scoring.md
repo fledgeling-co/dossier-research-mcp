@@ -59,7 +59,9 @@ The scope is the clause containing the match, bounded by a contrast word and by 
 
 This is a cue list, not comprehension. It cannot see "the claim that revenue reached 1.2 billion is disputed", and the result says so in its notes rather than implying it read the sentence. `ignoreNegation` re-runs a corpus with the rule off, so its effect is measured rather than argued about.
 
-**A date states no number.** `2026-07-01` holds a `07`, and because an unstated unit is compatible with any gold unit, a gold of seven would otherwise be recovered from a publication date. Whole date shapes are blanked before scanning, length-preserving so every other offset survives. Whole shapes only: `2026-07-27` and `50-60%` look identical at the hyphen, and both numbers in a range are real.
+**A date states no number.** `2026-07-01` holds a `07`, and because an unstated unit is compatible with any gold unit, a gold of seven would otherwise be recovered from a publication date. Whole date shapes are blanked before scanning, length-preserving so every other offset survives, and a clock time and a URL go with them. Whole shapes only: `2026-07-27` and `50-60%` look identical at the hyphen, and both numbers in a range are real.
+
+The shapes are `bench/src/score/noise-shapes.ts`, which is one implementation shared with the due-weight scorer. See the resolution note below for what unifying them cost and what it found.
 
 ### Dates
 
@@ -266,9 +268,23 @@ An undated source is carried as its own number and never counted as current: a r
 
 An unreadable **as-of** date throws. It is the caller's argument rather than the corpus's data, and reporting it per source produced the worst possible message: every source blamed for a missing date it plainly had, which sends whoever is debugging it to the gold set instead of to the one broken line. The loader already takes this position on an invalid reference date, and this matches it.
 
-## Deferred, and recorded rather than hidden
+## Resolved 28 July 2026, and what the unification found
 
-**Two numeric implementations exist and should become one.** The due-weight scorer needs the same decimal-safe shifting and the same tolerance comparison, and reached both independently while this item was in flight; its own source says the same thing from the other side. Neither could safely edit the other's file while both were unmerged, so the duplication is deliberate and temporary. They agree on `exact`, on the four tolerance arms and on masking whole date shapes, which is the reassuring half; they differ on which magnitude words they accept, which is the half that will drift. Unify now that both have merged.
+**Two numeric implementations existed and are now one set of primitives.** The due-weight scorer needed the same decimal-safe shifting, the same tolerance comparison and the same date masking, and reached all three independently while this item was in flight. Neither could safely edit the other's file while both were unmerged, so the duplication was deliberate and temporary. BENCH-15 closed it: the mask is `bench/src/score/noise-shapes.ts`, the magnitude vocabulary is `SCALE_WORDS` in `units.ts`, and the comparator is `withinTolerance` in `numbers.ts`. There is one of each.
+
+The two **extraction** functions stay two, and that is a decision rather than an omission. `readNumbers` answers "what figures did the report state, and in what unit"; `extractNumericMentions` answers "does this text state this figure". They return different types and have opposite error preferences, which their own module docs state: a false negative is the expensive error here and a false positive is the expensive one there. Merging them would mean picking one error preference for both.
+
+That difference is why the magnitude *vocabulary* is shared and the *attachment policy* is not. An ambiguous suffix here produces two readings and the gold fact's unit decides between them, so admitting a word costs nothing; the due-weight scorer has one reading and no unit model. `mm` is therefore in the shared table and excluded there, named in its own constant with the reason.
+
+**Two defects were found by executing both copies rather than reading them.**
+
+The mask blanked a date with spaces, and the scale-word probe skips whitespace looking for the magnitude attached to a figure. So a masked date between the two was skipped straight over, and `revenue was 1.2 2026-07-27 billion` read as `1200000000`, a magnitude the report never attached to that figure. The fill is now a character that is not whitespace.
+
+And `MONTH` was spelled `(?:jan|feb|...|dec)[a-z]*` in both files, which also matches `novel`, `decade` and `marginal`. It did no damage here because this module carried no shape where a month is followed only by a year; it did real damage in the file that did. The union carries that shape, so the pattern now names the twelve months and their standard abbreviations, on both boundaries.
+
+**Recorded for an owner, and deliberately not fixed here.** A hyphenated token still yields a number on this path: `covid-19 killed 26` reads `[19, 26]` here and `[26]` in the due-weight scorer. That is a different rule from date masking, living in the extraction functions BENCH-15 kept apart, and fixing it by side effect inside a unification would be exactly the quiet scope creep this repo keeps finding in itself.
+
+## Deferred, and recorded rather than hidden
 
 **Backward negation only.** A cue is looked for before the figure, never after, so "8.8, not 7.2" correctly leaves 8.8 asserted while "8.8 is not the assigned score" is missed. Scanning forward as well would fix the second and break the first, and the first is the commoner shape. Recorded as a known limit rather than traded silently.
 
