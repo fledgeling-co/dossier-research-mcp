@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   assertIndependentMembers,
+  completionRate,
   memberCostUsd,
   memberRuns,
   PANEL_INDEPENDENCE_INVARIANT,
   type CombinationMember,
 } from './member.js';
-import { member, run } from './fixtures.js';
+import { failedRun, member, run } from './fixtures.js';
 
 describe('the independence invariant (COMB-05)', () => {
   it('refuses a member marked as having seen another member', () => {
@@ -122,5 +123,25 @@ describe('memberRuns', () => {
     const flat = memberRuns([a, b]);
     expect(flat).toHaveLength(3);
     expect(flat.map((r) => r.provider)).toEqual(['a', 'a', 'b']);
+  });
+});
+
+describe('completion rate separates never-ran from failed-everything (DUP-10)', () => {
+  it('is null when nothing was attempted, never zero', () => {
+    // This returned 0 until BENCH-15, so a member holding no runs printed as
+    // 'completed 0% of its attempted runs' for a member that had nothing fail.
+    // `report/aggregate.ts` and `stats/reliability.ts` already answered null
+    // here, and `aggregate.ts` keeps four distinct refusal reasons precisely to
+    // keep 'never ran' apart from 'failed everything'.
+    expect(completionRate([])).toBeNull();
+  });
+
+  it('is zero when every attempt failed, which was never the disagreement', () => {
+    expect(completionRate([failedRun('dead'), failedRun('dead')])).toBe(0);
+  });
+
+  it('is the plain share otherwise', () => {
+    expect(completionRate([run('half', []), failedRun('half')])).toBe(0.5);
+    expect(completionRate([run('sound', [])])).toBe(1);
   });
 });

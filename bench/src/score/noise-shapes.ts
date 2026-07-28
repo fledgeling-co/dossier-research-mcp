@@ -80,8 +80,16 @@ export const MONTH_NAMES: readonly string[] = [
   'dec',
 ];
 
-/** A month name that ends where a month name ends. */
-const MONTH = `(?:${MONTH_NAMES.join('|')})(?![\\p{L}\\p{N}])`;
+/**
+ * A month name that begins and ends where a month name does.
+ *
+ * **Both boundaries, and the left one was found by a test rather than by
+ * reading.** With only the right-hand guard, the alternation is free to start
+ * matching one character in, so `smarch 2026` masked from the `m` and
+ * `undecember 2026` masked from the `d`. A month name is a whole word or it is
+ * part of another word.
+ */
+const MONTH = `(?<![\\p{L}\\p{N}])(?:${MONTH_NAMES.join('|')})(?![\\p{L}\\p{N}])`;
 
 /**
  * Every shape blanked, in the order the alternation tries them.

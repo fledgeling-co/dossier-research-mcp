@@ -223,6 +223,22 @@ export interface ContainmentResult {
 /**
  * Whether a page contains everything a statement asserts.
  *
+ * **Not a duplicate of `containment` in `bench/src/score/syndication.ts`, and
+ * the two must not be merged.** They share a name and nothing else. This one
+ * takes a *statement and a page* and asks whether the page holds every
+ * checkable token the statement asserts, which is a citation-support question
+ * and answers `supported` / `unsupported` / `unchecked`. `shingleContainment`
+ * takes *two sets of shingle hashes* and returns Broder's set-containment
+ * fraction over the smaller side, which is a near-duplicate question about two
+ * pages and answers a number between zero and one. Different inputs, different
+ * outputs, different questions.
+ *
+ * The barrel renames them apart for that reason: `tokenContainment` here,
+ * `shingleContainment` there. A keep-both merge resolution once put both in one
+ * barrel under one name and typecheck caught it, which is the only reason it
+ * did not ship. BENCH-15 was told explicitly to leave them alone, and this
+ * comment is the fence.
+ *
  * Three cases answer `unchecked` rather than `unsupported`, and every one of
  * them is the difference between a measurement and an accusation:
  *

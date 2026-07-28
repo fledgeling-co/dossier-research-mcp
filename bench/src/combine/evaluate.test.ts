@@ -731,3 +731,45 @@ describe('the tie test reaches the production path (COMB-53)', () => {
     expect(scoped.overall.frontier.separation).toBe('checked');
   });
 });
+
+describe('a member that never ran is not a member that failed everything (DUP-10)', () => {
+  const empty: CombinationMember = { id: 'never-ran', independence: 'independent', runs: [] };
+
+  it('merges to a null completion rate rather than to zero', () => {
+    const report = evaluate({
+      members: [empty, member('steady', ['https://y.com/1'])],
+      scoreCombination: countSources,
+      measure: { name: 'source-count', direction: 'higher-is-better' },
+    });
+    const own = report.combinations.find((c) => c.id === 'never-ran');
+    expect(own?.merged.completionRate).toBeNull();
+    expect(own?.merged.runCount).toBe(0);
+  });
+
+  it('does not print itself as the least reliable purchase on the board', () => {
+    // The note is about how much of what was ATTEMPTED finished. A combination
+    // that attempted nothing has no answer to that, and folding its null in as
+    // a zero would have made it the worst figure in every report it appeared
+    // in, for the one state that is not a result at all.
+    const report = evaluate({
+      members: [empty, member('steady', ['https://y.com/1'])],
+      scoreCombination: countSources,
+      measure: { name: 'source-count', direction: 'higher-is-better' },
+    });
+    expect(report.notes.join(' ')).not.toMatch(/least reliable combination/);
+  });
+
+  it('still prints the note when a combination really did fail some attempts', () => {
+    const flaky: CombinationMember = {
+      id: 'flaky',
+      independence: 'independent',
+      runs: [run('flaky', ['https://x.com/1']), failedRun('flaky')],
+    };
+    const report = evaluate({
+      members: [empty, flaky],
+      scoreCombination: countSources,
+      measure: { name: 'source-count', direction: 'higher-is-better' },
+    });
+    expect(report.notes.join(' ')).toMatch(/least reliable combination completed 50%/);
+  });
+});
