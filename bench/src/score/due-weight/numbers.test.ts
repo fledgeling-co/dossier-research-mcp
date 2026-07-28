@@ -1,11 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Tolerance } from '../../tasks/schema.js';
-import {
-  extractNumericMentions,
-  findMatchingMention,
-  maskDateShapes,
-  matchesTolerance,
-} from './numbers.js';
+import { extractNumericMentions, findMatchingMention, maskDateShapes } from './numbers.js';
+import { withinTolerance } from '../numbers.js';
 import { normaliseForMatch } from './text.js';
 
 /**
@@ -103,7 +99,7 @@ describe('extractNumericMentions', () => {
     expect(2.01 * 1e3).not.toBe(2010);
     expect(values('1.07 billion')).toEqual([1070000000]);
     expect(values('2.01 thousand')).toEqual([2010]);
-    expect(matchesTolerance(values('1.07 billion')[0] ?? NaN, 1070000000, EXACT)).toBe(true);
+    expect(withinTolerance(values('1.07 billion')[0] ?? NaN, 1070000000, EXACT)).toBe(true);
   });
 
   it('ignores a magnitude word after an exponent rather than guessing which was meant', () => {
@@ -137,40 +133,46 @@ describe('maskDateShapes', () => {
   });
 });
 
-describe('matchesTolerance', () => {
+/**
+ * The comparator is now `withinTolerance` from `../numbers.js`, the one shared
+ * implementation. Every assertion below is the one that ran against this
+ * module's own deleted copy, kept verbatim: passing them against the survivor is
+ * what proves the two answered the same question the same way (DUP-07).
+ */
+describe('withinTolerance, the shared comparator this module used to duplicate', () => {
   // DUEWT-18
   it('exact rejects a neighbouring value', () => {
-    expect(matchesTolerance(100, 100, EXACT)).toBe(true);
-    expect(matchesTolerance(100.0001, 100, EXACT)).toBe(false);
+    expect(withinTolerance(100, 100, EXACT)).toBe(true);
+    expect(withinTolerance(100.0001, 100, EXACT)).toBe(false);
   });
 
   // DUEWT-18
   it('absolute accepts at its boundary and rejects beyond it', () => {
     const t: Tolerance = { kind: 'absolute', value: 0.5 };
-    expect(matchesTolerance(100.5, 100, t)).toBe(true);
-    expect(matchesTolerance(99.5, 100, t)).toBe(true);
-    expect(matchesTolerance(100.6, 100, t)).toBe(false);
+    expect(withinTolerance(100.5, 100, t)).toBe(true);
+    expect(withinTolerance(99.5, 100, t)).toBe(true);
+    expect(withinTolerance(100.6, 100, t)).toBe(false);
   });
 
   // DUEWT-18
   it('relative reads its payload as a fraction, never as a percentage', () => {
     const t: Tolerance = { kind: 'relative', fraction: 0.01 };
-    expect(matchesTolerance(101, 100, t)).toBe(true);
-    expect(matchesTolerance(102, 100, t)).toBe(false);
+    expect(withinTolerance(101, 100, t)).toBe(true);
+    expect(withinTolerance(102, 100, t)).toBe(false);
   });
 
   // DUEWT-18
   it('significant figures accepts a correctly rounded value', () => {
     const t: Tolerance = { kind: 'significantFigures', digits: 3 };
-    expect(matchesTolerance(1234567, 1230000, t)).toBe(true);
-    expect(matchesTolerance(1240000, 1230000, t)).toBe(false);
-    expect(matchesTolerance(0, 0, t)).toBe(true);
+    expect(withinTolerance(1234567, 1230000, t)).toBe(true);
+    expect(withinTolerance(1240000, 1230000, t)).toBe(false);
+    expect(withinTolerance(0, 0, t)).toBe(true);
   });
 
   it('never matches a non-finite value, and says no for that reason rather than by accident', () => {
-    expect(matchesTolerance(NaN, 100, EXACT)).toBe(false);
-    expect(matchesTolerance(Infinity, 100, { kind: 'absolute', value: 1e308 })).toBe(false);
-    expect(matchesTolerance(100, NaN, EXACT)).toBe(false);
+    expect(withinTolerance(NaN, 100, EXACT)).toBe(false);
+    expect(withinTolerance(Infinity, 100, { kind: 'absolute', value: 1e308 })).toBe(false);
+    expect(withinTolerance(100, NaN, EXACT)).toBe(false);
   });
 });
 

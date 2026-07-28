@@ -1,4 +1,7 @@
 import type { Tolerance } from '../../tasks/schema.js';
+import { maskDateShapes } from '../noise-shapes.js';
+import { withinTolerance } from '../numbers.js';
+import { SCALE_WORDS } from '../units.js';
 
 /**
  * Finding a figure in prose, and deciding whether it is the figure the gold set
@@ -26,34 +29,13 @@ import type { Tolerance } from '../../tasks/schema.js';
  * the hyphen, so any rule sharp enough to drop the date also drops the range,
  * and a range is exactly how a report writes two figures that disagree.
  *
- * **Known debt, recorded rather than hidden.** BENCH-04 needs the same tolerance
- * comparison for gold facts. The two items are in flight at the same time on
- * disjoint files, so the primitive lives here and they should be unified once
- * both have merged. Racing a shared file between concurrent runners is worse.
+ * **The primitives are shared, and where they are not is a decision.** BENCH-15
+ * merged the duplicate halves: the mask is `../noise-shapes.js`, the magnitude
+ * vocabulary is `SCALE_WORDS` in `../units.js`, and the tolerance comparator is
+ * `withinTolerance` in `../numbers.js`. What stays local is the *attachment
+ * policy* below, and it stays local because this scorer has no unit model and
+ * the accuracy scorer does. See `MAGNITUDE_ATTACHED_EXCLUSIONS`.
  */
-
-/**
- * Date-shaped runs, masked out before any number is read.
- *
- * Only *whole* shapes, never a fragment: an ISO date, a slashed date, and a
- * year with a month between 01 and 12. `2026-2030` is deliberately not here,
- * because that is a range of years and both of its numbers are real.
- */
-const MONTH = '(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*';
-const DATE_SHAPES = new RegExp(
-  [
-    String.raw`\d{4}-\d{2}-\d{2}`,
-    String.raw`\d{1,2}/\d{1,2}/\d{2,4}`,
-    String.raw`\d{4}/\d{2}/\d{2}`,
-    String.raw`\d{4}-(?:0[1-9]|1[0-2])(?!\d)`,
-    // Written out, which is how a report actually dates a filing. `July 27,
-    // 2026` was yielding the figures 27 and 2026 to the conflict matcher.
-    `${MONTH} \\d{1,2}(?:st|nd|rd|th)?,? \\d{4}`,
-    `\\d{1,2}(?:st|nd|rd|th)? ${MONTH},? \\d{4}`,
-    `${MONTH} \\d{4}`,
-  ].join('|'),
-  'g',
-);
 
 /**
  * The numeric core: digits with optional thousands grouping, an optional decimal
@@ -69,31 +51,66 @@ const DATE_SHAPES = new RegExp(
 const NUMERIC_CORE = /(?:\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?|\.\d+)(?:e[-+]?\d+)?/;
 
 /**
- * Magnitude written attached to the number, as in `1.2bn` or `5m`.
+ * The magnitude spellings this scorer refuses to read attached to a figure.
  *
- * Longest forms first, because the alternation takes the first that matches.
+ * The vocabulary is shared with the accuracy scorer; the *policy* is not, and
+ * this constant is where BENCH-15 put the disagreement rather than splitting it.
+ *
+ * Accuracy has a unit model. An ambiguous suffix there produces two readings,
+ * `450m` as both 450 million and 450 metres, and the gold fact's own unit
+ * decides between them, so admitting a word costs nothing. This scorer produces
+ * one reading and has no unit to decide with, and its own header states the
+ * opposite error preference: a spurious match credits a report for
+ * acknowledging a disagreement it never mentioned.
+ *
+ * `5mm` is millimetres far more often than five million, and nothing here can
+ * tell. Its present answer is to yield no figure at all, which is the
+ * conservative one; admitting the word would make it yield five million.
+ */
+export const MAGNITUDE_ATTACHED_EXCLUSIONS: ReadonlySet<string> = new Set(['mm']);
+
+/**
+ * The magnitude spellings that may sit after a space and still be a magnitude.
+ *
  * The abbreviations are accepted **only** attached, never after a space: `5 m`
  * is metres far more often than five million, while `$1.2bn` is never anything
- * else. That asymmetry is the reason there are two patterns rather than one.
+ * else. `mn`, `bn` and `tn` are the exception because they name no unit, so
+ * `1.2 bn` cannot be read any other way. That asymmetry is the reason there are
+ * two patterns rather than one.
  */
-const ATTACHED_MAGNITUDE = /^(thousand|trillion|billion|million|bn|mn|tn|k|m|b|t)(?![\p{L}\p{N}])/u;
+export const SPACED_MAGNITUDES: ReadonlySet<string> = new Set([
+  'thousand',
+  'thousands',
+  'million',
+  'millions',
+  'billion',
+  'billions',
+  'trillion',
+  'trillions',
+  'mn',
+  'bn',
+  'tn',
+]);
 
-/** Magnitude written as a whole word after a space. Words only, for the reason above. */
-const SPACED_MAGNITUDE = /^ (thousand|million|billion|trillion|bn|mn|tn)(?![\p{L}\p{N}])/u;
+/** Longest first, because an alternation takes the first branch that matches. */
+const longestFirst = (words: Iterable<string>): string =>
+  [...words].sort((a, b) => b.length - a.length || a.localeCompare(b)).join('|');
 
-const MAGNITUDE_PLACES: Readonly<Record<string, number>> = {
-  thousand: 3,
-  k: 3,
-  million: 6,
-  m: 6,
-  mn: 6,
-  billion: 9,
-  b: 9,
-  bn: 9,
-  trillion: 12,
-  t: 12,
-  tn: 12,
-};
+const ATTACHED_WORDS = [...SCALE_WORDS.keys()].filter(
+  (w) => !MAGNITUDE_ATTACHED_EXCLUSIONS.has(w),
+);
+
+/** Magnitude written attached to the number, as in `1.2bn` or `5m`. */
+const ATTACHED_MAGNITUDE = new RegExp(
+  `^(${longestFirst(ATTACHED_WORDS)})(?![\\p{L}\\p{N}])`,
+  'u',
+);
+
+/** Magnitude written as a whole word after a space. See `SPACED_MAGNITUDES`. */
+const SPACED_MAGNITUDE = new RegExp(
+  `^ (${longestFirst(SPACED_MAGNITUDES)})(?![\\p{L}\\p{N}])`,
+  'u',
+);
 
 /**
  * A character before a digit run meaning the run is part of something else: a
@@ -111,7 +128,7 @@ const LETTER = /\p{L}/u;
 /** Where a minus sign can legitimately begin a number. */
 const OPENS_A_NUMBER = /[\s([{<"']/u;
 /** The magnitude words, longest first, for looking backwards from a hyphen. */
-const MAGNITUDE_TAIL = /(thousand|trillion|billion|million|bn|mn|tn|k|m|b|t)$/;
+const MAGNITUDE_TAIL = new RegExp(`(${longestFirst(ATTACHED_WORDS)})$`);
 
 /**
  * Whether the letters immediately before `at` spell a magnitude.
@@ -138,24 +155,14 @@ export interface NumericMention {
   readonly percent: boolean;
 }
 
-/** Replace every date-shaped run with the same number of `#`, so offsets survive. */
 /**
- * A URL, and a clock time.
+ * Date, time and URL runs blanked before any number is read.
  *
- * Digits inside a URL are an identifier, not a figure the report stated: a
- * citation carrying `?rev=1150000000` would otherwise credit a report for
- * naming a number that appears nowhere in its prose. A time of day is the same
- * class as a date and was left behind when dates were masked, so
- * `2026-07-27T10:30:00Z` was yielding the figure 30.
+ * The rule and every shape live in `../noise-shapes.js`, which is the **one**
+ * implementation both numeric readers share. Re-exported here because this
+ * module's callers have always imported it from here.
  */
-const NOISE_SHAPES = /https?:\/\/[^\s<>"')\]]+|(?<!\d)\d{1,2}:\d{2}(?::\d{2})?/g;
-
-/** Replace date, URL and time runs with the same number of `#`, so offsets survive. */
-export function maskDateShapes(text: string): string {
-  return text
-    .replace(NOISE_SHAPES, (run) => '#'.repeat(run.length))
-    .replace(DATE_SHAPES, (run) => '#'.repeat(run.length));
-}
+export { maskDateShapes };
 
 /**
  * Move the decimal point instead of multiplying.
@@ -242,12 +249,12 @@ export function extractNumericMentions(text: string): NumericMention[] {
     let places = 0;
     let suffix = '';
     if (attached !== null) {
-      places = MAGNITUDE_PLACES[attached[1] ?? ''] ?? 0;
+      places = SCALE_WORDS.get(attached[1] ?? '') ?? 0;
       suffix = attached[0];
     } else if (!hasExponent) {
       const spaced = SPACED_MAGNITUDE.exec(rest);
       if (spaced !== null) {
-        places = MAGNITUDE_PLACES[spaced[1] ?? ''] ?? 0;
+        places = SCALE_WORDS.get(spaced[1] ?? '') ?? 0;
         suffix = spaced[0];
       }
     }
@@ -272,45 +279,17 @@ export function extractNumericMentions(text: string): NumericMention[] {
   return mentions;
 }
 
-function roundToSignificant(x: number, digits: number): number {
-  if (x === 0) return 0;
-  return Number(x.toPrecision(digits));
-}
-
-/**
- * Whether a reported number counts as the gold number.
- *
- * The four arms are BENCH-01's, and each names its payload differently so a
- * fraction can never be read as a percentage. A non-finite value on either side
- * is never a match: every comparison below would answer `false` anyway, and
- * answering "no" for the stated reason is worth one line.
- */
-export function matchesTolerance(actual: number, expected: number, tolerance: Tolerance): boolean {
-  if (!Number.isFinite(actual) || !Number.isFinite(expected)) return false;
-  switch (tolerance.kind) {
-    case 'exact':
-      return actual === expected;
-    case 'absolute':
-      return Math.abs(actual - expected) <= tolerance.value;
-    case 'relative':
-      return Math.abs(actual - expected) <= Math.abs(expected) * tolerance.fraction;
-    case 'significantFigures':
-      return (
-        roundToSignificant(actual, tolerance.digits) ===
-        roundToSignificant(expected, tolerance.digits)
-      );
-    default: {
-      const exhaustive: never = tolerance;
-      return exhaustive;
-    }
-  }
-}
-
 /**
  * The first mention that matches, or `null`.
  *
  * Takes mentions already extracted rather than the text, because a report is
  * scanned once and then asked about every value of every conflicting figure.
+ *
+ * The comparison is `withinTolerance` from `../numbers.js`, which is the **one**
+ * implementation. This module held a second one, `matchesTolerance`, with the
+ * same four arms written differently; BENCH-15 removed it, because "compared
+ * with the per-fact tolerance" is not a specification and two implementations of
+ * it disagree silently.
  */
 export function findMatchingMention(
   mentions: readonly NumericMention[],
@@ -318,7 +297,7 @@ export function findMatchingMention(
   tolerance: Tolerance,
 ): NumericMention | null {
   for (const mention of mentions) {
-    if (matchesTolerance(mention.value, expected, tolerance)) return mention;
+    if (withinTolerance(mention.value, expected, tolerance)) return mention;
   }
   return null;
 }

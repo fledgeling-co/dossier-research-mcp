@@ -2,7 +2,8 @@ import { canonicaliseUrl } from '../../../../src/research/corroborate.js';
 import { extractCitedUrls } from '../../../../src/research/report.js';
 import type { BenchTask } from '../../tasks/corpus.js';
 import type { ConflictingFigure, FringeClaim, TaskCategory } from '../../tasks/schema.js';
-import { extractNumericMentions, matchesTolerance, type NumericMention } from './numbers.js';
+import { extractNumericMentions, type NumericMention } from './numbers.js';
+import { withinTolerance } from '../numbers.js';
 import {
   PROXIMITY_CHARS,
   containsTerm,
@@ -362,7 +363,7 @@ function assignMentions(
   const candidates = values.map((value) =>
     distinct.filter((i) => {
       const m = mentions[i];
-      return m !== undefined && matchesTolerance(m.value, value.value, value.tolerance);
+      return m !== undefined && withinTolerance(m.value, value.value, value.tolerance);
     }),
   );
   const holderOfMention = new Map<number, number>();
