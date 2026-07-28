@@ -39,3 +39,4 @@ serially, through the orchestrator.
 | BENCH-17 | The frontier makes the strongest claim with the weakest evidence | [brief](BENCH-17-combine-floors.md) | Untriaged | | |
 | BENCH-18 | Syndication has no Unicode normalisation | [brief](BENCH-18-syndication-unicode.md) | Untriaged | | |
 | BENCH-19 | One entry point spends with no gate; two have no test | [brief](BENCH-19-spend-gates.md) | Untriaged | | |
+| BENCH-19 | One entry point spends with no gate; two have no test | [brief](BENCH-19-spend-gates.md) | Ready for Plan | [spec](../specs/spec-BENCH-19.md) | |
