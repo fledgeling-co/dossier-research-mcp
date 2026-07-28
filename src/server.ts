@@ -1495,6 +1495,19 @@ export function createServer(deps: ServerDeps): FastMCP {
       // reservation already listed, and rendering it identically would show a
       // refunded $9 as a $9 commitment.
       const released = entries.filter((e) => e.kind === 'release');
+      // Which reservations belong to runs a spawned CLI authored. Resolved from
+      // the run records rather than the ledger, because the ledger line is
+      // written at reservation time and knows only what it was told to spend.
+      const derivativeIds = new Set<string>();
+      for (const e of entries) {
+        const rec = await store.getRun(e.runId).catch(() => null);
+        if (rec?.spawnedBy) derivativeIds.add(e.runId);
+      }
+      const derivativeSpend = entries.filter(
+        (e) => e.kind !== 'release' && derivativeIds.has(e.runId),
+      );
+      const derivativeUsd = derivativeSpend.reduce((sum, e) => sum + e.estimatedCostUsd, 0);
+
       const top = entries
         .filter((e) => e.kind !== 'release')
         .sort((a, b) => b.estimatedCostUsd - a.estimatedCostUsd)
@@ -1511,6 +1524,16 @@ export function createServer(deps: ServerDeps): FastMCP {
           : '',
         snapshot.budgetUsd === 0 ? '- ⚠ The budget gate is DISABLED (DOSSIER_BUDGET_USD=0).' : '',
         '',
+        derivativeSpend.length > 0
+          ? `> [!CAUTION]\n> **$${derivativeUsd.toFixed(2)} of this window was committed by runs a CLI started, not by you.**\n` +
+            '> Those runs were authored by a backend Dossier had spawned, which had already seen the brief. ' +
+            'They are charged to your budget and add no independent evidence. ' +
+            'Listed here because the spend view is where an unexplained figure is noticed:\n' +
+            derivativeSpend
+              .map((e) => `> - $${e.estimatedCostUsd.toFixed(2)} · \`${e.runId}\`${e.label ? `, ${e.label}` : ''}`)
+              .join('\n') +
+            '\n'
+          : '',
         top.length > 0 ? '**Largest commitments:**' : '',
         ...top.map((e) => `- $${e.estimatedCostUsd.toFixed(2)} · ${e.tier} · \`${e.runId}\`${e.label ? `, ${e.label}` : ''}`),
         '',

@@ -308,7 +308,17 @@ export function localProvider(config: Config, adapter: CliAdapter): ResearchProv
           bin,
           ...headless(args.prompt),
         ],
-        { detached: true, stdio: 'ignore' },
+        {
+          detached: true,
+          stdio: 'ignore',
+          // The marker that survives into any Dossier this CLI starts. A stdio
+          // MCP server is a child of its client, so a panel member that calls
+          // `research_start` reaches a Dossier whose config already knows it is
+          // downstream of this interaction. Without it the run is billed to the
+          // user and counted as an independent voice, which is the one thing a
+          // panel member's answer is not.
+          env: { ...process.env, DOSSIER_SPAWNED_BY: id },
+        },
       );
       child.unref();
       writeFileSync(

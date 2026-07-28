@@ -61,6 +61,26 @@ export const RunRecordSchema = z.object({
    */
   panelId: z.string().max(64).optional(),
   /**
+   * Set when this run was started by a CLI that Dossier itself had spawned.
+   *
+   * A local CLI with Dossier's own MCP registered can call `research_start`.
+   * That run arrives as an ordinary MCP call, is charged to the user's budget
+   * and, if it lands in a panel, is counted as one more independent voice. It
+   * is not one: its author is a panel member that has already read the brief
+   * and may have read the other members' answers.
+   *
+   * Dossier learns this because a stdio MCP server is a CHILD of the client
+   * that launched it, so the environment Dossier gave the CLI is inherited by
+   * the Dossier the CLI then starts. The value is the spawning INTERACTION id,
+   * not a run id: the provider mints it before any run record exists, and a
+   * record's `interactionId` resolves it back. Naming it for what it actually
+   * holds beats naming it for what would have been tidier.
+   *
+   * Optional, and absent for every ordinary run, so nothing written before this
+   * existed changes meaning.
+   */
+  spawnedBy: z.string().max(200).optional(),
+  /**
    * The exact model that produced the report, as the backend names it.
    *
    * Optional because runs recorded before this field existed have no way to

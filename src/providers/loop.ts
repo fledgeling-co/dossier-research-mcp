@@ -212,11 +212,19 @@ function askCli(
   args: readonly string[],
   cwd: string,
   timeoutMs: number,
+  spawnedBy: string,
 ): Promise<{ readonly stdout: string; readonly code: number | null }> {
   return new Promise((resolvePromise, rejectPromise) => {
     // No shell, matching `local.ts`: the brief is author-written text and a
     // quoting mistake in a shell would be command execution.
-    const child = spawn(bin, [...args], { cwd, stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn(bin, [...args], {
+      cwd,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      // Same marker as the direct lane. A loop worker is a panel member too,
+      // and one that reaches for `research_start` rather than its own search
+      // would otherwise buy a paid run charged to the user.
+      env: { ...process.env, DOSSIER_SPAWNED_BY: spawnedBy },
+    });
     let stdout = '';
     let bytes = 0;
     let settled = false;
@@ -337,7 +345,7 @@ export function loopProvider(config: Config, adapter: CliAdapter): ResearchProvi
       // recorded as one that searched and found nothing.
       let outcome: TaskOutcome;
       try {
-        const { stdout } = await askCli(bin, argv, workDir, TASK_TIMEOUT_MS);
+        const { stdout } = await askCli(bin, argv, workDir, TASK_TIMEOUT_MS, id);
         const parsed = WorkerReplySchema.safeParse(extractJsonObject(stdout));
         if (parsed.success) {
           findings = parsed.data.findings;
@@ -376,7 +384,7 @@ export function loopProvider(config: Config, adapter: CliAdapter): ResearchProvi
     const draftArgv = noSearch
       ? ['-p', '--disallowedTools', ...CLOSED_BOOK_TOOLS, '--', draft]
       : headless(draft);
-    const { stdout } = await askCli(bin, draftArgv, workDir, DRAFT_TIMEOUT_MS);
+    const { stdout } = await askCli(bin, draftArgv, workDir, DRAFT_TIMEOUT_MS, id);
 
     const verdict = validateDraft(session, stdout);
     run.markdown = verdict.ok

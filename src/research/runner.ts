@@ -428,6 +428,10 @@ export class Runner {
         promptWasPreEngineered: args.preEngineered,
         provider,
         ...(args.panelId ? { panelId: args.panelId } : {}),
+        // Stamped from config, so it is set exactly when this server is a child
+        // of a CLI Dossier spawned. An ordinary launch has no such parent and
+        // records nothing, which keeps every existing run's meaning intact.
+        ...(this.config.spawnedBy ? { spawnedBy: this.config.spawnedBy } : {}),
         shape: args.shape ?? 'deep',
         ...(args.window ? { window: args.window } : {}),
         ...(args.wideSpec ? { wideSpec: args.wideSpec } : {}),
@@ -1146,7 +1150,8 @@ export class Runner {
       ...members.map((m) => {
         const label = `\`${m.id}\` ${m.provider}`;
         if (m.state === 'completed' && m.reportChars > 0) {
-          return `- ✅ ${label}: ${String(m.reportChars)} chars, ${String(m.sourceCount)} cited sources`;
+          const derivative = m.spawnedBy ? ' — **NOT INDEPENDENT**, started by a CLI Dossier spawned' : '';
+          return `- ✅ ${label}: ${String(m.reportChars)} chars, ${String(m.sourceCount)} cited sources${derivative}`;
         }
         if (m.state === 'completed') return `- ⚠ ${label}: completed but produced no report text`;
         const why = m.failureKind ? failureTag(m.failureKind) : m.state;
@@ -1154,6 +1159,26 @@ export class Runner {
       }),
       '',
     );
+    // A member that a panel member started is not a member. It read the brief,
+    // it may have read the other members' reports, and its agreement with them
+    // is not evidence of anything. Named before the merge rather than after,
+    // because the merge below counts agreement across members and a reader who
+    // learns this in a footnote has already read the number.
+    const derivative = members.filter((m) => m.spawnedBy);
+    if (derivative.length > 0) {
+      lines.push(
+        `> [!CAUTION]\n> ${String(derivative.length)} of ${String(members.length)} members ` +
+          'was started by a CLI that Dossier itself spawned, not by you. ' +
+          'Such a member has already seen the brief and may have read the other members’ reports, ' +
+          'so its agreement is an echo rather than corroboration, and its cost is charged to your budget ' +
+          'while adding no independent evidence. Treat the breadth below as ' +
+          `${String(members.length - derivative.length)}-way, not ${String(members.length)}-way.`,
+        '',
+        ...derivative.map((m) => `> - \`${m.id}\` ${m.provider}, spawned by \`${m.spawnedBy ?? ''}\``),
+        '',
+      );
+    }
+
     if (contributed.length < members.length) {
       lines.push(
         `> [!WARNING]\n> ${String(members.length - contributed.length)} of ${String(members.length)} members contributed nothing. ` +

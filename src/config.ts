@@ -61,6 +61,15 @@ const EnvSchema = z.object({
   VERTEX_LOCATION: z.string().trim().max(100).optional(),
 
   DOSSIER_STORE_DIR: z.string().trim().max(1000).optional(),
+  /**
+   * Set by Dossier on a CLI it spawns, never by a user.
+   *
+   * A stdio MCP server is a child of its client, so a Dossier started by a CLI
+   * that Dossier started inherits this and stamps it on everything it runs.
+   * Validated like any other input because it arrives through the environment
+   * and reaches a stored record.
+   */
+  DOSSIER_SPAWNED_BY: z.string().trim().max(200).optional(),
 
   DOSSIER_BUDGET_USD: numeric(100, 0, 1_000_000),
   DOSSIER_BUDGET_WINDOW_HOURS: numeric(24, 1, 24 * 365),
@@ -122,6 +131,19 @@ export interface Config {
   /** Explicit provider allow-list; empty means "everything detected". */
   readonly enabledProviders: readonly string[];
   readonly storeDir: string;
+  /**
+   * The Dossier interaction whose CLI spawned this server, if one did.
+   *
+   * Empty for an ordinary launch. Set when Dossier is running as a child of a
+   * CLI that Dossier itself started, which is how a panel member comes to be
+   * able to call `research_start`: a stdio MCP server is a child of its client,
+   * so the variable Dossier put in the CLI's environment arrives here.
+   *
+   * Everything this server then starts is stamped with it, so a run authored by
+   * a panel member is identifiable rather than indistinguishable from one the
+   * user asked for.
+   */
+  readonly spawnedBy: string;
   readonly budgetUsd: number;
   readonly budgetWindowHours: number;
   /** Optional per-provider sub-ceilings. Zero means "only the global one". */
@@ -197,6 +219,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       .map((s) => s.trim().toLowerCase())
       .filter(Boolean),
     storeDir: e.DOSSIER_STORE_DIR || join(homedir(), '.dossier-research-mcp'),
+    spawnedBy: e.DOSSIER_SPAWNED_BY ?? '',
     budgetUsd: e.DOSSIER_BUDGET_USD,
     budgetWindowHours: e.DOSSIER_BUDGET_WINDOW_HOURS,
     providerBudgetsUsd: {
