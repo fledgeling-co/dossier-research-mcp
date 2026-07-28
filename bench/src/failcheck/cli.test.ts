@@ -359,21 +359,30 @@ describe('GATE-09 importing the entry point does not run it', () => {
 });
 
 describe('GATE-10 the entry point is wired', () => {
-  it('the real CLI, spawned over its real argv, refuses and spawns nothing', async (ctx) => {
+  it('the real CLI, spawned over its real argv, refuses and writes nothing', async (ctx) => {
     const tsx = TSX_CLI;
     if (tsx === undefined) {
       ctx.skip(TSX_MISSING);
       return;
     }
+    // One spawn, not several. The wiring property needs exactly one process,
+    // and each extra one is real load on a suite that also runs a file-lock
+    // contention test measured in wall-clock time. Every assertion this case
+    // could want is available from the same run.
+    //
     // Hermetic by construction: the refusal path is the one that spawns
     // nothing, so proving the entry point runs costs no quota at all.
+    const out = join(temp(), 'must-not-exist.json');
     const repoRoot = fileURLToPath(new URL('../../..', import.meta.url));
-    const ran = await spawnEntry(tsx, CLI, ['--dir', corpusOf(2)], repoRoot);
+    const ran = await spawnEntry(tsx, CLI, ['--dir', corpusOf(2), '--out', out], repoRoot);
+
     expect(ran.code).toBe(1);
     expect(ran.stderr).toContain('2 selected task(s)');
     expect(ran.stderr).toContain('--confirm');
     // stdout is reserved; everything this command says is a diagnostic.
     expect(ran.stdout).toBe('');
+    // And it stopped before the work, not after it.
+    expect(existsSync(out)).toBe(false);
   }, 60_000);
 
   it('names the missing binary and the fix in its skip reason', () => {
@@ -381,18 +390,6 @@ describe('GATE-10 the entry point is wired', () => {
     expect(TSX_MISSING).toContain('npm install');
     expect(TSX_MISSING).toMatch(/in-process/);
   });
-
-  it('writes no evidence file on the refusal path', async (ctx) => {
-    const tsx = TSX_CLI;
-    if (tsx === undefined) {
-      ctx.skip(TSX_MISSING);
-      return;
-    }
-    const out = join(temp(), 'must-not-exist.json');
-    const repoRoot = fileURLToPath(new URL('../../..', import.meta.url));
-    await spawnEntry(tsx, CLI, ['--dir', corpusOf(1), '--out', out], repoRoot);
-    expect(existsSync(out)).toBe(false);
-  }, 60_000);
 });
 
 describe('GATE-11 the corpus the script ships still loads through this path', () => {

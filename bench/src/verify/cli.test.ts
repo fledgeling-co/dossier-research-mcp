@@ -160,14 +160,25 @@ describe('VERIFY-02 importing the entry point does not run it', () => {
 });
 
 describe('VERIFY-03 the entry point is wired', () => {
-  it('the real CLI, spawned over its real argv, verifies an empty corpus and exits 0', async (ctx) => {
+  it('the real CLI, spawned over its real argv, verifies an empty corpus and writes only where told', async (ctx) => {
     const tsx = TSX_CLI;
     if (tsx === undefined) {
       ctx.skip(TSX_MISSING);
       return;
     }
+    // One spawn, not several. The wiring property needs exactly one process,
+    // and each extra one is real load on a suite that also runs a file-lock
+    // contention test measured in wall-clock time.
+    //
     // An empty corpus and a temp `--out`, so this proves the entry point runs
     // without reaching a network and without touching the committed evidence.
+    // That second half is the specific hazard: the default `--out` is a file
+    // under version control and the write is unconditional, so a spawn that
+    // forgot to redirect it would erase the record of what the gold set proved.
+    const committed = fileURLToPath(
+      new URL('../../evidence/gold-verification.json', import.meta.url),
+    );
+    const before = existsSync(committed);
     const out = join(temp(), 'spawned-evidence.json');
     const ran = await spawnEntry(tsx, CLI, ['--dir', corpus(false), '--out', out]);
 
@@ -177,6 +188,7 @@ describe('VERIFY-03 the entry point is wired', () => {
     // Everything this command says is a diagnostic; stdout is left clear.
     expect(ran.stdout).toBe('');
     expect(existsSync(out)).toBe(true);
+    expect(existsSync(committed)).toBe(before);
   }, 60_000);
 
   it('names the missing binary and the fix in its skip reason', () => {
@@ -184,21 +196,4 @@ describe('VERIFY-03 the entry point is wired', () => {
     expect(TSX_MISSING).toContain('npm install');
     expect(TSX_MISSING).toMatch(/in-process/);
   });
-
-  it('does not touch the committed evidence file when --out is given', async (ctx) => {
-    const tsx = TSX_CLI;
-    if (tsx === undefined) {
-      ctx.skip(TSX_MISSING);
-      return;
-    }
-    // The specific hazard: the default `--out` is a file under version control
-    // and the write is unconditional, so a spawn that forgot to redirect it
-    // would erase the record of what the gold set proved.
-    const committed = fileURLToPath(
-      new URL('../../evidence/gold-verification.json', import.meta.url),
-    );
-    const before = existsSync(committed);
-    await spawnEntry(tsx, CLI, ['--dir', corpus(false), '--out', join(temp(), 'e.json')]);
-    expect(existsSync(committed)).toBe(before);
-  }, 60_000);
 });
