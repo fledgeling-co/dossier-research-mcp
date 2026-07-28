@@ -60,7 +60,7 @@ BENCH-09 is hand-authoring work and is the long pole in wall-clock terms. It sta
 | BENCH-10 | Self-eval of Dossier's own checking | 01, 03 | **Merged** | see log | |
 | BENCH-11 | Which combination is best | 02, scorers | **Merged** | see log | |
 | BENCH-12 | A finished report is an input to the next one | none | **Merged** | `ai/bench-12` | 1717 tests; ships `research_ground` |
-| BENCH-13 | The statistics | 02, 08 | **Running** | | |
+| BENCH-13 | The statistics | 02, 08 | **Merged** | `ai/bench-13` | 2209 tests; 180 comparisons, 0 runnable | |
 | BENCH-14 | A fresh worktree cannot run the suite | none | **Merged** | `ai/bench-14` | 14 pass in a bare worktree, was 11 failing | deferred child, from BENCH-11 |
 | BENCH-15 | Three primitives now exist twice | 04, 05, 11 | Queued | | deferred child, from BENCH-04/05/11 |
 | BENCH-16 | Nothing records when a source was published | 02, 03 | Queued | | deferred child, from BENCH-08 |
@@ -184,3 +184,18 @@ What actually bounds the cost is not the concurrency number, it is **committing 
   Swept the tree for the same habit: exactly one instance existed. The other three gate-running spawns use `npx tsx`, which already walks ancestors, proven by the baseline where only one file failed.
 
   **Flagged, not fixed:** `bench/src/report/cli.ts` has no wiring test at all, so `bench:report` could break its entry point and the gate would stay green. Same class of defect as the one this item exists to prevent.
+- **28 Jul, BENCH-13 merged. All thirteen original items are in.** 2209 tests green.
+
+  **The headline is a refusal, and it is the right one.** Probed with three backends at three repetitions across all seven admitted tasks, with a fabricated 70-point accuracy gap deliberately planted: **180 pairwise comparisons enumerate and 0 can run.** Every one refused as not scorable, because every category sits below the five-task floor. The report says so above every score. A benchmark that produced a confident ranking from that corpus would be the exact failure this whole design argues against, and it declined.
+
+  **A structural limit found while building, which changes what the design can ever deliver.** Clustering on category means a category-scoped comparison has one cluster and no replication across clusters, so it can never be clustered at all. It is refused rather than computed at task level, which means only *overall* comparisons can ever produce a measured difference and a per-category ranking will print its numbers with every backend tied however far apart the medians look. That was not visible when I specified clustered errors; it is a consequence of specifying them.
+
+  Its Codex review found five real defects, all one shape: **the report could contradict itself.** A refused comparison fell back to a weaker check and published a category ordering the paired test had just declined; the scorecard and the ranking derived the overall verdict separately and disagreed; and `pass@1` and `pass^k` ignored failures entirely, so three passes and seven failures read as perfectly reliable.
+
+  **A third NUL byte**, in two string literals used as separators. Three runners across two days have now written a U+0000 composite-key separator, and `lint:source` caught all three. The gate exists because `contract.ts` shipped one in v0.2.1; it has now paid for itself three times in two days.
+
+## Remaining
+
+BENCH-15 and BENCH-16 are queued deferred children. One more was surfaced by BENCH-14 and has no row yet: `bench/src/report/cli.ts` has no wiring test, so `bench:report` could break its entry point and the gate would stay green.
+
+**The binding constraint on everything is the corpus.** Until at least two categories hold five tasks each, no comparison can run at all. Every scorer, every statistic and every frontier now exists and has nothing it can distinguish. That is BENCH-09's LiveDRBench problem-inversion follow-up, and it is worth more than any remaining code.
