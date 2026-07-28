@@ -61,7 +61,7 @@ BENCH-09 is hand-authoring work and is the long pole in wall-clock terms. It sta
 | BENCH-11 | Which combination is best | 02, scorers | **Merged** | see log | |
 | BENCH-12 | A finished report is an input to the next one | none | **Merged** | `ai/bench-12` | 1717 tests; ships `research_ground` |
 | BENCH-13 | The statistics | 02, 08 | **Running** | | |
-| BENCH-14 | A fresh worktree cannot run the suite | none | **Running** | | deferred child, from BENCH-11 |
+| BENCH-14 | A fresh worktree cannot run the suite | none | **Merged** | `ai/bench-14` | 14 pass in a bare worktree, was 11 failing | deferred child, from BENCH-11 |
 | BENCH-15 | Three primitives now exist twice | 04, 05, 11 | Queued | | deferred child, from BENCH-04/05/11 |
 | BENCH-16 | Nothing records when a source was published | 02, 03 | Queued | | deferred child, from BENCH-08 |
 
@@ -175,3 +175,12 @@ What actually bounds the cost is not the concurrency number, it is **committing 
   **BENCH-10 measured what this design costs.** Containment passed 11 of 23 bad citations as supporting where the judged pass let none through, and the cause is structural rather than tunable: a contradiction states the opposite of a page using that page's own numbers. That number is now in the product's tool description, because the design forbade a model in the scoring loop precisely so this could be measured rather than argued about. From the same corpus, 22 of 30 pages resolve HTTP 200 and do not support the claim attached to them, so reading a green link as a sound citation scores identically to answering "supports" to everything.
 
   **BENCH-11 found a shipped defect** by building a second consumer of `mergeEvidence`, which labelled provenance with the first six characters of a run id. Two ids sharing that prefix collapsed into one label and overlap then reported zero however much the runs shared. Its Codex review also caught `canonicaliseUrl` folding `http` and `https` together, understating overlap in the direction that flatters a combination.
+- **28 Jul, BENCH-14 merged** — A fresh worktree now runs the suite. Verified where it matters: a worktree under `.worktrees/` with no `node_modules` of its own goes from 11 failing to **14 passing, zero skipped**.
+
+  It corrected the acceptance criterion I wrote rather than working around it. My check used `/tmp`, where no ancestor holds a `node_modules` at all, so `tsgo`, `eslint` and `vitest` are absent and the gate dies before reaching a test. That case is not fixable here and the runner said so instead of claiming it.
+
+  **It also refused to remove the last subprocess, for the right reason.** Nine of the ten cases became in-process calls, but making the entry point importable means guarding the top-level `await main()`, and a guard that silently stops firing makes `npm run bench:detector` print nothing and exit zero while every in-process test stays green. That is the `reading.ts` defect this repo shipped a day earlier, and the fix would have recreated it. One case still spawns, resolving tsx through Node's own resolution, and skips with a named reason if that fails.
+
+  Swept the tree for the same habit: exactly one instance existed. The other three gate-running spawns use `npx tsx`, which already walks ancestors, proven by the baseline where only one file failed.
+
+  **Flagged, not fixed:** `bench/src/report/cli.ts` has no wiring test at all, so `bench:report` could break its entry point and the gate would stay green. Same class of defect as the one this item exists to prevent.
