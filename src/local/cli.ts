@@ -1,4 +1,5 @@
 import { execFileSync, spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { accessSync, chmodSync, constants, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { access, realpath } from 'node:fs/promises';
 import { homedir, tmpdir, userInfo } from 'node:os';
@@ -748,10 +749,16 @@ export function normaliseModelName(model: string): string {
  * The store's own permissions are tightened alongside, because defence that
  * depends on a single path choice is one refactor from being gone.
  */
-export function cliWorkDir(_storeDir: string): string {
-  // Deliberately NOT derived from storeDir. The parameter is kept so callers
-  // read unchanged and so this comment sits where the old path was built.
-  const dir = join(tmpdir(), `dossier-cli-workdir-${String(userInfo().uid)}`);
+export function cliWorkDir(storeDir: string): string {
+  // Outside the store, but still one directory PER store.
+  //
+  // The first attempt at this fix returned a single shared directory for every
+  // store, which traded one isolation bug for another: two runs, or two tests,
+  // then shared a working directory and could see each other's leftovers. The
+  // store path is hashed rather than joined, so the directory is unique per
+  // store without the store's own path being reconstructable from it.
+  const key = createHash('sha256').update(resolve(storeDir)).digest('hex').slice(0, 12);
+  const dir = join(tmpdir(), `dossier-cli-workdir-${String(userInfo().uid)}-${key}`);
   try {
     mkdirSync(dir, { recursive: true, mode: 0o700 });
     // Empty and git-initialised: enough for Codex to consider it trusted, with

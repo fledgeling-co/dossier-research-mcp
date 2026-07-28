@@ -642,10 +642,13 @@ describe('CLI-32: a CLI is run with stdin closed, in a scratch directory', () =>
     const root = await mkdtemp(join(tmpdir(), 'wd-'));
     const work = cliWorkDir(root);
     expect(root.startsWith(work), 'and the store must not sit under it').toBe(false);
-    // Two different stores share one scratch directory, which is intended: it
-    // is scratch, it holds nothing, and one per store would multiply the
-    // directories without isolating anything that is not already isolated.
-    expect(cliWorkDir(await mkdtemp(join(tmpdir(), 'wd2-')))).toBe(work);
+    // And one directory PER store. The first version of this fix shared a
+    // single directory across every store, which swapped leaking into the
+    // store for two concurrent runs sharing a working directory — caught by a
+    // test that passed alone and failed in the full suite.
+    expect(cliWorkDir(await mkdtemp(join(tmpdir(), 'wd2-')))).not.toBe(work);
+    // Same store in, same directory out, or the git init is paid every call.
+    expect(cliWorkDir(root)).toBe(work);
   });
 
   it('closes stdin, so a CLI that waits for input does not hang', async () => {

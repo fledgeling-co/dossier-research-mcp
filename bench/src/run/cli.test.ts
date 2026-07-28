@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { NO_SEARCH_CLIS } from '../../../src/providers/loop.js';
-import { HONOURS_TOOLS, parseArgs, refusesNoSearch } from './cli.js';
+import { HONOURS_TOOLS, NO_SEARCH_UNVERIFIED, parseArgs, refusesNoSearch } from './cli.js';
 
 /**
  * Argument parsing, tested on its own because every defect in it is a spend
@@ -102,29 +102,48 @@ describe('parseArgs', () => {
       expect(refusesNoSearch('local-claude')).toBe(false);
     });
 
-    it('HONOURS_TOOLS names exactly the providers whose source reads args.tools', () => {
-      // The printed reassurance is only as true as this set. A provider that
-      // grows tool support and is not added here would be reported as
-      // closed-book while it searched; one that loses it would be reported as
-      // having searched when it did not. Both are the benchmark lying about
-      // its own conditions, so the set is re-derived rather than trusted.
-      const CANDIDATES = ['gemini', 'openai', 'perplexity', 'xai', 'local'] as const;
+    it('HONOURS_TOOLS names exactly the backends whose REQUEST carries the tool set', () => {
+      // Derived from the code path, not the file name, because the file name
+      // got this wrong twice in one session and in both directions.
+      //
+      // `src/providers/gemini.ts` has no reference to `tools` and looked like a
+      // backend that ignored them. It is a thin wrapper: the request is built
+      // in `src/gemini/client.ts`, which maps `google_search` straight through.
+      // So the map below names, per backend, the file that actually builds its
+      // request, and a wrapper that merely forwards is followed rather than
+      // grepped.
+      const BUILDS_REQUEST: Record<string, string> = {
+        gemini: '../../../src/gemini/client.ts',
+        openai: '../../../src/providers/openai.ts',
+        perplexity: '../../../src/providers/perplexity.ts',
+        xai: '../../../src/providers/xai.ts',
+        local: '../../../src/providers/local.ts',
+      };
       const reads = new Set<string>();
-      for (const id of CANDIDATES) {
-        const src = readFileSync(new URL(`../../../src/providers/${id}.ts`, import.meta.url), 'utf8');
+      for (const [id, rel] of Object.entries(BUILDS_REQUEST)) {
+        const src = readFileSync(new URL(rel, import.meta.url), 'utf8');
         // Comments describe intent, not behaviour: a provider that only
         // mentions tools in prose does not send them.
         const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
         if (/\btools\b/.test(code)) reads.add(id);
       }
-      // The loop backends read the declared tools too, and act on them by
-      // choosing the CLI's argv, so they belong in the set for the CLIs that
-      // can be denied their tools and nowhere else. This half was wrong when
-      // first written: the flag reached `loop-claude` while the run printed
-      // that it did not, which is the same false reassurance in the opposite
-      // direction. It is derived from the provider now.
+      // The loop backends choose the CLI's argv, so they honour it for the CLIs
+      // that can be denied their tools, and nowhere else.
       for (const cli of NO_SEARCH_CLIS) reads.add(`loop-${cli}`);
       expect([...reads].sort()).toEqual([...HONOURS_TOOLS].sort());
+    });
+
+    it('does not claim a Gemini no-search cell is closed-book', () => {
+      // Receiving the request is not the same as obeying it. Deep Research is a
+      // search agent whose own cost band is quoted as ~80 searches for fast and
+      // ~160 for max, and nobody has tested what it does with no search tool
+      // declared. Sorting it into either bucket would be a claim this benchmark
+      // exists to catch.
+      expect(HONOURS_TOOLS.has('gemini')).toBe(true);
+      expect(NO_SEARCH_UNVERIFIED.has('gemini')).toBe(true);
+      for (const p of ['openai', 'perplexity', 'xai', 'loop-claude']) {
+        expect(NO_SEARCH_UNVERIFIED.has(p), p).toBe(false);
+      }
     });
   });
 });

@@ -62,32 +62,45 @@ const USAGE = `Usage: bench-run --providers <a,b> --repeat <n> --ceiling <usd> [
 /**
  * Backends whose request actually carries the declared tool set.
  *
- * Established by reading the provider modules rather than by assuming: only
- * `openai`, `perplexity` and `xai` reference `tools` at all. `gemini.ts` has no
- * reference to it, because Deep Research always searches, and neither does
- * `local.ts`, because a CLI uses whatever search it was built with.
+ * Corrected after getting it wrong twice, in both directions, which is why the
+ * derivation below follows the code path rather than a file name.
  *
- * A stale list here would print a reassurance that is false, so
- * `cli.test.ts` re-derives it from the provider sources.
+ * `src/providers/gemini.ts` contains no reference to `tools` — but it is a thin
+ * wrapper, and the request is built in `src/gemini/client.ts`, whose
+ * `buildTools` maps `google_search` straight through. Grepping the wrapper said
+ * Gemini ignored the flag; the client says it does not.
  */
 export const HONOURS_TOOLS: ReadonlySet<string> = new Set([
+  'gemini',
   'openai',
   'perplexity',
   'xai',
-  // The loop backends control their own argv, so they can deny a CLI its tools
-  // where the CLI supports it. Derived from the provider rather than restated,
-  // because listing them here was wrong within an hour of being written: the
-  // flag reached `loop-claude` while this file reported that it did not.
   ...NO_SEARCH_CLIS.map((cli) => `loop-${cli}`),
 ]);
 
 /**
+ * Backends where omitting the search tool is NOT known to produce a closed-book
+ * run, whatever the request says.
+ *
+ * Gemini is the case. `buildTools` returns `undefined` for an empty array, so
+ * the request genuinely carries no search tool — and Deep Research is a search
+ * agent by construction, whose own cost band is quoted as "~80 searches" for
+ * fast and "~160 searches" for max. Whether it stops searching when the tool is
+ * undeclared has NOT been tested, and asserting either way would be exactly the
+ * kind of claim this benchmark exists to catch.
+ *
+ * So the run says so, rather than sorting it into "closed-book" or "ignored the
+ * flag". Both would be a statement nobody has checked.
+ */
+export const NO_SEARCH_UNVERIFIED: ReadonlySet<string> = new Set(['gemini']);
+
+/**
  * Loop backends that REFUSE a no-search run rather than ignoring the request.
  *
- * The third state, and the one worth planning around. `gemini` ignores the flag
- * and answers anyway; `loop-codex` throws in `createRun`, because a CLI with no
- * documented way to deny its tools must not be run with search on under a
- * closed-book label. Both are "does not honour it", and treating them alike
+ * The third state, and the one worth planning around. A local CLI ignores the
+ * flag and answers anyway; `loop-codex` throws in `createRun`, because a CLI
+ * with no documented way to deny its tools must not be run with search on under
+ * a closed-book label. Both are "does not honour it", and treating them alike
  * would queue a batch whose every cell is going to fail one at a time.
  */
 export function refusesNoSearch(provider: string): boolean {
@@ -273,13 +286,23 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
     // CLI ignore the declared tool set and search anyway, so a batch labelled
     // no-search contains cells that searched, and a reader who assumes
     // otherwise is comparing a closed-book column against an open-book one.
-    const reached = args.providers.filter((p) => HONOURS_TOOLS.has(p));
     const refuses = args.providers.filter((p) => refusesNoSearch(p));
-    const ignored = args.providers.filter((p) => !HONOURS_TOOLS.has(p) && !refusesNoSearch(p));
+    const unverified = args.providers.filter((p) => NO_SEARCH_UNVERIFIED.has(p));
+    const reached = args.providers.filter((p) => HONOURS_TOOLS.has(p) && !NO_SEARCH_UNVERIFIED.has(p));
+    const ignored = args.providers.filter(
+      (p) => !HONOURS_TOOLS.has(p) && !refusesNoSearch(p) && !NO_SEARCH_UNVERIFIED.has(p),
+    );
     say(`No search: reaches ${reached.length === 0 ? 'NONE of the chosen backends' : reached.join(', ')}`);
+    if (unverified.length > 0) {
+      say(
+        `           ${unverified.join(', ')} receive the request with no search tool declared, but whether ` +
+          'that stops them searching is UNVERIFIED — Deep Research is a search agent and its own cost band ' +
+          'is quoted in searches. Do not read those cells as closed-book.',
+      );
+    }
     if (ignored.length > 0) {
       say(
-        `           ${ignored.join(', ')} ignore the declared tools and use their own built-in search; ` +
+        `           ${ignored.join(', ')} never see the declared tools and use their own built-in search; ` +
           'their cells are NOT closed-book',
       );
     }
