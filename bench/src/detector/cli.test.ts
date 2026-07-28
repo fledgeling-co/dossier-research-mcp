@@ -119,12 +119,15 @@ function spawnCli(tsx: string): Promise<{ code: number | null; stdout: string; s
 
 describe('the entry point actually runs (SELF-23)', () => {
   it('is wired: the real CLI, spawned over its real argv, prints both families (WT-04)', async (ctx) => {
-    if (TSX_CLI === undefined) {
+    const tsx = TSX_CLI;
+    if (tsx === undefined) {
       // Named rather than silent. A skipped test nobody notices is a test that
       // has stopped working, so this says what is missing and how to fix it.
+      // `skip` throws; the return is what tells the compiler so.
       ctx.skip(TSX_MISSING);
+      return;
     }
-    const ran = await spawnCli(TSX_CLI);
+    const ran = await spawnCli(tsx);
     expect(ran.stderr, ran.stderr).toBe('');
     expect(ran.code).toBe(0);
     expect(ran.stdout).toContain('# The support family');
