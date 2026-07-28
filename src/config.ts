@@ -109,6 +109,17 @@ const EnvSchema = z.object({
    * and a panel wider than the cap is refused whole rather than trimmed. Ten
    * admits that with headroom and still refuses a runaway.
    */
+  /**
+   * How many signed-in CLIs the free lane runs. 0 runs every one available.
+   *
+   * Defaults to two. A second model is the cheapest check there is on an
+   * invented finding — a claim only one backend found is visibly weaker than
+   * one both found — while a third and fourth mostly widen web coverage rather
+   * than verifying anything, and every one spends subscription quota Dossier
+   * cannot see or meter. The ones held back are named as tie-breakers rather
+   * than discarded.
+   */
+  DOSSIER_FREE_LANE_MAX: numeric(2, 0, 16),
   DOSSIER_MAX_CONCURRENT: numeric(10, 1, 64),
   DOSSIER_REQUIRE_CONTRACT: boolish(false),
   DOSSIER_DEDUPE_TTL_MINUTES: numeric(1440, 0, 60 * 24 * 90),
@@ -187,6 +198,8 @@ export interface Config {
   readonly providerBudgetsUsd: Readonly<Record<string, number>>;
   /** Runs allowed in flight per backend. Zero means only the global cap applies. */
   readonly providerConcurrency: Readonly<Record<string, number>>;
+  /** CLIs the free lane runs at once. Zero means every signed-in one. */
+  readonly freeLaneMax: number;
   readonly maxConcurrent: number;
   readonly requireContract: boolean;
   readonly dedupeTtlMinutes: number;
@@ -288,6 +301,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       openai: e.DOSSIER_CONCURRENCY_OPENAI,
       xai: e.DOSSIER_CONCURRENCY_XAI,
     },
+    freeLaneMax: e.DOSSIER_FREE_LANE_MAX,
     maxConcurrent: e.DOSSIER_MAX_CONCURRENT,
     requireContract: e.DOSSIER_REQUIRE_CONTRACT,
     dedupeTtlMinutes: e.DOSSIER_DEDUPE_TTL_MINUTES,

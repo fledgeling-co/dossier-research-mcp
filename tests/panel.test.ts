@@ -178,16 +178,35 @@ describe('panel assembly', () => {
   // used to produce one answer, because a single `local` provider picked a
   // winner by preference order and the other two sat idle on every run.
   it('PANEL-21: seats every signed-in CLI, strongest first', () => {
-    const panel = panelFor('Who leads this market?', {}, clis);
+    // `freeLaneMax: 0` is the uncapped lane. This case is about SEATING and
+    // ORDER — that every signed-in CLI is eligible and the strongest leads —
+    // which is a separate property from how many of them a default run spends.
+    // The cap is asserted directly below.
+    const panel = panelFor('Who leads this market?', { freeLaneMax: 0 }, clis);
     expect(ids(panel.free)).toEqual(['local-claude', 'local-codex', 'local-grok']);
     expect(panel.total.highUsd).toBe(0);
     // Order is the offered order at equal cost, not whatever the sort happened
     // to do, so the strongest CLI leads and reads first in the rendering.
-    expect(ids(panelFor('Who leads this market?', {}, [grokCli, cli, codexCli]).free)).toEqual([
-      'local-grok',
-      'local-claude',
-      'local-codex',
-    ]);
+    expect(
+      ids(panelFor('Who leads this market?', { freeLaneMax: 0 }, [grokCli, cli, codexCli]).free),
+    ).toEqual(['local-grok', 'local-claude', 'local-codex']);
+  });
+
+  it('PANEL-21: runs two of them by default, and holds the rest as tie-breakers', () => {
+    // Two is where the cross-model check appears: a claim only one backend
+    // found is visibly weaker than one both found, and that costs nothing extra
+    // in dollars. Three mostly widens web coverage instead — corroboration is
+    // counted in independent registrable domains, not in backends — while every
+    // CLI spends subscription quota Dossier cannot see, meter or cap.
+    const panel = panelFor('Who leads this market?', {}, clis);
+    expect(ids(panel.free)).toEqual(['local-claude', 'local-codex']);
+
+    // Held, not discarded, and the reason says what would make it worth running.
+    const held = panel.rejected.find((r) => r.id === 'local-grok');
+    expect(held?.why).toMatch(/tie-breaker/);
+    expect(panel.notes.join(' ')).toMatch(/if the two disagree/i);
+    // And the operator is told how to get all of them back.
+    expect(panel.notes.join(' ')).toMatch(/DOSSIER_FREE_LANE_MAX=0/);
   });
 
   it('PANEL-21: a CLI that is installed but not signed in loses its own seat only', () => {
@@ -403,9 +422,11 @@ describe('panel assembly', () => {
   });
 
   it('PANEL-26: an unprobed machine keeps every CLI and says the lane may hold duplicates', () => {
+    // Uncapped, because this is about the DEDUPE keeping an unprobed CLI rather
+    // than about how many the default runs.
     // No cache at all. Guessing from the product name is what would drop a
     // paid-for backend, and on the default install the guess would be wrong.
-    const panel = panelFor('Who leads this market?', {}, clis);
+    const panel = panelFor('Who leads this market?', { freeLaneMax: 0 }, clis);
     expect(ids(panel.free)).toEqual(['local-claude', 'local-codex', 'local-grok']);
     expect(panel.rejected.map((r) => r.id)).not.toContain('local-grok');
 
@@ -438,7 +459,13 @@ describe('panel assembly', () => {
   });
 
   it('PANEL-26: a partly probed lane still warns about the members nobody asked', () => {
-    const panel = panelFor('Who leads this market?', { cliModels: probedAs({ 'local-claude': 'Claude Opus 4.6' }) }, clis);
+    // Uncapped: the warning counts the lane the dedupe saw, not the two a
+    // default run would spend.
+    const panel = panelFor(
+      'Who leads this market?',
+      { freeLaneMax: 0, cliModels: probedAs({ 'local-claude': 'Claude Opus 4.6' }) },
+      clis,
+    );
     expect(panel.free).toHaveLength(3);
     expect(panel.notes.join(' ')).toMatch(/2 of 3 CLIs on the free lane have no probed model/);
   });

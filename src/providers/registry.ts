@@ -66,6 +66,7 @@ export class ProviderRegistry {
    * next restart.
    */
   private readonly storeDir: string;
+  private readonly freeLaneMax: number;
 
   constructor(config: Config, resolveGeminiClient: () => DeepResearchClient | null) {
     const built = [
@@ -88,6 +89,7 @@ export class ProviderRegistry {
     this.allowListInForce = config.enabledProviders.length > 0;
     this.all = this.allowListInForce ? built.filter((p) => allows(config.enabledProviders, p.id)) : built;
     this.storeDir = config.storeDir;
+    this.freeLaneMax = config.freeLaneMax;
   }
 
 
@@ -168,6 +170,7 @@ export class ProviderRegistry {
       ...need,
       allowList: this.allowListInForce,
       cliModels: probedModelsFor(this.storeDir),
+      freeLaneMax: this.freeLaneMax,
     });
   }
 }
@@ -473,6 +476,8 @@ export interface PanelNeed extends RoutingNeed {
    * A missing entry means "never asked", never "different from the others".
    */
   readonly cliModels?: ReadonlyMap<ProviderId, ProbedModel>;
+  /** How many CLIs the free lane may run. 0 means every one available. */
+  readonly freeLaneMax?: number;
 }
 
 const ZERO_BAND: CostBand = { lowUsd: 0, highUsd: 0, midUsd: 0, basis: 'no members' };
@@ -557,7 +562,42 @@ export function assemblePanelAmong(
   const deduped = dedupeFreeLaneByModel(free, need.cliModels);
   rejected.push(...deduped.dropped);
   notes.push(...deduped.notes);
-  const freeFinal = deduped.kept;
+
+  // Two, not every CLI on the machine, and the reason is what the extra ones
+  // actually buy.
+  //
+  // A second model is the cheapest check there is on an invented finding: a
+  // claim only one backend found is visibly weaker than one both found, and
+  // that costs nothing extra in dollars. A third and fourth mostly widen web
+  // coverage rather than adding checks — `countsAsCorroboration` counts
+  // independent registrable domains, not backends, so a fourth model agreeing
+  // is not a fourth source.
+  //
+  // What they do cost is subscription quota, which is the one price in this
+  // system Dossier cannot see, meter or put a ceiling on. So the default spends
+  // two and holds the rest.
+  //
+  // The held ones are NOT dropped: `reserve` is the tie-breaker. When the two
+  // that ran disagree, a third is the cheapest way to break it, and naming it
+  // here means the merge can say which one to reach for.
+  const laneMax = need.freeLaneMax ?? DEFAULT_FREE_LANE;
+  const freeFinal = laneMax > 0 ? deduped.kept.slice(0, laneMax) : deduped.kept;
+  const reserve = laneMax > 0 ? deduped.kept.slice(laneMax) : [];
+  for (const held of reserve) {
+    rejected.push({
+      id: held.provider.id,
+      why: `held as a tie-breaker: the free lane runs ${String(laneMax)} for a cross-model check, and a third is worth spending only if those two disagree`,
+    });
+  }
+  if (reserve.length > 0) {
+    notes.push(
+      `Free lane capped at ${String(laneMax)} of ${String(deduped.kept.length)} available CLIs. ` +
+        'A second model is the cheapest check on an invented finding; a third mostly widens coverage ' +
+        'rather than verifying, and every CLI spends subscription quota Dossier cannot meter. ' +
+        `If the two disagree, break the tie with \`provider: "${reserve[0]!.provider.id}"\`. ` +
+        'Set DOSSIER_FREE_LANE_MAX=0 to run every signed-in CLI.',
+    );
+  }
 
   // "Never xAI alone" on a legal question, from the design and from xAI's own
   // documentation, which describes the product as suited to finding things
@@ -637,6 +677,16 @@ interface FreeLaneDedupe {
  * provider, never derived from a probed model name. This function reads
  * `capabilities` for nothing and must keep reading it for nothing.
  */
+/**
+ * How many CLIs the free lane runs when the operator has not said.
+ *
+ * Two, because two is where the cross-model check appears and three is where
+ * the returns fall off. Named here rather than written into the assembly, so
+ * the number is one decision with a reason attached rather than a literal
+ * somebody will change without reading why.
+ */
+export const DEFAULT_FREE_LANE = 2;
+
 function dedupeFreeLaneByModel(
   free: readonly PanelMember[],
   models: ReadonlyMap<ProviderId, ProbedModel> | undefined,
