@@ -10,6 +10,17 @@ This project follows [semantic versioning](https://semver.org/). Until 1.0 the m
 
 ### Changed
 
+- **The benchmark's own fail-first check spent your CLI subscription the moment you ran it, and now refuses to.** `npm run bench:failcheck` with no arguments defaulted to closed-book, `--bin claude`, a limit of 1,000 and four at a time, and started spawning immediately. Its sibling `bench:detector -- judge` refuses the same class of run without `--confirm`, naming the case count and what it spends. Same resource, same mechanism, opposite treatment, and `CLAUDE.md` is explicit that anything spending money says so and gates it. This was the benchmark violating the rule the product follows.
+
+  It now refuses and prints what it would spend: how many tasks, in which mode, through which binary, and that binary's dated coverage claim and caution read out of the product's own catalogue rather than asserted here. Two further refusals sit in front of that one. `--bin` must name a backend this check has a headless form written down for, because handing one vendor's flags to another produces a run that dies at argument parsing and gets recorded as a task that failed, which is a wrong admission decision rather than an error anybody notices; that is how `local-codex` went 0-for-3 in this repo's own ledger. And after `--confirm`, the binary is resolved and identified before the first question, because a name on `PATH` is not an identity.
+
+  The ordering is the part worth knowing: **nothing is spawned until `--confirm`**, including the `--version` probe, since a probe is a spawn too. The mode check moved ahead of the task count as well, because closed-book on a backend that cannot do it used to fail after selection, so a refusal could name twenty-seven tasks for a combination capable of none of them.
+
+  Three further ways it failed open, all found by an adversarial read of the change rather than by the change itself, and all the shape `CLAUDE.md` names: skip-not-fatal is right for a listing and wrong for admission control. `--concurrency abc` parsed to `NaN`, which made the worker pool zero lanes wide, so it probed **nothing**, wrote an evidence file recording that no task was already passed, and exited 0, overwriting the committed evidence on the way. An unknown flag was ignored, so `--limt 2 --confirm` ran the whole corpus while the caller believed they had asked for two. And a flag whose value was forgotten swallowed the next token, so `--category --confirm` ran **unconfirmed** against a category named `--confirm`. Numeric flags are now whole numbers of at least one, unknown flags and bare positionals are refused, and a value that is itself a flag is refused.
+
+  This is a benchmark script, not the server. Nothing in the published package changes.
+
+
 - **The benchmark's syndication check counted one wire story as two sources whenever the two outlets typeset it differently.** `bench/src/score/syndication.ts` was the only text normaliser in the tree that did not normalise Unicode, so `ﬁ` and `fi` were different letters, `０` and `0` were different digits, and a precomposed `é` was a different word from a decomposed one. It now normalises to NFKC before shingling.
 
   It **failed open**, which is why it is worth an entry rather than a line in a commit. The wire story was not collapsed, so the collapsed independent-domain count stayed equal to the raw one and the report overstated how independently sourced a backend was. That is the direction that flatters the backend, and it defeats the rule the whole product turns on: agreement is not corroboration.
@@ -42,6 +53,19 @@ This project follows [semantic versioning](https://semver.org/). Until 1.0 the m
 
 
 ### Fixed
+
+- **`bench/src/detector/report.ts` declared a purity it did not have, and the guard was structurally unable to notice.** The module said it must never import `node:fs` and must never reach a network. The guard listed four sibling imports it must not have, omitted the one that leaks, and checked by matching each file's own text, so a leak one hop away was invisible to it by construction.
+
+  Traced with an ESM resolve hook, it reaches six forbidden modules by three chains, all through the same unguarded edge: `node:fs` two hops out, `undici`, `node:net` and `node:dns/promises` three, and `node:fs/promises` and `node:child_process` six, through the product's own CLI spawner. A cross-slice audit found the first of those; the rest were found by re-running the trace rather than trusting the finding.
+
+  **This is capability, not behaviour, and the difference is the whole point.** The detector has never made a network call, read a file or spawned a process while scoring: the arms take a scripted transport, an offline fetcher, an in-memory cache and a fixed clock. What was false was the guarantee, not the conduct, and reporting it the other way would be a more alarming claim than the true one.
+
+  The guard now walks the import graph, using the walk BENCH-03 had already written for `bench/src/score/` rather than a second one, and the claim splits: four modules reach nothing impure, and `report.ts` is asserted impure over its exact module set with `./arms.js` asserted as the only edge by which it is. A new impurity through any other edge fails. Lifting the walk lost a form the old regex caught, a dynamic `import()`, and its own smuggling case caught that before it shipped.
+
+- **Three benchmark entry points could have stopped working with the whole suite green.** `bench:verify` and `bench:failcheck` had no test of any kind, and `bench:report` had nineteen that all called its functions directly and none that ran it. That is exactly the defect BENCH-14 was created to fix, and it survived because BENCH-14 was scoped to the one file that had already broken. Each now has one real process over real argv, on a path that reaches no network.
+
+  Found while writing them: `bench:verify` defaults `--out` to a committed evidence file and writes unconditionally, so any test that drove it without redirecting the output would have overwritten the record of what the gold set proved with an empty report, and stayed green.
+
 
 - **Codex reported "failed to answer" while three other CLIs answered, and a CLI was being run in your project directory.** Two defects, both mine, found together because one hid the other.
 

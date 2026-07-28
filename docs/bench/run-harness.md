@@ -143,3 +143,11 @@ Plan first. `--dry-run` prints the matrix, the remaining cells, the projected wo
 | `--dry-run` | Plan and print, start nothing |
 
 Exit codes: `0` ran or had nothing to do, `1` no tasks found, `2` refused by the ceiling.
+
+### Why there is no `npm run bench:run`
+
+Every other benchmark entry point has an npm script and this one does not. That was never written down, so a cross-slice audit raised it on 28 July 2026 as a possible oversight. It is not, and the reason is now recorded rather than rediscovered.
+
+This is the only entry in the benchmark that spends a **metered balance**. Everything else spends nothing or spends a subscription quota the runner already pays for. A script makes a command look like part of the ordinary dev loop, sitting in `package.json` beside `bench:verify` and `bench:report`, and tab-completing next to them. The long form is a small deliberate speed bump in front of the one command that can buy four figures of research.
+
+Its own guards are already the strongest here: `--ceiling` is required, an unknown flag is refused rather than ignored, and the plan prints before the first dollar. The missing script is one more layer of the same posture, not a gap in it.

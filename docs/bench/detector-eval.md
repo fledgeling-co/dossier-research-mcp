@@ -127,6 +127,23 @@ npm run bench:detector -- judge --confirm # run the judged pass; spends a quota
 
 The judged pass defaults to a coding CLI, which spends a subscription already paid for rather than a metered balance, on the same routing rule the product itself follows and the same approach BENCH-09 used to fail-check twenty-seven tasks for nothing. It refuses to start without `--confirm`.
 
+`capture` reaches the network and is deliberately not gated the same way. A single author-supplied URL fetched through the SSRF-safe production collector is a read, not a spend, and a confirmation on every network call is how an operator learns to type `--confirm` without reading it.
+
+### What the scoring path can reach, and what it does
+
+`report.ts` used to declare that it must never import `node:fs` and must never reach a network, and a guard reading its own text agreed. Both were false. Traced with an ESM resolve hook on 28 July 2026, and through `arms.ts` alone, it reaches six forbidden modules by three chains:
+
+```
+arms -> citations/cache                     node:fs
+arms -> citations/fetch -> net/safe-fetch   undici, node:net, node:dns/promises
+arms -> citations/collect -> ... -> local/cli
+                                            node:fs, node:fs/promises, node:child_process
+```
+
+**Nothing is called.** The registry arm drives `collectCitationEvidence` with a scripted transport, an offline page fetcher, an in-memory cache and a fixed clock, so scoring reaches no network, reads no file and spawns nothing. That was true before this was found and it is true now. What was false was the guarantee, not the conduct, and the distinction is worth keeping straight: **capability, not behaviour.**
+
+The guard walks the import graph now and asserts the narrow true thing. Four modules reach nothing impure. `report.ts` reaches those six, and `./arms.js` is the only edge by which it does, so a new impurity through any other edge fails. Keeping the arms edge is a choice rather than a necessity: the collector injects every outside interaction, so `report.ts` could be made pure by taking the arms as an argument. That is a module-boundary change to a merged slice for a property that is not behavioural, and it was declined on those terms.
+
 **The caveat that rides on that number:** the CLI is not the utility model the product would call. The result measures a model of that class answering the product's own question, with the product's own prompt and the product's own page cap, and the evidence file records which model answered and on what date. A re-run against a different model is a new evidence file, never an edit to the old one.
 
 ## What it found, 27 July 2026

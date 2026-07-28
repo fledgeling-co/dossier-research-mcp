@@ -63,7 +63,10 @@ const USAGE = `bench:detector - does Dossier's own checking actually work
 
 capture prints the YAML block to paste into a case file. It reaches the network
 through the production collector, so the fixture is the text the scorer would
-have been handed live.
+have been handed live. It is deliberately NOT gated the way judge is: one
+author-supplied URL fetched through the SSRF-safe collector is a read, not a
+spend, and putting a confirmation on every network call is how an operator
+learns to type --confirm without reading it.
 
 Options for judge:
   --bin <name>       the coding CLI to ask (default: claude). Spends its

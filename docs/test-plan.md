@@ -428,8 +428,8 @@ so a reader does not have to re-run them to see what was established.
 | **SEED-22** | Every probe records the response opening, so a surprising verdict is adjudicable against what was actually said | unit: `failcheck/verdict` | ✓ |
 | | *Below this line: network scripts, run by hand, evidence committed* | | |
 | **SEED-23** | Every gold fact is present in the source it cites | `npm run bench:verify` | ✓ 82/82 on 2026-07-27 (10 admitted, 72 quarantined) |
-| **SEED-24** | No task is answerable from a frontier model's weights alone | `npm run bench:failcheck -- --mode closed-book` | ✓ 0 of 27 already passed |
-| **SEED-25** | No admitted task is already passed by a free search-enabled CLI backend | `npm run bench:failcheck -- --mode search` | ✗ see the finding recorded in `bench/quarantine/README.md` |
+| **SEED-24** | No task is answerable from a frontier model's weights alone | `npm run bench:failcheck -- --mode closed-book --confirm` | ✓ 0 of 27 already passed |
+| **SEED-25** | No admitted task is already passed by a free search-enabled CLI backend | `npm run bench:failcheck -- --mode search --confirm` | ✗ see the finding recorded in `bench/quarantine/README.md` |
 
 ### BENCH-02 — the run harness
 
@@ -710,7 +710,7 @@ The only slice that tests Dossier's own claim rather than a provider's, and the 
 | **SELF-01** | The corpus loads offline and carries all five support verdicts plus all four registry verdicts | unit: `corpus` | ✓ |
 | **SELF-02** | Every case carries reasoning for its label, enforced by the schema rather than by review | unit: `corpus`, `balance` | ✓ |
 | **SELF-03** | A page fixture edited after capture fails the load, rather than silently changing a score | unit: `corpus` | ✓ |
-| **SELF-04** | The loader is pure: it reads no file and reaches no network, proven by walking its import graph | unit: `corpus` | ✓ |
+| **SELF-04** | The loader, the schema, the projections and the arithmetic reach no file and no network, proven by walking the import graph transitively rather than reading each file's own text. `report.ts` is **not** in that set; see GATE-13 | unit: `corpus` | ✓ corrected 2026-07-28 |
 | **SELF-05** | The corpus is balanced: every label has at least three cases and none exceeds 35% of its family | unit: `balance` | ✓ |
 | **SELF-06** | A detector answering `supports` to everything scores badly on the real corpus, on accuracy and on macro-F1 | unit: `balance` | ✓ |
 | **SELF-07** | It also scores recall 0 on `not_addressed`, which is the failure aggregate accuracy hides | unit: `balance` | ✓ |
@@ -894,3 +894,26 @@ Two existing rows are **amended rather than replaced**, and the amendment is the
 | **COMB-51** | The join end to end: stored cells through `harvest` and `aggregate`, verdicts mapped onto members, frontier withheld with the report's reason word. The scope gate is read off the corpus counts rather than off what happened to run, and the overall scope never reports a completion failure as a corpus failure | unit: `eligibility` | ✓ |
 | **COMB-52** | `eligibility.ts` imports no filesystem, network or fetcher, so the whole directory stays pure with the adapter in it | unit: `evaluate` | ✓ |
 | **COMB-53** | A caller can supply a score spread per combination through `evaluateCombinations`, so the tie test reaches the production path rather than only its own tests | unit: `evaluate` | ✓ |
+## BENCH-19: the spend gate, the untested entry points, and a purity claim that was false
+
+Three defects sharing one cause: the benchmark's own entry points were never held to the rules the product they measure follows. The code is [`bench/src/failcheck/cli.ts`](../bench/src/failcheck/cli.ts), [`bench/src/verify/cli.ts`](../bench/src/verify/cli.ts), [`bench/src/import-graph.ts`](../bench/src/import-graph.ts) and [`bench/src/spawn-entry.ts`](../bench/src/spawn-entry.ts).
+
+Two rows below are corrections rather than additions, and both are marked in place above: SEED-24 and SEED-25 printed an invocation that now always refuses, and SELF-04 claimed a transitive walk that did not exist and asserted purity over a module since proven impure.
+
+| AC | Statement | Test | Status |
+|---|---|---|---|
+| **GATE-01** | `bench:failcheck` without `--confirm` refuses, writes nothing, and neither asks a question nor probes a binary. A `--version` probe is a spawn, so "refused" and "refused before spawning anything" are asserted apart | unit: `failcheck/cli` | ✓ |
+| **GATE-02** | The refusal names the task count, the mode, the binary and the concurrency, and the count is the count after filtering | unit: `failcheck/cli` | ✓ |
+| **GATE-03** | The refusal quotes that backend's dated, sourced coverage claim and its caution from the product's own catalogue, rather than asserting a billing model for whatever was typed | unit: `failcheck/cli` | ✓ |
+| **GATE-04** | `--bin` naming a binary this check has no headless form for is refused before any corpus is read, and the message distinguishes a name the product does not know from a CLI it knows but this check cannot drive | unit: `failcheck/cli` | ✓ |
+| **GATE-05** | A mode the named backend cannot support is refused before the count is printed, so a refusal never names tasks a combination could not have run | unit: `failcheck/cli` | ✓ |
+| **GATE-06** | After `--confirm` and before the first question, the binary is resolved and identified; anything but `ready` refuses and asks nothing | unit: `failcheck/cli` | ✓ |
+| **GATE-07** | With `--confirm` the command **runs**: it probes every selected task, writes the evidence file, reports the tally, and exits non-zero when a task is already passed | unit: `failcheck/cli` | ✓ |
+| **GATE-08** | Each question is asked through the executable the probe resolved, not the id it was asked about, since the two differ for at least one CLI the product knows | unit: `failcheck/cli` | ✓ |
+| **GATE-09** | `--confirm` never defaults to true, whatever else is passed | unit: `failcheck/cli` | ✓ |
+| **GATE-10** | `bench:verify` runs a real verification over an injected fetcher, writes only where `--out` points, and leaves the committed evidence file untouched | unit: `verify/cli` | ✓ |
+| **GATE-11** | Importing either entry module executes nothing: no corpus read, no fetch, no spawn, nothing written | unit: `failcheck/cli`, `verify/cli` | ✓ |
+| **GATE-12** | Each of `bench:failcheck`, `bench:verify` and `bench:report` is proved wired by one real process over real argv, on a path that is hermetic, with the interpreter resolved through Node's own resolution and a named skip when it cannot be | unit: `failcheck/cli`, `verify/cli`, `report-cli` | ✓ |
+| **GATE-13** | The detector purity guard decides on the transitive import graph. `report.ts` is asserted impure over its **exact** module set, and `./arms.js` is asserted to be the only edge by which it is | unit: `corpus` | ✓ |
+| **GATE-14** | The guard cannot be vacuously green: one case proves the walk follows edges, one proves it still flags a module that really is impure, and one proves it catches every form an impure import can be written in | unit: `corpus` | ✓ |
+| **GATE-15** | The walk is one shared module with two consumers, and the escape hatches a static walk cannot follow (`createRequire`, a bare `fetch(`) are reported rather than dropped | unit: `corpus`, `citations` | ✓ |

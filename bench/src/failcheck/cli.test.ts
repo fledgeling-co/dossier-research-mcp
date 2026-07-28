@@ -87,6 +87,8 @@ interface Ran {
   readonly stderr: string;
   /** Every question the command asked. Empty is the assertion that matters most. */
   readonly asked: string[];
+  /** The executable each question was actually asked through. */
+  readonly spawnedPaths: string[];
   /** Every binary it tried to identify. A `--version` probe is still a spawn. */
   readonly identified: string[];
   readonly written: { path: string; text: string }[];
@@ -99,6 +101,7 @@ async function run(
 ): Promise<Ran> {
   let stderr = '';
   const asked: string[] = [];
+  const spawnedPaths: string[] = [];
   const identified: string[] = [];
   const written: { path: string; text: string }[] = [];
 
@@ -106,8 +109,9 @@ async function run(
     err: (text) => {
       stderr += text;
     },
-    ask: (question: string, _options: Options) => {
+    ask: (question: string, _options: Options, binPath: string) => {
       asked.push(question);
+      spawnedPaths.push(binPath);
       return Promise.resolve(over.answer ?? '');
     },
     identify: (bin) => {
@@ -119,7 +123,7 @@ async function run(
     },
   };
   const code = await runFailCheck(args, io);
-  return { code, stderr, asked, identified, written };
+  return { code, stderr, asked, spawnedPaths, identified, written };
 }
 
 describe('GATE-01 nothing is spawned without --confirm', () => {
@@ -281,6 +285,17 @@ describe('GATE-06 with --confirm it actually runs', () => {
     });
     expect(ran.code).toBe(1);
     expect(ran.stderr).toContain('already-passed=2');
+  });
+
+  it('asks through the executable the probe resolved, not the id it was asked about', async () => {
+    // The product gives the id `cursor` the binary `cursor-agent`, so spawning
+    // the id would run something else. Spawning the resolved path also closes
+    // the gap between establishing what a binary is and running it.
+    const resolved: CliStatus = { ...READY, path: '/opt/homebrew/bin/claude' };
+    const ran = await run(['--dir', corpusOf(2), '--out', join(temp(), 'e.json'), '--confirm'], {
+      status: resolved,
+    });
+    expect(ran.spawnedPaths).toEqual(['/opt/homebrew/bin/claude', '/opt/homebrew/bin/claude']);
   });
 
   it('respects --limit, so a confirmed run cannot exceed what the refusal named', async () => {

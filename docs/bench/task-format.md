@@ -284,8 +284,8 @@ a true gold fact sitting past the cap read exactly like a fabricated one.
 ### 4. Prove the task is not already passed
 
 ```bash
-npm run bench:failcheck -- --mode closed-book
-npm run bench:failcheck -- --mode search --ids one-task,another-task
+npm run bench:failcheck -- --mode closed-book --confirm
+npm run bench:failcheck -- --mode search --ids one-task,another-task --confirm
 ```
 
 Runs each question through a local coding CLI and reports whether the gold
@@ -293,6 +293,26 @@ answers are already in the response. The two modes prove different things and
 both are needed: `closed-book` disables every tool, so an answer can only come
 from the weights, and `search` leaves web search on, which is a real free
 research backend.
+
+**It refuses to start without `--confirm`, and prints what it would spend
+first.** Run it with no arguments and it names how many tasks it would probe, in
+which mode, through which binary, and what that binary's coverage actually is,
+then stops without spawning anything. That is the same posture
+`npm run bench:detector -- judge` takes, and for the same reason: this spends a
+subscription quota, and `CLAUDE.md`'s rule is that anything spending money says
+so and gates it.
+
+Two more refusals sit in front of that one, and both are about running the
+wrong thing rather than running too much:
+
+| Refused | Why |
+|---|---|
+| `--bin` naming anything but `claude` or `codex` | A CLI's headless form is a property of that binary. Handing one vendor's flags to another's produces a run that dies at argument parsing and gets recorded as a task that failed, which is a wrong admission decision rather than an error anybody notices. |
+| a binary whose identity the `--version` probe cannot confirm | Two vendors ship binaries with the same names. An unidentified one is a different vendor's bill, and one that is not signed in answers nothing, which this check would score as a task that failed. |
+
+The identity probe runs *after* `--confirm` and before the first question,
+because a `--version` probe is itself a spawn and "nothing is spawned without
+confirmation" would otherwise be untrue.
 
 One verdict is a statement about the *check* rather than the task.
 `not-applicable` is reported for a refusal task carrying no gold facts when it

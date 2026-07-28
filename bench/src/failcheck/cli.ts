@@ -130,8 +130,17 @@ export type ParsedArgs =
  */
 export interface FailCheckIo {
   readonly err: (text: string) => void;
-  /** Ask the backend one question. The only thing here that spends. */
-  readonly ask: (question: string, options: Options) => Promise<string>;
+  /**
+   * Ask the backend one question. The only thing here that spends.
+   *
+   * `binPath` is the executable the identity probe actually resolved, not the
+   * id it was asked about. The two are not always the same string: the product
+   * gives the id `cursor` the binary `cursor-agent`, so spawning the id would
+   * run something else, or nothing, and an empty answer is scored as a task
+   * that failed. Spawning the resolved path also closes the gap between
+   * checking a binary's identity and running it.
+   */
+  readonly ask: (question: string, options: Options, binPath: string) => Promise<string>;
   /** Resolve and identify the backend binary. A `--version` spawn; not a spend. */
   readonly identify: (bin: SupportedBin) => Promise<CliStatus>;
   readonly writeEvidence: (path: string, text: string) => void;
@@ -202,11 +211,11 @@ export function argvFor(question: string, options: Options): readonly string[] {
  * the question is author-written text and passing it through a shell would make
  * a quoting mistake into command execution.
  */
-function askViaSpawn(question: string, options: Options): Promise<string> {
+function askViaSpawn(question: string, options: Options, binPath: string): Promise<string> {
   const args = argvFor(question, options);
 
   return new Promise<string>((resolvePromise) => {
-    const child = spawn(options.bin, args, {
+    const child = spawn(binPath, args, {
       stdio: ['ignore', 'pipe', 'pipe'],
       // A key in the environment outranks the subscription and silently
       // converts every call to per-token billing. This check must not spend
@@ -338,7 +347,7 @@ export async function runFailCheck(argv: readonly string[], io: FailCheckIo): Pr
   );
 
   const probes = await pooled(selected, options.concurrency, async (task): Promise<TaskProbe> => {
-    const response = await io.ask(task.question, options);
+    const response = await io.ask(task.question, options, status.path ?? options.bin);
     const probe = probeTask(task, response, { mode: options.mode });
     io.err(
       `  ${probe.verdict === 'already-passed' ? 'PASSED' : probe.verdict.padEnd(6)} ${task.id} · ${String(probe.factsPresent)}/${String(probe.factsTotal)} facts${probe.refusalAcknowledged === undefined ? '' : ` · refusal=${String(probe.refusalAcknowledged)}`}\n`,
