@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { findImpureImports } from '../import-graph.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   combinationId,
@@ -126,6 +127,36 @@ describe('no module here can reach a network or a disk (COMB-02)', () => {
         if (pattern.source.includes('fetch\\s*\\(')) expect(`${file}: ${src}`).not.toMatch(pattern);
       }
     }
+  });
+
+  it('and the one file whose dependency moved outside this directory is walked, not read', () => {
+    // BENCH-15 opened a hop the check above cannot see: `identity.ts` now
+    // re-exports the scheme fold from `../score/source-identity.ts`, so the
+    // import this guard used to read off `identity.ts` is no longer in the
+    // directory it scans. The transitive walk closes it, and `identity.ts` is
+    // clean through every hop.
+    //
+    // **Only that file, and the reason is measured rather than a preference.**
+    // `bench/src/import-graph.ts` follows an `import type` edge, which is
+    // erased under `verbatimModuleSyntax` and is not a runtime edge at all.
+    // `eligibility.ts` takes three types from `bench/src/report/aggregate.ts`,
+    // and following that erased edge reports seven files here as reaching
+    // `node:fs`, `node:fs/promises` and `node:child_process` eight hops away
+    // through `src/local/cli.ts`. Teaching the walk to skip a type-only
+    // statement would reverse a decision BENCH-19 took deliberately and pinned
+    // with its own test, and would change what its exact-reach assertion for
+    // `detector/report.ts` says. That needs an owner rather than a drive-by.
+    const reaches = findImpureImports(fileURLToPath(new URL('./identity.ts', import.meta.url)));
+    expect(reaches.map((r) => `${r.module} via ${r.path.join(' -> ')}`)).toEqual([]);
+  });
+
+  it('would notice if that file stopped being clean', () => {
+    // A purity assertion that is green because it can no longer see anything is
+    // the failure this whole section is about.
+    const reaches = findImpureImports(
+      fileURLToPath(new URL('../citations/collect.ts', import.meta.url)),
+    );
+    expect(reaches.length).toBeGreaterThan(0);
   });
 });
 

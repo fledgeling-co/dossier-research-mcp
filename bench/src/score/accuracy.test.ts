@@ -523,3 +523,45 @@ describe('the real corpus (ACCREL-18)', () => {
     }
   });
 });
+
+describe('the scorer itself no longer recovers a gold value from a date (DUP-03, DUP-05)', () => {
+  // BENCH-17 shipped an AC row claiming a behaviour it had only half fixed, so
+  // these run through `scoreAccuracy` rather than through `readNumbers`: the
+  // claim is about what the *caller* now scores, not about a primitive being
+  // correct in isolation.
+
+  it('does not score a gold of 26 out of a two-digit-year date', () => {
+    const fact = number({ value: 26, unit: 'dimensionless' });
+    // Against the pre-BENCH-15 mask this report recovered the fact, because
+    // `03/04/26` yielded the figures 3, 4 and 26 and an unstated unit is
+    // compatible with any gold unit.
+    expect(recovers('The filing was lodged 03/04/26 and says nothing else.', fact)).toBe(false);
+    // The same figure, actually stated, still recovers.
+    expect(recovers('The filing was lodged 03/04/26 and counted 26 items.', fact)).toBe(true);
+  });
+
+  it('does not score a gold of 30 out of a timestamp', () => {
+    const fact = number({ value: 30, unit: 'dimensionless' });
+    expect(recovers('Captured as of 2026-07-27T10:30:00Z, with no other figure.', fact)).toBe(
+      false,
+    );
+    expect(recovers('Captured as of 2026-07-27T10:30:00Z; 30 rows changed.', fact)).toBe(true);
+  });
+
+  it('does not attach a magnitude word from the far side of a masked date', () => {
+    // The mask used to be filled with spaces, and the scale-word probe skips
+    // whitespace, so this scored a gold of 1.2 billion from a report stating
+    // 1.2 and a date. Both directions are asserted: the wrong gold no longer
+    // recovers, and the right one still does.
+    const report = 'Revenue was 1.2 2026-07-27 billion.';
+    expect(recovers(report, number({ value: 1_200_000_000, unit: 'dimensionless' }))).toBe(false);
+    expect(recovers(report, number({ value: 1.2, unit: 'dimensionless' }))).toBe(true);
+  });
+
+  it('still recovers a gold value that merely sits beside a date', () => {
+    // The union widens the mask, and a wider mask is a false-negative machine.
+    const fact = number({ value: 12, unit: 'dimensionless' });
+    expect(recovers('Filed 03/04/26 with 12 items, as of July  8,  2026.', fact)).toBe(true);
+    expect(recovers('In 2026-07 the count reached 12.', fact)).toBe(true);
+  });
+});

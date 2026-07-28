@@ -1,4 +1,6 @@
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { findImpureImports } from '../import-graph.js';
 import { describe, expect, it } from 'vitest';
 import { STALE_AFTER_DAYS } from './schema.js';
 import { loadCorpus, TaskCorpusError, YAML_OPTIONS, type TaskFileEntry } from './corpus.js';
@@ -81,6 +83,24 @@ describe('TASKFMT-01 and TASKFMT-22 the loader is pure and needs no filesystem',
   it('imports nothing from the filesystem, so purity is structural rather than promised', () => {
     const source = readFileSync(new URL('./corpus.ts', import.meta.url), 'utf8');
     expect(source).not.toMatch(FS_REACH);
+  });
+
+  it('reaches nothing that opens a file at any depth, not only in its own text', () => {
+    // Reading a module's own source proves only that it does not import a
+    // filesystem *directly*, and this loader imports `./schema.js`, so a check
+    // stopping at the entry file would pass on a loader whose second hop opened
+    // one. The walk is `bench/src/import-graph.ts`, which is `detector/`'s and
+    // `citations`', because a second wording of one rule is how two guards end
+    // up enforcing different things. Consolidated by BENCH-15.
+    const reaches = findImpureImports(fileURLToPath(new URL('./corpus.ts', import.meta.url)));
+    expect(reaches.map((r) => `${r.module} via ${r.path.join(' -> ')}`)).toEqual([]);
+  });
+
+  it('would notice: the sibling that really does open a file is flagged', () => {
+    // `files.ts` is the disk adapter and reads on purpose. A purity check that
+    // is green because it can no longer see anything is worse than none.
+    const reaches = findImpureImports(fileURLToPath(new URL('./files.ts', import.meta.url)));
+    expect(reaches.map((r) => r.module)).toContain('node:fs');
   });
 
   it('would catch a filesystem import added later, in any of its forms', () => {

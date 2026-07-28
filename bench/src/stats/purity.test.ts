@@ -1,5 +1,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { findImpureImports, stripComments } from '../import-graph.js';
 import { describe, expect, it } from 'vitest';
 import * as stats from './index.js';
 
@@ -19,31 +21,47 @@ describe('STAT-15 the statistics are pure over stored numbers', () => {
     const sources = readdirSync(dir).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts'));
     expect(sources.length).toBeGreaterThan(4);
 
-    const forbidden = [
-      /from 'node:fs'/,
-      /from 'node:https?'/,
-      /from 'node:net'/,
-      /from 'node:child_process'/,
-      /safe-fetch/,
-      /\.\.\/citations\//,
-      /\.\.\/\.\.\/\.\.\/src\//,
-      /\bfetch\s*\(/,
-      /Math\.random/,
-    ];
     for (const file of sources) {
-      const src = readFileSync(`${dir}${file}`, 'utf8');
-      // Comments are stripped before the whole-file checks, because `random.ts`
-      // documents at length why `Math.random` is the wrong answer here, and a
-      // check that cannot tell an explanation from a call would force the
-      // reason out of the file to keep the rule.
-      const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
-      const imports = [...src.matchAll(/^import[\s\S]*?from\s+'[^']+';/gm)].map((m) => m[0]).join('\n');
-      for (const pattern of forbidden) {
-        expect(`${file}: ${imports}`).not.toMatch(pattern);
-        if (pattern.source.includes('fetch\\s*\\(') || pattern.source.includes('Math')) {
-          expect(`${file}: ${code}`).not.toMatch(pattern);
-        }
-      }
+      // **Transitively**, since BENCH-15. This read each file's own text, which
+      // proves only that the file does not import a filesystem *directly*, and
+      // every module here imports siblings. The walk is
+      // `bench/src/import-graph.ts`, which is `detector/`'s and `citations`',
+      // because a second wording of one rule is how two guards end up
+      // enforcing different things. It also carries the two escape hatches a
+      // static walk cannot follow, `createRequire` and a bare `fetch(`.
+      const reaches = findImpureImports(join(dir, file));
+      expect(reaches.map((r) => `${r.module} via ${r.path.join(' -> ')}`), file).toEqual([]);
+    }
+  });
+
+  it('would notice an impurity rather than being green because it sees nothing', () => {
+    // Driven at a module that really does open a file. A purity check that
+    // cannot fail is not a purity check.
+    const reaches = findImpureImports(
+      fileURLToPath(new URL('../tasks/files.ts', import.meta.url)),
+    );
+    expect(reaches.map((r) => r.module)).toContain('node:fs');
+  });
+
+  it('imports no product code and draws no unseeded randomness', () => {
+    // Two rules the impurity walk does not answer and which are this
+    // directory's own. `../../../src/` is a design boundary rather than a
+    // purity one: the statistics are pure over stored numbers and must not
+    // acquire the product's opinions. `Math.random` is determinism, which is
+    // what makes a bootstrap reproducible from a stored cell.
+    //
+    // Read off the text, with comments stripped, because `random.ts` documents
+    // at length why `Math.random` is the wrong answer here and a check that
+    // could not tell an explanation from a call would force the reason out of
+    // the file to keep the rule.
+    const dir = fileURLToPath(new URL('.', import.meta.url));
+    const sources = readdirSync(dir).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts'));
+    for (const file of sources) {
+      const code = stripComments(readFileSync(join(dir, file), 'utf8'));
+      expect(`${file}: ${code}`).not.toMatch(/\.\.\/citations\//);
+      expect(`${file}: ${code}`).not.toMatch(/\.\.\/\.\.\/\.\.\/src\//);
+      expect(`${file}: ${code}`).not.toMatch(/safe-fetch/);
+      expect(`${file}: ${code}`).not.toMatch(/Math\.random/);
     }
   });
 
