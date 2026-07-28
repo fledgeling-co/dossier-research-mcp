@@ -669,7 +669,7 @@ The read side of the benchmark, and the one surface where the product's own argu
 | **REPORT-18** | A backend's overall figure covers only scorable categories, and names the ones excluded | unit: `aggregate`, `render` | ✓ |
 | **REPORT-19** | Adjacent backends whose observed spreads overlap are reported tied, not ordered, and the note says the check is descriptive rather than significance | unit: `rank` | ✓ |
 | **REPORT-20** | `calibration-brier` orders ascending; every other quality metric orders descending | unit: `rank` | ✓ |
-| **REPORT-21** | Recency renders unavailable with the missing-publication-date reason, never as zero and never omitted | unit: `harvest`, `render` | ✓ |
+| **REPORT-21** | ~~Recency renders unavailable with the missing-publication-date reason, never as zero and never omitted~~ **Corrected 28 July 2026 by BENCH-16**, which recorded the publication date the reason named. Recency is now computed; see DATE-20, DATE-21 and DATE-24 | unit: `harvest`, `render` | ✓ |
 | **REPORT-22** | A cell with no citation evidence snapshot renders the citation metrics unavailable with a reason, and is not scored zero | unit: `harvest` | ✓ |
 | **REPORT-23** | Rendering is pure: every module under `bench/src/report/` except the CLI imports no filesystem and no network, asserted by reading their own source | unit: `render` | ✓ |
 | **REPORT-24** | The same cells and corpus render byte-identically twice | unit: `render` | ✓ |
@@ -941,3 +941,37 @@ Four primitives existed in two copies each, with different answers, across `benc
 | **DUP-12** | The one permitted completion comparison in `bench/src/combine/` survives the nullable change: the enumeration guard that bans a fifth completion floor still sees `worstCompletion < 1` and nothing else | unit: `evaluate` | ✓ |
 | **DUP-13** | The statistics and task-loader purity guards decide on the transitive import graph rather than on each file's own text, using the same walk `detector/` and `citations` already use. Each keeps a case proving the walk still flags a module that really is impure | unit: `purity`, `corpus` | ✓ |
 | **DUP-14** | The one file whose dependency BENCH-15 moved outside `bench/src/combine/` is walked transitively and is clean, so the re-export did not open a hop the directory's own guard cannot see. The rest of that directory, and `bench/src/report/`, stay on the text check, because the walk follows an `import type` edge that is erased at runtime and reports seven files as reaching `node:fs` eight hops out through a type-only import | unit: `evaluate` | ✓ |
+## BENCH-16: nothing recorded when a source was published
+
+The last scored dimension the design declares and the pipeline could not compute. `benchmark.md` lists recency, BENCH-06 built the durability axis it needs, and BENCH-08 found there was no publication date anywhere to feed it: `PageEvidence` carried when a page was *checked*, which is a different fact. The code is [`bench/src/citations/published.ts`](../bench/src/citations/published.ts), [`bench/src/citations/evidence.ts`](../bench/src/citations/evidence.ts), [`bench/src/score/recency.ts`](../bench/src/score/recency.ts) and [`bench/src/report/`](../bench/src/report).
+
+REPORT-21 above is a **correction rather than an addition** and is marked in place: it asserted that recency renders unavailable with the missing-publication-date reason, and that reason no longer exists.
+
+Every extraction rule below was derived from fetching the benchmark's own corpus of cited URLs on 28 July 2026 rather than from documentation. The two findings that shaped it: modification dates outnumber publication dates on the real web, and 43 of 72 pages carry no date signal at all.
+
+| AC | Statement | Test | Status |
+|---|---|---|---|
+| **DATE-01** | A schema.org `datePublished` inside a JSON-LD block dates the page, and the recorded signal names it | unit: `published` | ✓ |
+| **DATE-02** | `citation_publication_date`, `citation_date` and `citation_online_date` date an academic page, in the slash form arXiv actually serves | unit: `published` | ✓ |
+| **DATE-03** | `article:published_time` decides even with `article:modified_time` sitting beside it, and the modified one is never the answer | unit: `published` | ✓ |
+| **DATE-04** | A meta name containing a modification word is refused before its value is read, and the refusal is named on the result rather than dropped | unit: `published` | ✓ |
+| **DATE-05** | A site-specific name that says `publish` is accepted where no allowlist would hold it; one that merely says `public` is not | unit: `published` | ✓ |
+| **DATE-06** | A `<time>` element is used only when the element itself declares it a publication date; a bare one is refused with the reason that it may be a comment timestamp | unit: `published` | ✓ |
+| **DATE-07** | A year and month adjacent in the URL path date the page; a lone four-digit segment such as an issue number does not | unit: `published` | ✓ |
+| **DATE-08** | A numeric date whose field order cannot be determined is refused; one where a component exceeds twelve is accepted, because the order is then determined rather than assumed | unit: `published` | ✓ |
+| **DATE-09** | A date before 1900, or later than the page was fetched, is refused as a misread rather than recorded | unit: `published` | ✓ |
+| **DATE-10** | The signal order holds: where two signals disagree the more explicit one decides, and the result says which produced it | unit: `published` | ✓ |
+| **DATE-11** | Where one signal carries several dates the earliest is taken, which is the reading that cannot flatter a source | unit: `published` | ✓ |
+| **DATE-12** | Three states, not two: a page nobody read is `unchecked`, a page read in full carrying no date is `absent`, and a page cut short at the byte cap is `unchecked` rather than `absent` | unit: `published` | ✓ |
+| **DATE-13** | The URL path is read even when the body was not, so a failed fetch at a dated address is still dated | unit: `published` | ✓ |
+| **DATE-14** | Page text is treated as hostile input: an unparseable, oversized or deeply nested JSON-LD block is skipped and named, and every scan is bounded | unit: `published` | ✓ |
+| **DATE-15** | The written forms come from `score/dates.ts` rather than a third date parser, proven by a form only that module accepts | unit: `published` | ✓ |
+| **DATE-16** | Every persisted page carries a publication date or an explicit absence. The field is required, so a snapshot without one fails to parse rather than reading as undated | unit: `evidence` | ✓ |
+| **DATE-17** | A snapshot written before the field existed fails to parse, rather than reporting a collection pass that never looked as a corpus of publishers who date nothing | unit: `evidence`, `store` | ✓ |
+| **DATE-18** | The collector fills it from the body it already holds, gated on the judged verdict, so a 404 page's own furniture cannot date the citation | unit: `collect` | ✓ |
+| **DATE-19** | `recencyInputs` produces the graded source list and the printed counts in one pass, and a cited URL with no page record counts `unchecked` rather than `absent` | unit: `recency` | ✓ |
+| **DATE-20** | **At the caller.** A cell whose cited pages are all undated reports the recency metric null with a reason, never zero and never fresh | unit: `harvest` | ✓ |
+| **DATE-21** | **At the caller.** A cell with one dated fresh page and one undated page scores a real figure over the dated one, and the undated page leaves the denominator rather than lowering the share | unit: `harvest` | ✓ |
+| **DATE-22** | The persisted publication type and the scorer's structural view agree at compile time, asserted as a type rather than by inspection | unit: `harvest` | ✓ |
+| **DATE-23** | The validity panel prints how many cited sources could be dated and how many could not, with the two undated causes kept apart | unit: `render`, `aggregate` | ✓ |
+| **DATE-24** | The limits section no longer says recency is unavailable, and the metric caveat says what the figure is computed over | unit: `render`, `metrics` | ✓ |
