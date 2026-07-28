@@ -344,7 +344,80 @@ describe('GATE-07 the argument parser', () => {
   });
 });
 
-describe('GATE-08 usage', () => {
+describe('GATE-08 the parser fails closed on anything it does not understand', () => {
+  it('refuses an unknown flag rather than ignoring it', async () => {
+    // `--limt 2 --confirm` used to run the whole corpus while the caller
+    // believed they had asked for two. Both sibling CLIs refuse for this
+    // reason.
+    const ran = await run(['--limt', '2', '--confirm']);
+    expect(ran.code).toBe(1);
+    expect(ran.asked).toEqual([]);
+    expect(ran.stderr).toContain('Unknown flag "--limt"');
+  });
+
+  it('refuses a numeric flag that is not a number, rather than probing nothing and passing', async () => {
+    // The worst of the set. `--concurrency abc` became NaN, which made the
+    // worker pool zero lanes wide, so it probed nothing, wrote an evidence file
+    // saying no task was already passed, and exited 0. An admission gate that
+    // answers "nothing is already passed" having checked nothing fails open on
+    // the one decision it exists to make.
+    for (const bad of ['abc', '0', '-1', '2.5', '']) {
+      const ran = await run(['--concurrency', bad, '--confirm'], {});
+      expect(ran.code, bad).toBe(1);
+      expect(ran.asked, bad).toEqual([]);
+      expect(ran.written, bad).toEqual([]);
+    }
+  });
+
+  it('refuses a bad --limit the same way', async () => {
+    const ran = await run(['--limit', 'lots', '--confirm']);
+    expect(ran.code).toBe(1);
+    expect(ran.written).toEqual([]);
+  });
+
+  it('refuses a flag whose value was forgotten, rather than swallowing the next flag', async () => {
+    // `--category --confirm` used to run unconfirmed against a category
+    // literally named "--confirm", which is the gate defeating itself.
+    const ran = await run(['--category', '--confirm']);
+    expect(ran.code).toBe(1);
+    expect(ran.asked).toEqual([]);
+    expect(ran.stderr).toContain('--category needs a value');
+  });
+
+  it('refuses a bare positional', async () => {
+    const ran = await run(['closed-book']);
+    expect(ran.code).toBe(1);
+    expect(ran.stderr).toContain('Unexpected argument');
+  });
+
+  it('accepts --flag=value as well as --flag value', () => {
+    const parsed = parseArgs(['--concurrency=2', '--mode=search', '--confirm']);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.options.concurrency).toBe(2);
+    expect(parsed.options.mode).toBe('search');
+    expect(parsed.options.confirm).toBe(true);
+  });
+
+  it('refuses a mode it does not implement', () => {
+    const parsed = parseArgs(['--mode', 'open-book']);
+    expect(parsed.ok).toBe(false);
+  });
+
+  it('argvFor throws rather than silently handing one vendor another vendor\'s flags', () => {
+    // Defence in depth: runFailCheck refuses this combination earlier, but this
+    // function is exported and reachable on its own, and the failure it
+    // prevents is silent. A binary given another vendor's tool-disabling flags
+    // does not error, it answers with its tools still on, and the run is
+    // recorded as a closed-book result that was nothing of the kind.
+    const parsed = parseArgs(['--bin', 'codex']);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(() => argvFor('q', parsed.options)).toThrow(/closed-book mode is implemented/);
+  });
+});
+
+describe('GATE-08b usage', () => {
   it('prints usage naming the confirmation flag and what it spends', async () => {
     const ran = await run(['--help']);
     expect(ran.code).toBe(0);

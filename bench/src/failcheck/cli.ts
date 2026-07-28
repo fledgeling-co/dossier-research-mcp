@@ -154,17 +154,72 @@ export interface FailCheckIo {
   readonly writeEvidence: (path: string, text: string) => void;
 }
 
+/** Flags taking a value, and flags that are switches. Nothing else is accepted. */
+const VALUE_FLAGS = new Set(['mode', 'bin', 'dir', 'limit', 'category', 'ids', 'concurrency', 'out']);
+const SWITCH_FLAGS = new Set(['confirm', 'help', 'h']);
+
+/**
+ * Parse the arguments, or return the refusal to print.
+ *
+ * Every branch here is a spend branch, which is why nothing is tolerated. Two
+ * defects this shape exists to prevent, both found by review after the first
+ * version shipped without it:
+ *
+ * - **An unknown flag was ignored.** `--limt 2 --confirm` ran the whole corpus
+ *   while the caller believed they had asked for two. `run/cli.ts` and
+ *   `report/cli.ts` both refuse an unknown flag for exactly this reason.
+ * - **A non-numeric value became `NaN`.** `--concurrency abc` made the worker
+ *   pool zero lanes wide, so it probed nothing, wrote an evidence file saying
+ *   no task was already passed, and exited 0. An admission gate that answers
+ *   "nothing is already passed" having checked nothing fails open on the one
+ *   decision it exists to make, and it overwrites the committed evidence while
+ *   doing it.
+ */
 export function parseArgs(argv: readonly string[]): ParsedArgs {
-  const get = (flag: string): string | undefined => {
-    const i = argv.indexOf(flag);
-    return i >= 0 ? argv[i + 1] : undefined;
-  };
-  const mode = get('--mode') === 'search' ? 'search' : 'closed-book';
+  const flags = new Map<string, string>();
+  const bare = new Set<string>();
+
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i];
+    if (arg === undefined) continue;
+    if (!arg.startsWith('-')) {
+      return { ok: false, message: `Unexpected argument "${arg}".\n\n${USAGE}` };
+    }
+    const eq = arg.indexOf('=');
+    const name = (eq === -1 ? arg : arg.slice(0, eq)).replace(/^-+/, '');
+    const inline = eq === -1 ? undefined : arg.slice(eq + 1);
+
+    if (!VALUE_FLAGS.has(name) && !SWITCH_FLAGS.has(name)) {
+      return { ok: false, message: `Unknown flag "--${name}".\n\n${USAGE}` };
+    }
+    if (SWITCH_FLAGS.has(name)) {
+      bare.add(name);
+      continue;
+    }
+    if (inline !== undefined) {
+      flags.set(name, inline);
+      continue;
+    }
+    const next = argv[i + 1];
+    // A value that is itself a flag means the value was forgotten. Swallowing
+    // it silently drops the following flag too, so `--category --confirm` used
+    // to run unconfirmed against a category literally named "--confirm".
+    if (next === undefined || next.startsWith('--')) {
+      return { ok: false, message: `--${name} needs a value.\n\n${USAGE}` };
+    }
+    flags.set(name, next);
+    i += 1;
+  }
+
+  const mode = flags.get('mode') ?? 'closed-book';
+  if (mode !== 'closed-book' && mode !== 'search') {
+    return { ok: false, message: `--mode must be closed-book or search; got "${mode}".\n` };
+  }
 
   // Checked against the list this script implements rather than cast into it
   // (CP §1), the same way `run/cli.ts` refuses a provider id that does not
   // exist. A typo here does not fail loudly, it runs some other binary.
-  const requestedBin = get('--bin') ?? 'claude';
+  const requestedBin = flags.get('bin') ?? 'claude';
   const bin = SUPPORTED_BINS.find((b) => b === requestedBin);
   if (bin === undefined) {
     const known = adapterFor(requestedBin);
@@ -178,21 +233,38 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
     };
   }
 
+  /** A positive whole number, or the refusal. Never `NaN`, never zero lanes. */
+  const positiveInt = (name: string, fallback: number): number | string => {
+    const raw = flags.get(name);
+    if (raw === undefined) return fallback;
+    const value = Number(raw);
+    if (!Number.isInteger(value) || value < 1) {
+      return `--${name} must be a whole number of at least 1; got "${raw}".\n`;
+    }
+    return value;
+  };
+
+  const limit = positiveInt('limit', 1000);
+  if (typeof limit === 'string') return { ok: false, message: limit };
+  const concurrency = positiveInt('concurrency', 4);
+  if (typeof concurrency === 'string') return { ok: false, message: concurrency };
+
   return {
     ok: true,
     options: {
       mode,
       bin,
-      limit: Number.parseInt(get('--limit') ?? '1000', 10),
-      concurrency: Math.max(1, Number.parseInt(get('--concurrency') ?? '4', 10)),
-      category: get('--category'),
-      ids: get('--ids')
+      limit,
+      concurrency,
+      category: flags.get('category'),
+      ids: flags
+        .get('ids')
         ?.split(',')
         .map((s) => s.trim())
         .filter((s) => s.length > 0),
-      dir: get('--dir') ?? CORPUS_DIR,
-      out: get('--out') ?? `bench/evidence/failcheck-${mode}.json`,
-      confirm: argv.includes('--confirm'),
+      dir: flags.get('dir') ?? CORPUS_DIR,
+      out: flags.get('out') ?? `bench/evidence/failcheck-${mode}.json`,
+      confirm: bare.has('confirm'),
     },
   };
 }
@@ -204,9 +276,21 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
  * binary, and `codex` in particular takes a bare positional after `exec` rather
  * than `-p`. That is why `SUPPORTED_BINS` is a short list rather than every id
  * the product knows.
+ *
+ * The closed-book throw is defence in depth and is deliberately kept even
+ * though `runFailCheck` refuses the combination earlier. This function is
+ * exported and reachable on its own, and the failure it prevents is silent: a
+ * binary handed another vendor's tool-disabling flags does not error, it
+ * answers with its tools still on, and the run is recorded as a closed-book
+ * result that was nothing of the kind.
  */
 export function argvFor(question: string, options: Options): readonly string[] {
   if (options.mode === 'closed-book') {
+    if (!CLOSED_BOOK_BINS.includes(options.bin)) {
+      throw new Error(
+        `closed-book mode is implemented for ${CLOSED_BOOK_BINS.join(', ')} only; got "${options.bin}".`,
+      );
+    }
     return ['-p', '--disallowedTools', ...CLOSED_BOOK_TOOLS, '--', `${question}${CLOSED_BOOK_SUFFIX}`];
   }
   return options.bin === 'codex' ? ['exec', question] : ['-p', '--', question];
