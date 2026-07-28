@@ -4,7 +4,7 @@ import type {
   RepetitionFloor,
   ScorableVerdict,
 } from '../report/aggregate.js';
-import { eligibilityOf, type CandidateEligibility } from './frontier.js';
+import type { CandidateEligibility } from './frontier.js';
 
 /**
  * BENCH-08's verdicts, carried into the lattice. The whole seam, and nothing
@@ -120,11 +120,6 @@ export function combinationEligibility(
     repetitionsMet: thin.length === 0,
     repetitionsWhy: thin.join(' '),
   };
-}
-
-/** The same fold, expressed as the frontier's own helper, for a single member. */
-export function memberCandidateEligibility(member: MemberEligibility): CandidateEligibility {
-  return eligibilityOf(member.verdict, member.repetitionFloor);
 }
 
 /**

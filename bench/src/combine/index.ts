@@ -14,11 +14,15 @@
  * `overlap.ts` measures how much was bought twice, three ways and in no
  * direction; `convergence.ts` is the deliberately separate path for members
  * agreeing on a *conclusion*; `marginal.ts` splits the credit exactly or
- * refuses; `frontier.ts` says which combinations are worth their price; and
- * `evaluate.ts` runs the lattice per category and overall.
+ * refuses; `eligibility.ts` carries `bench/src/report/`'s verdicts in and is
+ * the only file here that has ever seen a `BenchAggregate`; `frontier.ts` says
+ * which combinations are worth their price, and refuses to say it at all where
+ * those verdicts do not support the claim; and `evaluate.ts` runs the lattice
+ * per category and overall.
  *
  * Nothing here scores a report. `scoreCombination` is injected, for the reason
- * set out at the top of `evaluate.ts`.
+ * set out at the top of `evaluate.ts`. Nothing here decides what a sample can
+ * support either: that is `bench/src/report/aggregate.ts`'s, taken whole.
  */
 
 export {
@@ -105,11 +109,7 @@ export type {
  * because the alternative is every caller hand-rolling the same map from
  * verdicts to members, which is how a floor comes to mean two things.
  */
-export {
-  combinationEligibility,
-  eligibilityFromAggregate,
-  memberCandidateEligibility,
-} from './eligibility.js';
+export { combinationEligibility, eligibilityFromAggregate } from './eligibility.js';
 export type {
   CombinationEligibility,
   EligibilityScope,
