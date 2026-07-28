@@ -4402,6 +4402,12 @@ export async function buildDeps(config: Config = loadConfig()): Promise<ServerDe
   };
   const runner = new Runner(store, config, resolveProviderClient, async (run, markdown) => {
     if (!utility) return;
+    // Already titled? Then another server instance, or an earlier pass, has
+    // paid for this. Checked BEFORE reserving, because the reservation is the
+    // charge: several MCP clients share one store, each runs its own Dossier,
+    // and each polls the same runs.
+    const before = await store.getRun(run.id);
+    if (before?.title && before.summary) return;
     // Automatic titling fires on every completed run, so it is the most
     // frequent billed call in the server and was entirely outside the ledger.
     await runner.reserveUtilitySpend(`title:${run.id}`);

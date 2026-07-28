@@ -723,4 +723,44 @@ describe('failure classification and the compensating release', () => {
     // than being labelled with a guess.
     expect(stateHint('failed')).toMatch(/The error is on the record/);
   });
+
+  describe('titling is paid for once', () => {
+    it('marks a run terminal before the summariser runs, not after', async () => {
+      // A real money defect, found by auditing a real ledger: one run was
+      // titled 23 times in 64 seconds, 49 of 67 runs more than once, and $17
+      // of $22 of utility spend was this.
+      //
+      // The cause was ordering. `onFinalise` reserves and then waits on a
+      // model, and the record was saved only afterwards, so for those seconds
+      // the run was still `running` on disk. `refresh` guards terminal runs
+      // correctly — it just had nothing to read yet, so every concurrent poll
+      // re-entered and re-reserved.
+      //
+      // Asserted by holding the summariser open and polling underneath it,
+      // which is exactly what a second MCP client does.
+      let release: (() => void) | undefined;
+      const held = new Promise<void>((r) => {
+        release = r;
+      });
+      let calls = 0;
+
+      const client = scriptedClient([snapshot({ status: 'completed', markdown: '# Title\n\nBody.' })]);
+      const runner = new Runner(store, config, () => client, async () => {
+        calls += 1;
+        await held;
+      });
+      const { run } = await runner.start(START);
+
+      const first = runner.refresh(run.id);
+      // Let the first poll reach the held summariser.
+      await new Promise((r) => setTimeout(r, 20));
+      // Three more polls while it is still in there.
+      await Promise.all([runner.refresh(run.id), runner.refresh(run.id), runner.refresh(run.id)]);
+      release?.();
+      await first;
+
+      expect(calls, 'the summariser must be entered once, not once per concurrent poll').toBe(1);
+      expect((await store.getRun(run.id))?.state).toBe('completed');
+    });
+  });
 });

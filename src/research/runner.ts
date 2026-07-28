@@ -1037,6 +1037,21 @@ export class Runner {
               'The ledger keeps the reservation, because that is what the gate counted.',
           );
         }
+        // Persist the terminal state BEFORE titling, not after.
+        //
+        // `onFinalise` reserves a utility call and then waits on a model, which
+        // takes seconds. Saving afterwards left the record non-terminal for that
+        // whole window, so every concurrent `refresh` re-read a running run,
+        // polled it, found it completed again, and titled it again. Measured on
+        // a real ledger: one run was titled 23 times in 64 seconds, 49 of 67
+        // runs were titled more than once, and $17 of $22 of utility spend was
+        // this. The guard in `refresh` was present and correct the whole time —
+        // it just had nothing to read yet.
+        //
+        // The report is already on disk by here, so this only brings forward
+        // the fact that the run is over. Line ~1094 saves again with the title
+        // merged in, which is idempotent.
+        await this.store.saveRun(next);
         if (this.onFinalise) {
           // Title/summary generation is best-effort: a utility-model hiccup must
           // not lose a report that already cost dollars to produce.
