@@ -69,6 +69,7 @@
     "test:paid": "vitest run --project paid",
     "lint:source": "node scripts/check-source-hygiene.mjs",
     "bench:verify": "tsx bench/src/verify/cli.ts",
+    "bench:run": "tsx bench/src/run/cli.ts",
     "bench:failcheck": "tsx bench/src/failcheck/cli.ts",
     "bench:report": "tsx bench/src/report/cli.ts",
     "bench:detector": "tsx bench/src/detector/cli.ts"
