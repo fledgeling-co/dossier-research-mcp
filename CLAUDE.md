@@ -152,7 +152,19 @@ bench/                  the benchmark. NOT compiled into dist/ and NOT published
   src/verify/           proves each gold fact is really in the source it cites.
                         Pure matching rules plus one thin fetch adapter
   src/failcheck/        proves a task is not already passed, closed-book and
-                        search-enabled. Spends subscription quota; never in the gate
+                        search-enabled. Spends subscription quota, so it refuses
+                        without --confirm, names what it would spend, and
+                        resolves and identifies the binary before running it.
+                        Never in the gate
+  src/import-graph.ts   test support: the transitive import closure of a module,
+                        and every forbidden thing it can reach, with the path to
+                        each. One spelling for every purity guard, because a
+                        regex over a file's own text cannot see a leak one hop
+                        away and one of them did not
+  src/spawn-entry.ts    test support: running an entry point as a real process,
+                        with tsx resolved through Node's own ancestor walk. Four
+                        entry points guard their own invocation and each keeps
+                        one case that spawns the real thing
   src/tasks/schema.ts   the task format, in Zod. The contract every scorer reads
   src/tasks/corpus.ts   the pure synchronous loader. Imports no filesystem, on
                         purpose, so a scorer is testable without one

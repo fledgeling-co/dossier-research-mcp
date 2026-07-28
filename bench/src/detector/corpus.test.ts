@@ -248,8 +248,8 @@ describe('SELF-04: what the score can and cannot reach', () => {
    * What is true is narrower and checkable: everything impure it can reach, it
    * reaches through `./arms.js`, and the arms are handed an offline fetcher, a
    * scripted transport, an in-memory cache and a fixed clock, so nothing is
-   * called. That is **capability, not behaviour** — the detector has never made
-   * a network call — and the difference is the one BENCH-11 got right with a
+   * called. That is **capability, not behaviour**, since the detector has never
+   * made a network call, and the difference is the one BENCH-11 got right with a
    * resolve-hook trace and this guard got wrong with a regex.
    *
    * Asserting it positively rather than deleting the module from the list is
