@@ -62,7 +62,7 @@ BENCH-09 is hand-authoring work and is the long pole in wall-clock terms. It sta
 | BENCH-12 | A finished report is an input to the next one | none | **Merged** | `ai/bench-12` | 1717 tests; ships `research_ground` |
 | BENCH-13 | The statistics | 02, 08 | **Merged** | `ai/bench-13` | 2209 tests; 180 comparisons, 0 runnable | |
 | BENCH-14 | A fresh worktree cannot run the suite | none | **Merged** | `ai/bench-14` | 14 pass in a bare worktree, was 11 failing | deferred child, from BENCH-11 |
-| BENCH-15 | Three primitives now exist twice | 04, 05, 11 | **Running** | | deferred child, from BENCH-04/05/11 |
+| BENCH-15 | Three primitives now exist twice | 04, 05, 11 | **Merged** | `ai/bench-15` | four primitives unified; my own claim corrected | deferred child, from BENCH-04/05/11 |
 | BENCH-16 | Nothing records when a source was published | 02, 03 | **Running** | | deferred child, from BENCH-08 |
 | BENCH-17 | The frontier claims most on least evidence | 08, 11, 13 | **Merged** | `ai/bench-17` | frontier gated; its own first fix was incomplete | from the audit |
 | BENCH-18 | Syndication has no Unicode normalisation | 07 | **Merged** | `ai/bench-18` | surrogate bug confirmed and worse | from the audit |
@@ -237,3 +237,14 @@ Still open, in the audit's order: `bench/src/combine/` publishes a frontier with
 - **28 Jul, the last two dispatched.** BENCH-15 unifies four duplicated primitives, one of which (date masking) produces wrong accuracy scores today. BENCH-16 records a publication date at evidence-collection time, which is the only thing standing between the benchmark and a scored dimension it currently cannot compute at all.
 
   Both briefs carry the two lessons the fleet paid for: BENCH-17 fixed a sentence and shipped an AC row claiming the behaviour with it, caught only by an independent reader; and BENCH-19's second adversarial read found 14 defects after its first gate was already green, four of them checks that reported success without checking. Both runners are told to budget for a second read of their own work.
+- **28 Jul, BENCH-15 merged.** 2409 tests. Four primitives unified, and it corrected a claim of mine on the way.
+
+  **I recorded the magnitude-word divergence backwards.** I grepped `score/numbers.ts` for BENCH-04's vocabulary and asserted a direction from it; the table lives in `units.ts` and is a strict superset holding `b`, `k`, `m`, `mm`, `t` and every plural. The live divergence ran the other way, due-weight having no plurals, so `a 1.2 millions figure` read as `1.2`. Grepping one file and asserting about a module is the same error this project keeps finding, in me.
+
+  **The date masking is fixed, first and in its own commit so it bisects alone**, and proved by mutation **through the caller** rather than the function: restore `numbers.ts` from `main` and three cases in `accuracy.test.ts` fail, because against `main` it really did recover a gold of 26 from `03/04/26`, a gold of 30 from `10:30:00`, and a gold of 1.2 billion from a report that wrote `1.2`. That is BENCH-17's lesson applied.
+
+  Two defects found by executing rather than reading. **The space fill was itself a defect**: `readNumbers`'s scale-word probe skips whitespace, so a space-blanked date sitting between a figure and a magnitude word was stepped straight over and `revenue was 1.2 2026-07-27 billion` scored 1,200,000,000. The fill is now `#`. And **`MONTH` was `(?:jan|…|dec)[a-z]*` in both files**, matching `novel`, `decade` and `marginal`; naming the twelve months then exposed that it still had no left boundary, so `smarch 2026` masked from the `m`.
+
+  **`mm` is the decision worth recording**: in the shared table for accuracy, excluded from due-weight, because `5mm` is millimetres far more often than five million and admitting it there turns a silence into a spurious five million.
+
+  **Two of four purity guards could not move, for a measured reason.** `import-graph.ts` follows `import type` edges, which `verbatimModuleSyntax` erases, and `combine/eligibility.ts` takes three types from `report/aggregate.ts`; following that erased edge reports seven files in `combine/` as reaching `node:child_process` eight hops out. Skipping type-only statements would reverse a decision BENCH-19 pinned with its own test. Needs an owner.
