@@ -332,10 +332,33 @@ describe('DATE-12 three states, and the third is the one that matters', () => {
   });
 });
 
-describe('DATE-13 the address survives a failed fetch', () => {
-  it('dates a page from its path even when the body was never read', () => {
+describe('DATE-13 a page that did not resolve is never dated by its own address', () => {
+  // The first design read the path even with no body, on the reasoning that an
+  // address survives a failed fetch. Running the real extractor over the real
+  // corpus refuted it: the only page dated that way was `example-news.invalid`,
+  // a **fabricated** URL from the detector corpus, handed a fresh 2026 date out
+  // of its own path. That is the backend under test supplying the evidence it is
+  // graded on, and no measurement may take that input.
+
+  it('a fabricated URL with a recent-looking path is unchecked, not freshly published', () => {
+    const result = extract({
+      url: 'https://example-news.invalid/2026/07/quarterly-figures',
+      body: '',
+      bodyRead: false,
+    });
+    expect(result.status).toBe('unchecked');
+    expect(result.detail).toMatch(/own claim about a source nobody could reach/);
+  });
+
+  it('a page that DID resolve is still dated by its path, which is the common case', () => {
+    // 14 of the 43 dates found on the real corpus come from a path on a page
+    // that resolved, including every Federal Register document. Something was
+    // genuinely served at that address, which is what makes it evidence.
     const found = expectFound(
-      extract({ url: 'https://example.test/2021/12/11/post', body: '', bodyRead: false }),
+      extract({
+        url: 'https://example.test/2021/12/11/post',
+        body: '<html><head></head><body>no date in the markup</body></html>',
+      }),
     );
     expect(found.signal).toBe('url-path');
     expect(found.date).toBe('2021-12-11');

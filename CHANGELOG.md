@@ -31,6 +31,10 @@ This project follows [semantic versioning](https://semver.org/). Until 1.0 the m
 
   **43 of those 72 pages carry no date signal at all**, which is the other finding and it changed what the report prints. JSON APIs, plain-text RFCs, PDFs and rebuilt documentation are most of what a technical research report cites, so recency here is computed over a minority of a corpus by construction. The report now prints the share of sources it could not date, split by cause, above the scores. A fresh share of 1.0 over one dated source in forty is arithmetic, and the denominator beside it is the only thing that says so.
 
+  **One rule was reversed by running it.** The first version read a date out of the URL path even when the page never resolved, on the reasoning that an address survives a failed fetch. Over 212 real cited URLs the only page it dated that way was `example-news.invalid`, a **fabricated** URL from the detector corpus, handed a fresh 2026 date out of its own path. That is the backend under test supplying the evidence it is graded on. The path is now read only when the page resolved. It cost one real case, a live blog post behind a bot deterrent, which is now reported `unchecked` rather than dated from a guess.
+
+  **What it could actually date, measured through the production path:** of 212 distinct cited URLs, **41 dated, 151 read in full and stating no publication date, 20 never read.** Six of the seven signals fired on a real page. `bench/evidence/publication-dates.json` records it page by page.
+
   The written date forms come from the benchmark's existing date reader rather than a new parser, since two of those already disagree in this tree and a third would have been worse. Evidence snapshots written before this change fail to parse rather than reading as a corpus in which nobody dates anything; that costs a re-collection and never a wrong number.
 
   This is the benchmark, not the server. Nothing in the published package changes.

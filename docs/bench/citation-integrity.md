@@ -138,11 +138,31 @@ The written forms come from [`bench/src/score/dates.ts`](../../bench/src/score/d
 
 Every distinct URL cited by `bench/tasks/`, `bench/quarantine/` and `bench/detector/`, fetched 28 July 2026. 72 URLs, 60 answering. **43 carry no date signal of any kind**, and in a second probe over 70 URLs from this repo's research documents, JSON-LD `dateModified` outnumbered `datePublished` four to one. Both findings are load-bearing: the first is why the undated share is reported beside the score, and the second is why the modification refusal is a rule rather than a nicety. An extractor taking the first date-shaped thing it found would have dated most of this corpus to its last rebuild.
 
+### What the finished extractor could actually date
+
+Run over 212 distinct cited URLs on 28 July 2026, through the production collection path so the byte cap, the SSRF refusals and the judged verdict all applied as they would in a run. The evidence is [`bench/evidence/publication-dates.json`](../../bench/evidence/publication-dates.json), page by page.
+
+| | Count | Share |
+|---|---|---|
+| dated | 41 | 19.3% |
+| read in full, states no date | 151 | 71.2% |
+| never read, or read only as far as the cap | 20 | 9.4% |
+
+By signal: `url-path` 12, `citation-meta` 12, `json-ld` 11, `meta-date` 3, `article-published-time` 2, `time-element` 1. Six of the seven fired on a real page, which is what makes the ranking a measured order rather than a guess; `dublin-core` fired on none and is kept because it costs nothing and the corpus is one corpus.
+
+**Four fifths of a technical corpus cannot be dated at all**, and that is the number a reader of a recency score needs more than the score. It is why the undated share is printed above every figure rather than folded into a denominator.
+
+### One rule this measurement reversed
+
+The first design read the URL path even when nothing was read, on the reasoning that an address is the one signal that survives a failed fetch. Running it refuted that. The only page it dated that way was `example-news.invalid/2026/07/quarterly-figures`, a **fabricated** URL from the detector corpus, handed a fresh 2026 date out of its own path. That is the backend under test supplying the evidence it is graded on, which is the one input a measurement may never take.
+
+The path is now read only when the page resolved, where something was genuinely served at that address. It costs one real case, a live MIT blog post behind a bot deterrent whose path states its date, which is now `unchecked`: the true statement about it, and exactly the distinction the three states exist for.
+
 ### What it cannot mean
 
 - A `found` date is what the **page** claims, not an independently verified publication date.
 - An `absent` date does not mean the page was never published, only that it does not say so in a form this reads.
-- A `url-path` date is the weakest signal here and is only ever used when nothing on the page said anything.
+- A `url-path` date is the weakest signal here. It is used only when nothing on the page said anything **and** the page resolved, so it is never a claim about a source nobody could reach.
 
 ## Anchor honesty
 

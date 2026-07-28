@@ -963,7 +963,7 @@ Every extraction rule below was derived from fetching the benchmark's own corpus
 | **DATE-10** | The signal order holds: where two signals disagree the more explicit one decides, and the result says which produced it | unit: `published` | ✓ |
 | **DATE-11** | Where one signal carries several dates the earliest is taken, which is the reading that cannot flatter a source | unit: `published` | ✓ |
 | **DATE-12** | Three states, not two: a page nobody read is `unchecked`, a page read in full carrying no date is `absent`, and a page cut short at the byte cap is `unchecked` rather than `absent` | unit: `published` | ✓ |
-| **DATE-13** | The URL path is read even when the body was not, so a failed fetch at a dated address is still dated | unit: `published` | ✓ |
+| **DATE-13** | A page that did not resolve is never dated by its own address, because that is the report under test supplying the evidence it is graded on. A page that **did** resolve still is. Reversed by measurement after the first green gate: the only page the original rule dated that way was a fabricated URL from the detector corpus | unit: `published` | ✓ |
 | **DATE-14** | Page text is treated as hostile input: an unparseable, oversized or deeply nested JSON-LD block is skipped and named, and every scan is bounded | unit: `published` | ✓ |
 | **DATE-15** | The written forms come from `score/dates.ts` rather than a third date parser, proven by a form only that module accepts | unit: `published` | ✓ |
 | **DATE-16** | Every persisted page carries a publication date or an explicit absence. The field is required, so a snapshot without one fails to parse rather than reading as undated | unit: `evidence` | ✓ |

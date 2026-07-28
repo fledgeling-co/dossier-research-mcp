@@ -1,0 +1,2265 @@
+{
+ "what": "what share of a real corpus carries a publication date this extractor can read",
+ "corpus": "every distinct URL cited by bench/tasks/, bench/quarantine/ and bench/detector/, plus the URLs cited by docs/reference/source-notes.md and docs/deep-research/benchmark-prior-art.md",
+ "method": "the production path: collectCitationEvidence with the real fetchPage, so the byte cap, the SSRF refusals and the judged verdict all apply exactly as they would in a run",
+ "checkedAt": "2026-07-28",
+ "urls": 212,
+ "dated": 41,
+ "datedShare": 0.193,
+ "byStatus": {
+  "absent": 151,
+  "unchecked": 20,
+  "found": 41
+ },
+ "bySignal": {
+  "citation-meta": 12,
+  "json-ld": 11,
+  "url-path": 12,
+  "meta-date": 3,
+  "article-published-time": 2,
+  "time-element": 1
+ },
+ "pages": [
+  {
+   "url": "https://ai.google.dev/gemini-api/docs/thinking",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://aimultiple.com/ai-deep-research",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://antigravity.google/cli/install.ps1",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://antigravity.google/cli/install.sh",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://antigravity.google/docs/cli/using",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://antigravity.google/docs/mcp",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://antigravity.google/docs/plans",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://antigravity.google/pricing",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://api.crossref.org/works/10.1038/s41467-026-74880-6",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://api.crossref.org/works/10.1038/s41586-026-10726-x",
+   "verdict": "unverified",
+   "httpStatus": 429,
+   "truncated": false,
+   "published": {
+    "status": "unchecked",
+    "detail": "nothing was read from this page, so whether it states a publication date is unknown. A date in its address is not read here: on a page that never resolved that is the cited report's own claim about a source nobody could reach."
+   }
+  },
+  {
+   "url": "https://api.crossref.org/works/10.1073/pnas.2526461123",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://api.crossref.org/works/10.1073/pnas.2535317123",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://api.github.com/repos/Ayanami0730/deep_research_bench",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://api.github.com/repos/bosun-ai/swiftide",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://api.github.com/repos/cloudwego/eino",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://api.github.com/repos/EleutherAI/lm-evaluation-harness",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://api.github.com/repos/genkit-ai/genkit",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://api.github.com/repos/lmarena/search-arena",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://api.github.com/repos/microsoft/livedrbench",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://api.github.com/repos/promptfoo/promptfoo",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://api.github.com/repos/promptfoo/promptfoo/releases",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://api.github.com/repos/scaleapi/researchrubrics",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://api.github.com/repos/texttron/BrowseComp-Plus",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://api.github.com/repos/UKGovernmentBEIS/inspect_ai",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://api.github.com/repos/zavora-ai/adk-rust",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://api.x.ai/v1/responses",
+   "verdict": "unverified",
+   "httpStatus": 405,
+   "truncated": false,
+   "published": {
+    "status": "unchecked",
+    "detail": "nothing was read from this page, so whether it states a publication date is unknown. A date in its address is not read here: on a page that never resolved that is the cited report's own claim about a source nobody could reach."
+   }
+  },
+  {
+   "url": "https://arxiv.org/abs/2506.05334",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "found",
+    "date": "2025-06-05",
+    "signal": "citation-meta",
+    "raw": "2025/06/05",
+    "detail": "read from the `citation_date` meta tag"
+   }
+  },
+  {
+   "url": "https://arxiv.org/abs/2506.06287",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "found",
+    "date": "2025-05-06",
+    "signal": "citation-meta",
+    "raw": "2025/05/06",
+    "detail": "read from the `citation_date` meta tag"
+   }
+  },
+  {
+   "url": "https://arxiv.org/abs/2506.11763",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "found",
+    "date": "2025-06-13",
+    "signal": "citation-meta",
+    "raw": "2025/06/13",
+    "detail": "read from the `citation_date` meta tag"
+   }
+  },
+  {
+   "url": "https://arxiv.org/abs/2506.21506",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "found",
+    "date": "2025-06-26",
+    "signal": "citation-meta",
+    "raw": "2025/06/26",
+    "detail": "read from the `citation_date` meta tag"
+   }
+  },
+  {
+   "url": "https://arxiv.org/abs/2508.06600",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "found",
+    "date": "2025-08-08",
+    "signal": "citation-meta",
+    "raw": "2025/08/08",
+    "detail": "read from the `citation_date` meta tag"
+   }
+  },
+  {
+   "url": "https://arxiv.org/abs/2509.04499",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "found",
+    "date": "2025-09-02",
+    "signal": "citation-meta",
+    "raw": "2025/09/02",
+    "detail": "read from the `citation_date` meta tag"
+   }
+  },
+  {
+   "url": "https://arxiv.org/abs/2511.07685",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "found",
+    "date": "2025-11-10",
+    "signal": "citation-meta",
+    "raw": "2025/11/10",
+    "detail": "read from the `citation_date` meta tag"
+   }
+  },
+  {
+   "url": "https://arxiv.org/abs/2602.16942",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "found",
+    "date": "2026-02-18",
+    "signal": "citation-meta",
+    "raw": "2026/02/18",
+    "detail": "read from the `citation_date` meta tag"
+   }
+  },
+  {
+   "url": "https://arxiv.org/abs/2603.09891",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "found",
+    "date": "2026-03-10",
+    "signal": "citation-meta",
+    "raw": "2026/03/10",
+    "detail": "read from the `citation_date` meta tag"
+   }
+  },
+  {
+   "url": "https://arxiv.org/abs/2606.00093",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "found",
+    "date": "2026-05-25",
+    "signal": "citation-meta",
+    "raw": "2026/05/25",
+    "detail": "read from the `citation_date` meta tag"
+   }
+  },
+  {
+   "url": "https://arxiv.org/abs/2606.19544",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "found",
+    "date": "2026-06-17",
+    "signal": "citation-meta",
+    "raw": "2026/06/17",
+    "detail": "read from the `citation_date` meta tag"
+   }
+  },
+  {
+   "url": "https://arxiv.org/html/2411.00640v1",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://arxiv.org/html/2509.04499",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://arxiv.org/html/2509.04499v1",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://arxiv.org/html/2601.06112",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://arxiv.org/html/2602.24277v1",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://arxiv.org/html/2603.29231v1",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://cert-portal.siemens.com/productcert/pdf/ssa-397453.pdf",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://cert-portal.siemens.com/productcert/pdf/ssa-479842.pdf",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://cert-portal.siemens.com/productcert/pdf/ssa-661247.pdf",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://cert-portal.siemens.com/productcert/pdf/ssa-714170.pdf",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://chatgpt.com/codex/install.sh",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://code.claude.com/docs/en/costs",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://crates.io/api/v1/crates/adk-eval",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://crates.io/api/v1/crates/rig-core",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://crates.io/api/v1/crates/swiftide",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://cursor.com/install",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://cursor.com/install?win32=true%27",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://deepresearch-bench.github.io/",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://developer.apple.com/safari/resources",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://developer.chrome.com/docs/devtools/agents",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises. 1 `<time>` element(s) were present but none said it was the publication date, so none was used; a bare `<time>` is as likely to be a comment timestamp"
+   }
+  },
+  {
+   "url": "https://developers.google.com/gemini-code-assist/docs/deprecations/code-assist-individuals",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://developers.openai.com/api/docs/guides/deep-research",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://developers.openai.com/api/docs/guides/reasoning",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://developers.openai.com/api/docs/models/o3-deep-research",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://docs.perplexity.ai/docs/agent-api/quickstart",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://docs.perplexity.ai/docs/getting-started/integrations/mcp-server.md",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://docs.perplexity.ai/docs/sonar/models/sonar-deep-research",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://docs.perplexity.ai/llms.txt",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://docs.rs/adk-eval/latest/adk_eval/llm_judge/index.html",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://docs.x.ai/api/mcp",
+   "verdict": "unverified",
+   "httpStatus": 406,
+   "truncated": false,
+   "published": {
+    "status": "unchecked",
+    "detail": "nothing was read from this page, so whether it states a publication date is unknown. A date in its address is not read here: on a page that never resolved that is the cited report's own claim about a source nobody could reach."
+   }
+  },
+  {
+   "url": "https://docs.x.ai/developers/pricing",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "found",
+    "date": "2026-07-03",
+    "signal": "json-ld",
+    "raw": "2026-07-03T00:00:00Z",
+    "detail": "read from a schema.org `datePublished` in a JSON-LD block"
+   }
+  },
+  {
+   "url": "https://docs.x.ai/developers/tools/collections-search",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "found",
+    "date": "2026-02-12",
+    "signal": "json-ld",
+    "raw": "2026-02-12T00:00:00Z",
+    "detail": "read from a schema.org `datePublished` in a JSON-LD block"
+   }
+  },
+  {
+   "url": "https://docs.x.ai/docs/models",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "found",
+    "date": "2026-07-09",
+    "signal": "json-ld",
+    "raw": "2026-07-09T00:00:00Z",
+    "detail": "read from a schema.org `datePublished` in a JSON-LD block"
+   }
+  },
+  {
+   "url": "https://doi.org/10.1038/s41467-026-74880-6",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "found",
+    "date": "2026-07-02",
+    "signal": "json-ld",
+    "raw": "2026-07-02T00:00:00Z",
+    "detail": "read from a schema.org `datePublished` in a JSON-LD block"
+   }
+  },
+  {
+   "url": "https://doi.org/10.1038/s41586-026-10726-x",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "found",
+    "date": "2026-07-01",
+    "signal": "json-ld",
+    "raw": "2026-07-01T00:00:00Z",
+    "detail": "read from a schema.org `datePublished` in a JSON-LD block"
+   }
+  },
+  {
+   "url": "https://doi.org/10.1073/pnas.2526461123",
+   "verdict": "blocked",
+   "httpStatus": 403,
+   "truncated": false,
+   "published": {
+    "status": "unchecked",
+    "detail": "nothing was read from this page, so whether it states a publication date is unknown. A date in its address is not read here: on a page that never resolved that is the cited report's own claim about a source nobody could reach."
+   }
+  },
+  {
+   "url": "https://doi.org/10.1073/pnas.2535317123",
+   "verdict": "blocked",
+   "httpStatus": 403,
+   "truncated": false,
+   "published": {
+    "status": "unchecked",
+    "detail": "nothing was read from this page, so whether it states a publication date is unknown. A date in its address is not read here: on a page that never resolved that is the cited report's own claim about a source nobody could reach."
+   }
+  },
+  {
+   "url": "https://doi.org/10.48550/arXiv.2509.04499",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "found",
+    "date": "2025-09-02",
+    "signal": "citation-meta",
+    "raw": "2025/09/02",
+    "detail": "read from the `citation_date` meta tag"
+   }
+  },
+  {
+   "url": "https://drb.futuresearch.ai/",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://evals.report/benchmarks/search-arena",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://example-news.invalid/2026/07/quarterly-figures",
+   "verdict": "invalid_url",
+   "truncated": false,
+   "published": {
+    "status": "unchecked",
+    "detail": "nothing was read from this page, so whether it states a publication date is unknown. A date in its address is not read here: on a page that never resolved that is the cited report's own claim about a source nobody could reach."
+   }
+  },
+  {
+   "url": "https://example.com/",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://gemini.google.com/robots.txt",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://gemini.google.com/share/%3Cid",
+   "verdict": "unreachable",
+   "truncated": false,
+   "published": {
+    "status": "unchecked",
+    "detail": "nothing was read from this page, so whether it states a publication date is unknown. A date in its address is not read here: on a page that never resolved that is the cited report's own claim about a source nobody could reach."
+   }
+  },
+  {
+   "url": "https://github.com/Ayanami0730/deep_research_bench",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://github.com/ChromeDevTools/chrome-devtools-mcp",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://github.com/cisagov/log4j-affected-db",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://github.com/cisagov/log4j-affected-db/blob/develop/SOFTWARE-LIST.md",
+   "verdict": "not_found",
+   "httpStatus": 404,
+   "truncated": false,
+   "published": {
+    "status": "unchecked",
+    "detail": "nothing was read from this page, so whether it states a publication date is unknown. A date in its address is not read here: on a page that never resolved that is the cited report's own claim about a source nobody could reach."
+   }
+  },
+  {
+   "url": "https://github.com/containerd/containerd/security/advisories/GHSA-xhf5-7wjv-pqxp",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://github.com/daymade/claude-code-skills",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://github.com/microsoft/LiveDRBench",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://github.com/mvanhorn/last30days-skill",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://github.com/nu11secur1ty/CVE-mitre/tree/main/CVE-2021-44228",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://github.com/scienceaix/deepresearch",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://github.com/UditAkhourii/adhd",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://github.com/Weizhena/deep-research-skills",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://github.com/xai-org/grok-build",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://html.duckduckgo.com/html?q=agentic+coding+CLI+benchmark+research+tasks+Claude+Code+Codex+Gemini+CLI+comparison+evaluation+2026",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://iclr-blogposts.github.io/2026/blog/2026/why-ai-evaluations-need-error-bars",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://knowledge.workspace.google.com/admin/generative-ai/gemini-app/turn-the-gemini-app-on-or-off",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://learn.chatgpt.com/docs/codex/cli",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://lists.debian.org/debian-lts-announce/2021/12/msg00007.html",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "found",
+    "date": "2021-12-01",
+    "signal": "url-path",
+    "raw": "/2021/12/",
+    "detail": "read from a year and month in the URL path, with no day stated, so the first of that month was taken"
+   }
+  },
+  {
+   "url": "https://lists.fedoraproject.org/archives/list/package-announce%40lists.fedoraproject.org/message/M5CSVUNV4HWZZXGOKNSK6L7RPM7BOKIB",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://lists.fedoraproject.org/archives/list/package-announce%40lists.fedoraproject.org/message/VU57UJDCFIASIO35GC55JMKSRXJMCDFM",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://logging.apache.org/log4j/2.x/security.html",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://mastering-genkit.github.io/mastering-genkit-go/chapters/11-evaluations.html",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://medium.com/data-science-collective/deep-research-in-ai-the-insight-gap-446118ebe76e",
+   "verdict": "blocked",
+   "httpStatus": 403,
+   "truncated": false,
+   "published": {
+    "status": "unchecked",
+    "detail": "nothing was read from this page, so whether it states a publication date is unknown. A date in its address is not read here: on a page that never resolved that is the cited report's own claim about a source nobody could reach."
+   }
+  },
+  {
+   "url": "https://mitsloanedtech.mit.edu/2025/03/26/deep-research-transforming-the-creation-of-learning-materials-with-research-backed-ai",
+   "verdict": "unverified",
+   "httpStatus": 503,
+   "truncated": false,
+   "published": {
+    "status": "unchecked",
+    "detail": "nothing was read from this page, so whether it states a publication date is unknown. A date in its address is not read here: on a page that never resolved that is the cited report's own claim about a source nobody could reach."
+   }
+  },
+  {
+   "url": "https://msrc-blog.microsoft.com/2021/12/11/microsofts-response-to-cve-2021-44228-apache-log4j2",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "found",
+    "date": "2021-12-11",
+    "signal": "url-path",
+    "raw": "/2021/12/11/",
+    "detail": "read from a date in the URL path"
+   }
+  },
+  {
+   "url": "https://nodejs.org/dist/index.json",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://nodejs.org/download/release/latest",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://nodejs.org/en/blog/release",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises. 6 `<time>` element(s) were present but none said it was the publication date, so none was used; a bare `<time>` is as likely to be a comment timestamp"
+   }
+  },
+  {
+   "url": "https://nodejs.org/en/blog/release/v20.5.1",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://nodejs.org/en/blog/release/v22.23.0",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://nodejs.org/en/blog/release/v22.23.1",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://nodejs.org/en/blog/release/v24.17.0",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://nodejs.org/en/blog/release/v24.18.0",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://nodejs.org/en/blog/release/v26.3.0",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://nodejs.org/en/blog/release/v26.3.1",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://nodejs.org/en/blog/release/v26.4.0",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://nodejs.org/en/blog/release/v26.5.0",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://nodejs.org/en/blog/vulnerability/july-2026-security-releases",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://nodejs.org/en/download/archive/v26.5.0",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises. 2 `<time>` element(s) were present but none said it was the publication date, so none was used; a bare `<time>` is as likely to be a comment timestamp"
+   }
+  },
+  {
+   "url": "https://nvd.nist.gov/",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://nvd.nist.gov/vuln/detail/%3CCVE-ID",
+   "verdict": "unverified",
+   "httpStatus": 400,
+   "truncated": false,
+   "published": {
+    "status": "unchecked",
+    "detail": "nothing was read from this page, so whether it states a publication date is unknown. A date in its address is not read here: on a page that never resolved that is the cited report's own claim about a source nobody could reach."
+   }
+  },
+  {
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2021-44228",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-14191",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-41579",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-53488",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-54500",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-54502",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-54592",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://openlibrary.org/books/OL25718398M",
+   "verdict": "not_found",
+   "httpStatus": 404,
+   "truncated": false,
+   "published": {
+    "status": "unchecked",
+    "detail": "nothing was read from this page, so whether it states a publication date is unknown. A date in its address is not read here: on a page that never resolved that is the cited report's own claim about a source nobody could reach."
+   }
+  },
+  {
+   "url": "https://paperguide.ai/blog/ai-tools-for-narrative-review",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "found",
+    "date": "2026-06-30",
+    "signal": "json-ld",
+    "raw": "2026-06-30T06:54:00.000Z",
+    "detail": "read from a schema.org `datePublished` in a JSON-LD block"
+   }
+  },
+  {
+   "url": "https://paperguide.ai/deep-research-ai",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://pkg.go.dev/github.com/firebase/genkit/go",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://platform.claude.com/docs/en/docs/build-with-claude/effort",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://policies.google.com/terms/generative-ai",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://policies.google.com/terms",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://psirt.global.sonicwall.com/vuln-detail/SNWLID-2021-0032",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://pubmed.ncbi.nlm.nih.gov/42393087",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://pubmed.ncbi.nlm.nih.gov/42446976",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://regex101.com/r/Ly7O1x/3",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://regex101.com/r/vkijKf/1",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://registry.npmjs.org/evalite",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://registry.npmjs.org/hono",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": true,
+   "published": {
+    "status": "unchecked",
+    "detail": "the page was read only as far as the byte cap and no publication date appeared in that part, so a date further down was never seen."
+   }
+  },
+  {
+   "url": "https://registry.npmjs.org/promptfoo",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": true,
+   "published": {
+    "status": "unchecked",
+    "detail": "the page was read only as far as the byte cap and no publication date appeared in that part, so a date further down was never seen."
+   }
+  },
+  {
+   "url": "https://registry.npmjs.org/typescript",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": true,
+   "published": {
+    "status": "unchecked",
+    "detail": "the page was read only as far as the byte cap and no publication date appeared in that part, so a date further down was never seen."
+   }
+  },
+  {
+   "url": "https://registry.npmjs.org/undici",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": true,
+   "published": {
+    "status": "unchecked",
+    "detail": "the page was read only as far as the byte cap and no publication date appeared in that part, so a date further down was never seen."
+   }
+  },
+  {
+   "url": "https://registry.npmjs.org/vitest",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": true,
+   "published": {
+    "status": "unchecked",
+    "detail": "the page was read only as far as the byte cap and no publication date appeared in that part, so a date further down was never seen."
+   }
+  },
+  {
+   "url": "https://sarahconstantin.substack.com/p/ai-deep-research-tools-reviewed",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "found",
+    "date": "2025-03-24",
+    "signal": "json-ld",
+    "raw": "2025-03-24T18:35:08+00:00",
+    "detail": "read from a schema.org `datePublished` in a JSON-LD block"
+   }
+  },
+  {
+   "url": "https://security.netapp.com/advisory/ntap-20211210-0007",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://semver.org/",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=CVE-2026-14191",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=CVE-2026-41579",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=CVE-2026-53488",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=CVE-2026-54500",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=CVE-2026-54502",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=CVE-2026-54592",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://support.apple.com/kb/HT213189",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises. 1 `<time>` element(s) were present but none said it was the publication date, so none was used; a bare `<time>` is as likely to be a comment timestamp"
+   }
+  },
+  {
+   "url": "https://support.google.com/gemini/answer/13743730",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://support.google.com/gemini/answer/14620100",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://support.google.com/gemini/answer/15719111",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://support.google.com/gemini/answer/17004136",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://thinkingmachines.ai/blog/defeating-nondeterminism-in-llm-inference",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "found",
+    "date": "2025-09-10",
+    "signal": "meta-date",
+    "raw": "2025-09-10T00:01:00-07:00",
+    "detail": "read from the `datepublished` meta tag"
+   }
+  },
+  {
+   "url": "https://tools.cisco.com/security/center/content/CiscoSecurityAdvisory/cisco-sa-apache-log4j-qRuKNEbd",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "found",
+    "date": "2022-01-31",
+    "signal": "meta-date",
+    "raw": "1/31/2022 9:16:10 PM",
+    "detail": "read from the `date` meta tag"
+   }
+  },
+  {
+   "url": "https://trec-rag.github.io/",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://twitter.com/kurtseifried/status/1469345530182455296",
+   "verdict": "not_found",
+   "httpStatus": 404,
+   "truncated": false,
+   "published": {
+    "status": "unchecked",
+    "detail": "nothing was read from this page, so whether it states a publication date is unknown. A date in its address is not read here: on a page that never resolved that is the cited report's own claim about a source nobody could reach."
+   }
+  },
+  {
+   "url": "https://webkit.org/blog/18136/introducing-the-safari-mcp-server-for-web-developers",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "found",
+    "date": "2026-07-01",
+    "signal": "article-published-time",
+    "raw": "2026-07-01T14:28:16-07:00",
+    "detail": "read from the `article:published_time` meta tag"
+   }
+  },
+  {
+   "url": "https://webkit.org/blog/6900/webdriver-support-in-safari-10",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "found",
+    "date": "2016-08-26",
+    "signal": "article-published-time",
+    "raw": "2016-08-26T09:00:24-07:00",
+    "detail": "read from the `article:published_time` meta tag"
+   }
+  },
+  {
+   "url": "https://workspaceupdates.googleblog.com/2026/03/workspace-admins-can-allow-gemini-app-conversation-for-their-organizations.html",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "found",
+    "date": "2026-03-01",
+    "signal": "url-path",
+    "raw": "/2026/03/",
+    "detail": "read from a year and month in the URL path, with no day stated, so the first of that month was taken"
+   }
+  },
+  {
+   "url": "https://bentley.com/en/common-vulnerability-exposure/be-2022-0001",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "found",
+    "date": "2025-05-14",
+    "signal": "json-ld",
+    "raw": "2025-05-14T08:17:15+00:00",
+    "detail": "read from a schema.org `datePublished` in a JSON-LD block"
+   }
+  },
+  {
+   "url": "https://cisa.gov/known-exploited-vulnerabilities-catalog?field_cve=CVE-2021-44228",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://cisa.gov/uscert/ed-22-02-apache-log4j-recommended-mitigation-measures",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises. 5 `<time>` element(s) were present but none said it was the publication date, so none was used; a bare `<time>` is as likely to be a comment timestamp"
+   }
+  },
+  {
+   "url": "https://cjr.org/tow_center/we-compared-eight-ai-search-engines-theyre-all-bad-at-citing-news.php",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://debian.org/security/2021/dsa-5020",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://federalregister.gov/api/v1/documents.json?conditions[term]=",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://federalregister.gov/api/v1/documents/2026-13971.json",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://federalregister.gov/api/v1/documents/2026-13980.json",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://federalregister.gov/api/v1/documents/2026-13998.json",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://federalregister.gov/api/v1/documents/2026-14043.json",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://federalregister.gov/api/v1/documents/2026-14052.json",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://federalregister.gov/api/v1/documents/2026-14072.json",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://federalregister.gov/api/v1/documents/2026-14109.json",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://federalregister.gov/api/v1/documents/2026-14315.json",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://federalregister.gov/documents/2026/07/10/2026-13971/expansion-of-va-process-for-72-hour-notification-of-emergency-treatment",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "found",
+    "date": "2026-07-10",
+    "signal": "url-path",
+    "raw": "/2026/07/10/",
+    "detail": "read from a date in the URL path"
+   }
+  },
+  {
+   "url": "https://federalregister.gov/documents/2026/07/10/2026-13980/establishment-of-class-e-airspace-conneaut-oh",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "found",
+    "date": "2026-07-10",
+    "signal": "url-path",
+    "raw": "/2026/07/10/",
+    "detail": "read from a date in the URL path"
+   }
+  },
+  {
+   "url": "https://federalregister.gov/documents/2026/07/10/2026-13980/establishment-of-class-e-airspace-conneaut-oh/n/nBoth",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "found",
+    "date": "2026-07-10",
+    "signal": "url-path",
+    "raw": "/2026/07/10/",
+    "detail": "read from a date in the URL path"
+   }
+  },
+  {
+   "url": "https://federalregister.gov/documents/2026/07/10/2026-13998/facilitating-implementation-of-next-generation-911-services-ng911-improving-911-reliability",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "found",
+    "date": "2026-07-10",
+    "signal": "url-path",
+    "raw": "/2026/07/10/",
+    "detail": "read from a date in the URL path"
+   }
+  },
+  {
+   "url": "https://federalregister.gov/documents/2026/07/13/2026-14043/administrative-false-claims-and-procedures",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "found",
+    "date": "2026-07-13",
+    "signal": "url-path",
+    "raw": "/2026/07/13/",
+    "detail": "read from a date in the URL path"
+   }
+  },
+  {
+   "url": "https://federalregister.gov/documents/2026/07/13/2026-14052/natural-resource-damages-for-hazardous-substances",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "found",
+    "date": "2026-07-13",
+    "signal": "url-path",
+    "raw": "/2026/07/13/",
+    "detail": "read from a date in the URL path"
+   }
+  },
+  {
+   "url": "https://federalregister.gov/documents/2026/07/13/2026-14072/safety-zone-chicago-sanitary-and-ship-canal-chicago-il",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "found",
+    "date": "2026-07-13",
+    "signal": "url-path",
+    "raw": "/2026/07/13/",
+    "detail": "read from a date in the URL path"
+   }
+  },
+  {
+   "url": "https://federalregister.gov/documents/2026/07/14/2026-14109/airworthiness-directives-textron-aviation-inc-airplanes",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "found",
+    "date": "2026-07-14",
+    "signal": "url-path",
+    "raw": "/2026/07/14/",
+    "detail": "read from a date in the URL path"
+   }
+  },
+  {
+   "url": "https://federalregister.gov/documents/2026/07/16/2026-14315/special-local-regulations-marine-events-within-the-southwest-district",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "found",
+    "date": "2026-07-16",
+    "signal": "url-path",
+    "raw": "/2026/07/16/",
+    "detail": "read from a date in the URL path"
+   }
+  },
+  {
+   "url": "https://ietf.org/rfc/rfc2119.txt",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://intel.com/content/www/us/en/security-center/advisory/intel-sa-00646.html",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises. the `lastmodifieddate` meta tag was refused: a modification date is not a publication date, and taking one would grade a rebuilt page fresh forever; a JSON-LD block was not valid JSON and was skipped"
+   }
+  },
+  {
+   "url": "https://kb.cert.org/vuls/id/930724",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": true,
+   "published": {
+    "status": "found",
+    "date": "2021-12-15",
+    "signal": "meta-date",
+    "raw": "2021-12-15",
+    "detail": "read from the `published_at` meta tag"
+   }
+  },
+  {
+   "url": "https://linkedin.com/feed",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://liveplan.com/blog/planning/deep-research-chatgpt-vs-gemini",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "found",
+    "date": "2026-05-13",
+    "signal": "json-ld",
+    "raw": "2026-05-13T17:13:54.706Z",
+    "detail": "read from a schema.org `datePublished` in a JSON-LD block"
+   }
+  },
+  {
+   "url": "https://maragu.dev/blog/evaluate-llm-apps-in-go",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://nature.com/articles/s41467-026-74880-6",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "found",
+    "date": "2026-07-02",
+    "signal": "json-ld",
+    "raw": "2026-07-02T00:00:00Z",
+    "detail": "read from a schema.org `datePublished` in a JSON-LD block"
+   }
+  },
+  {
+   "url": "https://nature.com/articles/s41586-026-10726-x",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "found",
+    "date": "2026-07-01",
+    "signal": "json-ld",
+    "raw": "2026-07-01T00:00:00Z",
+    "detail": "read from a schema.org `datePublished` in a JSON-LD block"
+   }
+  },
+  {
+   "url": "https://npmjs.com/package/undici?activeTab=versions",
+   "verdict": "blocked",
+   "httpStatus": 403,
+   "truncated": false,
+   "published": {
+    "status": "unchecked",
+    "detail": "nothing was read from this page, so whether it states a publication date is unknown. A date in its address is not read here: on a page that never resolved that is the cited report's own claim about a source nobody could reach."
+   }
+  },
+  {
+   "url": "https://nu11secur1ty.com/2021/12/cve-2021-44228.html",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "found",
+    "date": "2021-12-16",
+    "signal": "time-element",
+    "raw": "2021-12-16T03:31:00-08:00",
+    "detail": "read from a `<time>` element that declares itself a publication date"
+   }
+  },
+  {
+   "url": "https://oracle.com/security-alerts/alert-cve-2021-44228.html",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises. the `updated date` meta tag was refused: a modification date is not a publication date, and taking one would grade a rebuilt page fresh forever"
+   }
+  },
+  {
+   "url": "https://oracle.com/security-alerts/cpuapr2022.html",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises. the `updated date` meta tag was refused: a modification date is not a publication date, and taking one would grade a rebuilt page fresh forever"
+   }
+  },
+  {
+   "url": "https://oracle.com/security-alerts/cpujan2022.html",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises. the `updated date` meta tag was refused: a modification date is not a publication date, and taking one would grade a rebuilt page fresh forever"
+   }
+  },
+  {
+   "url": "https://promptfoo.dev/docs/configuration/expected-outputs",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises. 1 `<time>` element(s) were present but none said it was the publication date, so none was used; a bare `<time>` is as likely to be a comment timestamp"
+   }
+  },
+  {
+   "url": "https://rfc-editor.org/rfc/rfc6265.txt",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://sciencedirect.com/science/article/pii/S0004370223002102",
+   "verdict": "blocked",
+   "httpStatus": 403,
+   "truncated": false,
+   "published": {
+    "status": "unchecked",
+    "detail": "nothing was read from this page, so whether it states a publication date is unknown. A date in its address is not read here: on a page that never resolved that is the cited report's own claim about a source nobody could reach."
+   }
+  },
+  {
+   "url": "https://sectionai.com/blog/chatgpt-vs-gemini-deep-research",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://x.ai/cli/install.ps1",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://x.ai/cli/install.sh",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  },
+  {
+   "url": "https://x.com/home",
+   "verdict": "live",
+   "httpStatus": 200,
+   "truncated": false,
+   "published": {
+    "status": "absent",
+    "detail": "the page was read in full and states no publication date this extractor recognises."
+   }
+  }
+ ]
+}

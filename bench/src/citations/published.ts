@@ -34,9 +34,8 @@ import { decodeEntities } from '../verify/match.js';
  *
  * ## What was measured before any of this was designed
  *
- * Every distinct URL cited by `bench/tasks/`, `bench/quarantine/` and
- * `bench/detector/` was fetched on 28 July 2026 and its date signals dumped: 72
- * URLs, 60 of which answered. Three findings shaped the code below.
+ * The benchmark's own cited URLs were fetched on 28 July 2026 and their date
+ * signals dumped. Three findings shaped the code below.
  *
  * **The commonest date on a real page is not a publication date.** Modification
  * dates outnumbered publication dates in both probes, four to one in JSON-LD.
@@ -45,15 +44,21 @@ import { decodeEntities } from '../verify/match.js';
  * extractor taking the first date-shaped thing it found would date a page to its
  * last rebuild and grade every documentation site fresh forever.
  *
- * **Most of a real corpus is honestly undated.** 43 of 72 carried no date signal
- * of any kind: JSON APIs, plain-text RFCs, PDFs and rebuilt documentation. That
- * is a finding about the corpus rather than a defect here, which is why the
- * share that could not be dated is reported beside the score rather than hidden
- * inside its denominator.
+ * **Most of a real corpus is honestly undated.** JSON APIs, plain-text RFCs,
+ * PDFs and rebuilt documentation carry nothing. That is a finding about the
+ * corpus rather than a defect here, which is why the share that could not be
+ * dated is reported beside the score rather than hidden inside its denominator.
  *
  * **Ambiguity is in the corpus.** Cisco answers `1/31/2022 9:16:10 PM`. `1/31`
  * resolves because 31 cannot be a month; `1/5/2022` would not, and picking a
  * convention would be wrong about half of that class.
+ *
+ * ## What the finished thing could date
+ *
+ * Run over 212 distinct cited URLs through the production collection path:
+ * **41 dated, 151 read in full and stating no date, 20 never read.** Six of the
+ * seven signals fired on a real page, so the ranking is a measured order rather
+ * than a guess. `bench/evidence/publication-dates.json` has it page by page.
  */
 
 /**
@@ -114,7 +119,10 @@ export interface PublicationUnchecked {
 export type PublicationDate = PublicationFound | PublicationAbsent | PublicationUnchecked;
 
 export interface PublicationInput {
-  /** The canonical URL, which is the only signal that survives a failed fetch. */
+  /**
+   * The canonical URL. Read for a date only when the page resolved, because on
+   * a page that did not, a date in the address is the cited report's own claim.
+   */
   readonly url: string;
   /** The raw body. Empty when nothing was read. */
   readonly body: string;
@@ -642,11 +650,22 @@ function fromUrlPath(url: string, bounds: PlausibleRange): SignalAttempt {
  * explicitly the publisher said "published". Where two disagree the more
  * explicit one wins, and `signal` on the result says which was used.
  *
- * **The URL path is tried even when nothing was read**, which is the one
- * exception to everything else here. It does not need the body, so a page that
- * failed to resolve at `/2021/12/11/some-post` is still dated by its own
- * address, and refusing to say so would throw away the only signal that
- * survives a fetch failure.
+ * **Every signal, including the URL path, needs a page that resolved.** The
+ * first version of this file read the path even when nothing was read, on the
+ * reasoning that an address is the one signal that survives a failed fetch.
+ * Running it over the real corpus refuted that: the only page it dated that way
+ * was a **fabricated** URL from the detector corpus, `example-news.invalid`,
+ * which got a fresh 2026 date out of its own path. That is the recency axis
+ * being fed by the backend under test, which is the one input a measurement may
+ * never take. A path on a page that *did* resolve is corroborated by something
+ * having genuinely been served at that address, and that case is 14 of the 43
+ * dates this extractor finds on the real corpus, so the line is drawn there
+ * rather than at the signal.
+ *
+ * It costs one real case, measured: a live MIT blog post behind a bot deterrent
+ * whose path states its date. That page is now `unchecked`, which is the true
+ * statement about it, and `unchecked` is what this whole file exists to keep
+ * distinct from `absent`.
  */
 export function extractPublicationDate(input: PublicationInput): PublicationDate {
   const bounds = plausibleRange(input.checkedAt);
@@ -690,8 +709,8 @@ export function extractPublicationDate(input: PublicationInput): PublicationDate
     // date it is. Cisco's advisories are dated by nothing else.
     attempts.push(fromMetaNames(metas, ['date'], 'meta-date', bounds));
     attempts.push(fromTimeElement(input.body, bounds));
+    attempts.push(fromUrlPath(input.url, bounds));
   }
-  attempts.push(fromUrlPath(input.url, bounds));
 
   for (const attempt of attempts) {
     if (attempt.found !== undefined) return attempt.found;
@@ -703,7 +722,7 @@ export function extractPublicationDate(input: PublicationInput): PublicationDate
     return {
       status: 'unchecked',
       detail: clip(
-        `nothing was read from this page, so whether it states a publication date is unknown; its address carries no date either.${seen}`,
+        `nothing was read from this page, so whether it states a publication date is unknown. A date in its address is not read here: on a page that never resolved that is the cited report's own claim about a source nobody could reach.${seen}`,
         MAX_DETAIL_CHARS,
       ),
     };
