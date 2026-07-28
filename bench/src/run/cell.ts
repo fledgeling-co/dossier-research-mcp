@@ -55,11 +55,31 @@ export interface CellRef {
   readonly provider: string;
   /** 1-based. Never 0: see `FingerprintInput.repeat` in `src/research/contract.ts`. */
   readonly repeat: number;
+  /**
+   * How the backend was configured, when that is not its default.
+   *
+   * The same backend run with web search off is a different backend for scoring
+   * purposes and must not share a cell with the search-on run. Encoding it in
+   * the provider string instead would break the `cell.provider as ProviderId`
+   * lookup that turns a cell into something runnable, so it is its own segment.
+   *
+   * **Absent for the default configuration, and that is deliberate.** A key is
+   * what resume subtracts, so appending an empty segment unconditionally would
+   * renumber every cell already bought and re-buy the lot.
+   */
+  /**
+   * Absent, or present and a string. Explicitly admitting `undefined` is
+   * required under `exactOptionalPropertyTypes`, because the record this key is
+   * derived from is a parsed Zod object whose optional field is typed
+   * `string | undefined` rather than merely absent.
+   */
+  readonly variant?: string | undefined;
 }
 
 /** The stable identity of a cell, used as the resume key and stored on the record. */
 export function cellKey(ref: CellRef): string {
-  return [ref.taskId, ref.provider, String(ref.repeat)].join(KEY_SEPARATOR);
+  const base = [ref.taskId, ref.provider, String(ref.repeat)];
+  return (ref.variant === undefined ? base : [...base, ref.variant]).join(KEY_SEPARATOR);
 }
 
 const isoTimestamp = z.string().min(1).max(40);
@@ -68,6 +88,12 @@ const cellBase = {
   key: z.string().min(1).max(300),
   taskId: z.string().min(1).max(120),
   provider: z.string().min(1).max(60),
+  /**
+   * Set when the backend was run in a non-default configuration, and omitted
+   * otherwise so records written before variants existed still validate against
+   * the `key === cellKey(c)` refinement below.
+   */
+  variant: z.string().min(1).max(40).optional(),
   repeat: z.number().int().min(1).max(MAX_REPETITIONS),
   startedAt: isoTimestamp,
   finishedAt: isoTimestamp,

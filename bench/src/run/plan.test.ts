@@ -221,4 +221,39 @@ describe('spreadEligibility', () => {
       expect(() => spreadEligibility(bad), String(bad)).toThrow(/non-negative integer/);
     }
   });
+
+  describe('the search variant', () => {
+    const base = {
+      taskIds: ['t1'],
+      providers: ['openai'],
+      repetitions: 1,
+      estimateCellUsd: () => 1,
+      ceilingUsd: 100,
+    };
+
+    it('a variant cell does not collide with the default cell for the same pair', () => {
+      // The whole point of the flag. If these shared a key, resume would treat
+      // the search-off cell as already bought by the search-on run and the
+      // comparison would be one column against itself.
+      const on = planBatch(base).queue[0];
+      const off = planBatch({ ...base, variant: 'nosearch' }).queue[0];
+      expect(on).toBeDefined();
+      expect(off).toBeDefined();
+      expect(cellKey(off!)).not.toBe(cellKey(on!));
+    });
+
+    it('omitting the variant leaves the key byte-identical to before variants existed', () => {
+      // Cells bought before this field was added carry three-segment keys. If
+      // the default appended an empty segment, every one of them would re-plan
+      // as unbought and be paid for twice.
+      expect(cellKey({ taskId: 't1', provider: 'openai', repeat: 1 })).toBe('t1/openai/1');
+    });
+
+    it('a recorded variant cell is subtracted on resume, and the default one is not', () => {
+      const off = { ...base, variant: 'nosearch' };
+      const done = cellKey({ taskId: 't1', provider: 'openai', repeat: 1, variant: 'nosearch' });
+      expect(planBatch({ ...off, completedKeys: [done] }).queue).toHaveLength(0);
+      expect(planBatch({ ...base, completedKeys: [done] }).queue).toHaveLength(1);
+    });
+  });
 });

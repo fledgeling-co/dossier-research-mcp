@@ -34,6 +34,16 @@ export interface CliArgs {
   readonly concurrency: number;
   readonly includeFailed: boolean;
   readonly dryRun: boolean;
+  /**
+   * Run the backends with no search tool declared.
+   *
+   * Only three backends read this at all: `openai`, `perplexity` and `xai`.
+   * `gemini` and every local CLI ignore the declared tools entirely and use
+   * whatever search they have built in, so a no-search batch does NOT make them
+   * closed-book and must not be reported as though it had. The run prints which
+   * of the chosen backends the flag actually reaches.
+   */
+  readonly noSearch: boolean;
 }
 
 const USAGE = `Usage: bench-run --providers <a,b> --repeat <n> --ceiling <usd> [options]
@@ -45,11 +55,25 @@ const USAGE = `Usage: bench-run --providers <a,b> --repeat <n> --ceiling <usd> [
   --out <file>        cell store (default bench/results/cells.jsonl)
   --concurrency <n>   cells in flight (default ${String(DEFAULT_CONCURRENCY)})
   --include-failed    re-queue cells whose recorded outcome was a failure
+  --no-search         declare no search tool (only openai, perplexity and xai honour it)
   --dry-run           plan and print, start nothing`;
+
+/**
+ * Backends whose request actually carries the declared tool set.
+ *
+ * Established by reading the provider modules rather than by assuming: only
+ * `openai`, `perplexity` and `xai` reference `tools` at all. `gemini.ts` has no
+ * reference to it, because Deep Research always searches, and neither does
+ * `local.ts`, because a CLI uses whatever search it was built with.
+ *
+ * A stale list here would print a reassurance that is false, so
+ * `cli.test.ts` re-derives it from the provider sources.
+ */
+export const HONOURS_TOOLS: ReadonlySet<string> = new Set(['openai', 'perplexity', 'xai']);
 
 /** Flags taking a value, and flags that are switches. Nothing else is accepted. */
 const VALUE_FLAGS = new Set(['providers', 'ceiling', 'repeat', 'tasks', 'out', 'concurrency']);
-const SWITCH_FLAGS = new Set(['include-failed', 'dry-run']);
+const SWITCH_FLAGS = new Set(['include-failed', 'dry-run', 'no-search']);
 
 /** Exported for the arg-parsing tests; a mistyped flag here spends money. */
 export function parseArgs(argv: readonly string[]): CliArgs {
@@ -138,6 +162,7 @@ export function parseArgs(argv: readonly string[]): CliArgs {
     concurrency,
     includeFailed: bare.has('include-failed'),
     dryRun: bare.has('dry-run'),
+    noSearch: bare.has('no-search'),
   };
 }
 
@@ -201,13 +226,14 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
     completedKeys: recorded.completedKeys,
     failedKeys: recorded.failedKeys,
     includeFailed: args.includeFailed,
+    ...(args.noSearch ? { variant: 'nosearch' } : {}),
     // The same estimate the runner will reserve, so the projection and the gate
     // cannot drift apart, PLUS the utility call the runner reserves separately
     // on every completed run to title and summarise it. That call is outside
     // every provider's band, so leaving it out understated a 4,000-cell batch by
     // up to $0.08 a cell and let spend past the batch ceiling unaccounted.
     estimateCellUsd: (provider) =>
-      (deps.providers.get(provider as ProviderId)?.estimate({ tier: 'fast', tools: ['google_search'] })
+      (deps.providers.get(provider as ProviderId)?.estimate({ tier: 'fast', tools: args.noSearch ? [] : ['google_search'] })
         .cost.highUsd ?? 0) + UTILITY_CALL_BAND.highUsd,
     ceilingUsd: args.ceilingUsd,
     rollingRemainingUsd: budget.remainingUsd,
@@ -219,6 +245,21 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
   say(`Remaining: ${String(plan.queue.length)}`);
   say(`Projected: $${plan.projectedUsd.toFixed(2)} at worst case, against a ceiling of $${plan.ceilingUsd.toFixed(2)} (an estimate band, never a quote)`);
   say(`Spread:    ${plan.spreadIfComplete.reason}`);
+  if (args.noSearch) {
+    // Which backends the flag reaches is not a detail. `gemini` and every local
+    // CLI ignore the declared tool set and search anyway, so a batch labelled
+    // no-search contains cells that searched, and a reader who assumes
+    // otherwise is comparing a closed-book column against an open-book one.
+    const reached = args.providers.filter((p) => HONOURS_TOOLS.has(p));
+    const ignored = args.providers.filter((p) => !HONOURS_TOOLS.has(p));
+    say(`No search: reaches ${reached.length === 0 ? 'NONE of the chosen backends' : reached.join(', ')}`);
+    if (ignored.length > 0) {
+      say(
+        `           ${ignored.join(', ')} ignore the declared tools and use their own built-in search; ` +
+          'their cells are NOT closed-book',
+      );
+    }
+  }
   if (plan.rollingWindowWarning !== '') say(`Note:      ${plan.rollingWindowWarning}`);
 
   if (plan.refused) {
@@ -251,7 +292,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
       prompt: task.question,
       archetype: 'technical',
       tier: 'fast',
-      tools: [{ type: 'google_search' }],
+      tools: args.noSearch ? [] : [{ type: 'google_search' }],
       collaborativePlanning: false,
       thinkingSummaries: false,
       visualization: false,

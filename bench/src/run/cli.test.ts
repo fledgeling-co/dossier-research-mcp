@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { parseArgs } from './cli.js';
+import { readFileSync } from 'node:fs';
+import { HONOURS_TOOLS, parseArgs } from './cli.js';
 
 /**
  * Argument parsing, tested on its own because every defect in it is a spend
@@ -80,6 +81,31 @@ describe('parseArgs', () => {
       concurrency: 2,
       includeFailed: true,
       dryRun: true,
+    });
+  });
+
+  describe('the no-search flag', () => {
+    it('is a switch, and defaults to off', () => {
+      expect(parseArgs(['--providers', 'openai', '--ceiling', '5']).noSearch).toBe(false);
+      expect(parseArgs(['--providers', 'openai', '--ceiling', '5', '--no-search']).noSearch).toBe(true);
+    });
+
+    it('HONOURS_TOOLS names exactly the providers whose source reads args.tools', () => {
+      // The printed reassurance is only as true as this set. A provider that
+      // grows tool support and is not added here would be reported as
+      // closed-book while it searched; one that loses it would be reported as
+      // having searched when it did not. Both are the benchmark lying about
+      // its own conditions, so the set is re-derived rather than trusted.
+      const CANDIDATES = ['gemini', 'openai', 'perplexity', 'xai', 'local'] as const;
+      const reads = new Set<string>();
+      for (const id of CANDIDATES) {
+        const src = readFileSync(new URL(`../../../src/providers/${id}.ts`, import.meta.url), 'utf8');
+        // Comments describe intent, not behaviour: a provider that only
+        // mentions tools in prose does not send them.
+        const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+        if (/\btools\b/.test(code)) reads.add(id);
+      }
+      expect([...reads].sort()).toEqual([...HONOURS_TOOLS].sort());
     });
   });
 });

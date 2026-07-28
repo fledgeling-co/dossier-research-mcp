@@ -21,6 +21,14 @@ export interface PlanBatchInput {
   readonly providers: readonly string[];
   /** Repetitions per pair. `1` is allowed; see `spreadEligibility`. */
   readonly repetitions: number;
+  /**
+   * Backend configuration this batch runs under, when it is not the default.
+   *
+   * Batch-wide rather than per-provider: a run comparing search on against
+   * search off is two batches into one store, not one batch that silently
+   * configures some backends differently from others.
+   */
+  readonly variant?: string;
   /** Cell keys already carrying a recorded outcome, from the cell store. */
   readonly completedKeys?: Iterable<string>;
   /** Cell keys whose recorded outcome was a failure. A subset of the above. */
@@ -116,7 +124,10 @@ export function planBatch(input: PlanBatchInput): BatchPlan {
       }
       for (let repeat = 1; repeat <= repetitions; repeat += 1) {
         totalCells += 1;
-        const ref: CellRef = { taskId, provider, repeat };
+        const ref: CellRef =
+          input.variant === undefined
+            ? { taskId, provider, repeat }
+            : { taskId, provider, repeat, variant: input.variant };
         if (skip.has(cellKey(ref))) continue;
         queue.push(ref);
         projected += perCell;
