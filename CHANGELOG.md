@@ -6,7 +6,7 @@ Dates are the release date. Costs are estimate bands, never quotes. Where a fact
 
 This project follows [semantic versioning](https://semver.org/). Until 1.0 the minor number carries breaking changes.
 
-## [Unreleased]
+## [0.11.0] - 2026-07-28
 
 ### Changed
 
@@ -618,7 +618,8 @@ Four defects that a full hermetic suite passed and one real API call each found.
 
 - First release. Gemini Deep Research wrapped so an agent can drive it safely: durable runs that survive a disconnect, a spend gate that reserves the worst case before the call, and outline-first reading so a 60,000-token report never lands inline.
 
-[Unreleased]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.7.0...v0.8.0
