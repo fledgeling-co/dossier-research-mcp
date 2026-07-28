@@ -1,7 +1,7 @@
-import { readFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { findImpureImports, importGraph } from '../import-graph.js';
 import {
   containmentOracle,
   judgedOracle,
@@ -202,42 +202,13 @@ describe('determinism (INTEG-38)', () => {
 
 describe('purity (INTEG-37)', () => {
   /**
-   * Walk the repo-local import graph rather than reading one file.
+   * The walk lives in `bench/src/import-graph.ts` now.
    *
-   * Reading a module's own source proves only that it does not import a
-   * filesystem directly, and every scorer here imports shared modules from
-   * `src/`. Following the edges is the difference between checking the claim
-   * and checking the first line of it.
+   * It was written here, and it was the only copy, so the detector's own purity
+   * guard grew a same-file regex instead and could not see a four-hop leak that
+   * really existed. Lifting it out is what let both guards ask the same
+   * question; the assertions below are unchanged.
    */
-  function importGraph(entry: string): string[] {
-    const seen = new Set<string>();
-    const queue = [entry];
-    while (queue.length > 0) {
-      const file = queue.pop();
-      if (file === undefined || seen.has(file)) continue;
-      seen.add(file);
-      const source = readFileSync(file, 'utf8');
-      for (const m of source.matchAll(/from\s+'([^']+)'|import\('([^']+)'\)/g)) {
-        const specifier = m[1] ?? m[2] ?? '';
-        if (!specifier.startsWith('.')) continue;
-        queue.push(resolve(dirname(file), specifier.replace(/\.js$/, '.ts')));
-      }
-    }
-    return [...seen];
-  }
-
-  const IMPURE = [
-    'node:fs',
-    'node:fs/promises',
-    'node:net',
-    'node:dns',
-    'node:dns/promises',
-    'node:http',
-    'node:https',
-    'node:child_process',
-    'undici',
-  ];
-
   const entries = ['citations.ts', 'containment.ts', 'matrix.ts', 'identifiers.ts'];
 
   it('the walk actually follows edges, or every check below is vacuous', () => {
@@ -252,20 +223,14 @@ describe('purity (INTEG-37)', () => {
   it('the walker would notice an impure import if one appeared', () => {
     // Drive it at a module that really does touch a disk, so a permanently
     // green purity check cannot be mistaken for a working one.
-    const graph = importGraph(join(HERE, '..', 'citations', 'collect.ts'));
-    const sources = graph.map((f) => readFileSync(f, 'utf8')).join('\n');
-    expect(IMPURE.some((m) => sources.includes(`from '${m}'`))).toBe(true);
+    const reaches = findImpureImports(join(HERE, '..', 'citations', 'collect.ts'));
+    expect(reaches.length).toBeGreaterThan(0);
   });
 
   for (const entry of entries) {
     it(`${entry} reaches no filesystem and no network, transitively`, () => {
-      for (const file of importGraph(join(HERE, entry))) {
-        const source = readFileSync(file, 'utf8');
-        for (const module of IMPURE) {
-          expect(source).not.toContain(`from '${module}'`);
-          expect(source).not.toContain(`require('${module}')`);
-        }
-      }
+      const reaches = findImpureImports(join(HERE, entry));
+      expect(reaches.map((r) => `${r.module} via ${r.path.join(' -> ')}`)).toEqual([]);
     });
   }
 });
