@@ -102,6 +102,48 @@ Proper-noun strictness is the main source of `unsupported` and is a known weakne
 
 **It has now been measured, and the weakness is larger than this section implies.** Against the labelled corpus in [`detector-eval.md`](detector-eval.md), containment answered `supports` for 11 of the 23 citations that a reader would call bad, including every one of the six whose claim was stronger than its page and four of the seven the page contradicts outright. The reason is structural rather than tunable: a contradiction and a stronger claim both use the page's own numbers and names, so a check that asks whether those tokens appear has nothing to see. Free, exact and repeatable is still the right default for a regression suite, and the number is what a reader needs beside it.
 
+## The publication date
+
+Added 28 July 2026 by BENCH-16, which closed the last scored dimension the design declared and the pipeline could not compute. `benchmark.md` lists recency, BENCH-06 built the durability axis it needs, and nothing anywhere recorded a publication date; `PageEvidence` recorded `checkedAt`, which is when this pass read the page.
+
+It is read **here**, at collection time, for the reason everything else in this slice is: by the time a report is rendered the page is gone, and the only timestamp that survives is the wrong one. Every page in a snapshot now carries `published`, which is one of three things and never an optional string.
+
+| Status | What it means |
+|---|---|
+| `found` | a date, the signal it came from, and the string exactly as the page wrote it |
+| `absent` | the page was read in full and states no publication date this extractor recognises |
+| `unchecked` | nobody could look: the page did not resolve, or it was cut short at the byte cap |
+
+The third is the one that matters, and it is the same rule as the registries above: reporting a fetch failure as a publisher who omitted a date is an accusation dressed as a measurement. An optional `publishedAt` string would have had one absent state and could not have carried the distinction at all.
+
+### The seven signals, ranked by how explicitly the publisher said "published"
+
+`json-ld` (schema.org `datePublished`), then `citation-meta` (`citation_publication_date` and its siblings), then `article-published-time` (`article:published_time`), then `dublin-core` (`dcterms.issued` before the ambiguous bare `dc.date`), then `meta-date` (a named allowlist plus any name saying `publish`), then `time-element`, then `url-path`. Where two disagree the more explicit one decides, and the signal is recorded on the result so a wrong date is traceable to what produced it rather than argued about.
+
+### Four refusals, each a rule rather than a disposition
+
+**A modification date is never a publication date.** Any meta name containing `modif`, `updat`, `revis`, `lastmod`, `edited` or `changed` is refused before its value is read. That is a substring rule rather than an allowlist because the corpus carries `Updated Date`, `lastModifieddate` and `article:modified_time`, and no list anticipates every publisher's spelling. Where one was seen and refused, the `absent` detail says so, because "we saw a date and would not use it" is a different finding from "the page carries nothing".
+
+**A `<time>` element proves nothing on its own.** It is as likely to be a comment timestamp, a reading time or an event date. One is read only when the element itself declares it: a `pubdate` attribute, `itemprop="datePublished"`, or a class naming it published.
+
+**A four-digit number in a URL path is not a year.** The path signal requires a year and month adjacent, which is the form a date in a path takes and an issue number does not.
+
+**A numeric date whose field order cannot be determined is refused.** `1/5/2022` is two different days and picking a convention would be wrong about half of that class. `1/31/2022` survives, because 31 cannot be a month.
+
+Under all seven, a date before 1900 or later than the page was fetched is a misread rather than a publication date.
+
+The written forms come from [`bench/src/score/dates.ts`](../../bench/src/score/dates.ts) rather than a parser written here. That module already enumerates the accepted forms instead of leaving them to `Date.parse`, already compares whole UTC days, and already produces both readings of an ambiguous numeric date with a flag saying so. A second implementation would have been the third date reader in this tree.
+
+### What was measured before any of it was designed
+
+Every distinct URL cited by `bench/tasks/`, `bench/quarantine/` and `bench/detector/`, fetched 28 July 2026. 72 URLs, 60 answering. **43 carry no date signal of any kind**, and in a second probe over 70 URLs from this repo's research documents, JSON-LD `dateModified` outnumbered `datePublished` four to one. Both findings are load-bearing: the first is why the undated share is reported beside the score, and the second is why the modification refusal is a rule rather than a nicety. An extractor taking the first date-shaped thing it found would have dated most of this corpus to its last rebuild.
+
+### What it cannot mean
+
+- A `found` date is what the **page** claims, not an independently verified publication date.
+- An `absent` date does not mean the page was never published, only that it does not say so in a form this reads.
+- A `url-path` date is the weakest signal here and is only ever used when nothing on the page said anything.
+
 ## Anchor honesty
 
 Scoped hard: decoded HTML `id` and `name` anchors, on a complete readable HTML response. A text fragment, a PDF page number, a body that is not HTML, a body that was cut short and a page that did not resolve are `not-applicable` or `unchecked`. Treating every non-match as dishonest would manufacture accusations at scale out of fragment forms this check was never able to read.
@@ -151,6 +193,7 @@ Segmentation runs over the **raw** report. Normalising citations first rewrites 
 - A `catalogue-present` ISBN does not mean the book exists, and a `catalogue-absent` one does not mean it does not.
 - A `live` URL does not mean the page supports the claim attached to it. It means the URL resolves.
 - A `supported` containment verdict does not mean the page supports the claim. It means the page contains the numbers, years, identifiers and names the statement asserts.
+- A `found` publication date is the page's own claim about itself, and an `absent` one is not evidence the page is new.
 - A high citation accuracy over few citations is not the same finding as a high one over many, which is why volume is never folded in.
 - `sourceNecessity` is reproducible, not canonical.
 

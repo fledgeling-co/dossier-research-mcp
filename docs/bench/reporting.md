@@ -118,19 +118,27 @@ The report opens with a validity panel, before a single score. The brief's word 
 
 **The stale-task count and share.** A stale task loads, is scored and is counted stale; the rule lives in [`task-format.md`](task-format.md). A score computed over a corpus that is a third stale is a different claim from one that is not.
 
+**The share of cited sources whose publication date could not be established**, split by cause. The recency score is computed over the dated ones only, so this is what says how much of the corpus that figure is about.
+
 **The registry `unchecked` count and share**, with BENCH-03's caveat beside it. That caveat is the reason the number is here rather than in a footnote: arXiv rate-limits nearly every probe, so `unchecked` is that archive's ordinary answer rather than its exceptional one, and Crossref alone would report a genuine DOI as fabricated because it is one registration agency among several. A registry score computed over mostly-unchecked identifiers accuses backends of fabrication on the strength of checks that never ran. See [`citation-integrity.md`](citation-integrity.md).
 
 **Pipeline gaps, named as ours.** A cell whose stored report could not be read, or which has no evidence snapshot, is a failure of this pipeline rather than a result about a backend, and it is worded that way so it cannot be read as one. A cell naming a task the corpus no longer holds is counted as an orphan rather than dropped, because a corpus that moved under a stored result is information and a silently narrower denominator is exactly what the loader refuses at the other end.
 
-## Recency, and why it is permanently unavailable
+## Recency, and what it is computed over
 
-BENCH-06 built the durability axis and it needs a publication date per source. **Nothing in the stored results has one.** The cell record carries a source count; BENCH-03's `PageEvidence` carries url, verdict, text, truncation, anchors and the time the page was *checked*, which is not the time it was published.
+**Amended 28 July 2026 by BENCH-16.** This section said recency was permanently unavailable, and the reason it gave was true: BENCH-06 built the durability axis, the axis needs a publication date per source, and nothing in the stored results had one. `PageEvidence` carried the time a page was *checked*, which is not the time it was published, and approximating one from the other would have graded every source fresh, in the direction that flatters every backend.
 
-So the metric is declared, reported `unavailable`, and names the missing input on every report. Approximating a publication date from a fetch time would grade every source fresh and make the whole dimension a lie in the direction that flatters every backend.
+The gap is closed at the only point where it can be: `PageEvidence.published` now carries a publication date read from the fetched page, or an explicit statement that one could not be established. See [`citation-integrity.md`](citation-integrity.md) for the seven signals and the four refusals, and [`scoring.md`](scoring.md) for what the scorer does with a date once it has one.
 
-This is a real gap in the pipeline, discovered here rather than designed in, and closing it means adding a publication date to the evidence snapshot at collection time. It is recorded here rather than quietly rendered as a zero, which is the shape BENCH-03 established for a dimension it could not compute. See [`scoring.md`](scoring.md) for what the recency scorer does with a date once it has one.
+What the report prints beside the score is the part that matters here. **The recency figure is computed over the sources that could be dated, and nothing else.** An undated source is graded `undated`, leaves the denominator, and never counts as fresh; a report where nothing could be dated is `unmeasurable` rather than zero. So the figure alone is not readable: a fresh share of 1.0 over one dated source in forty is arithmetic. The validity panel therefore carries the count, above the scores, exactly as the registry `unchecked` share does and for the same reason.
 
-The syndication-collapsed domain count is withheld on the same principle. With no page text to compare, the collapsed count is identical to the raw one by construction, and printing it would assert that syndication was looked for and not found. See [`source-quality.md`](source-quality.md).
+The two undated causes are kept apart, and that is not fussiness. A page read in full that states no publication date is a fact about the publisher. A page nobody could read, or one cut short at the byte cap, is a fact about this pipeline, and only the second is fixed by re-running the collection pass. Collapsing them would let a collection that fetched nothing report a corpus of publishers who date nothing.
+
+**Measured on the benchmark's own corpus**, every distinct URL cited by `bench/tasks/`, `bench/quarantine/` and `bench/detector/`, fetched 28 July 2026: 43 of 72 pages carry no publication-date signal at all. JSON APIs, plain-text RFCs, PDFs and rebuilt documentation sites are most of what a technical research report cites. A large undated share is the ordinary condition of a corpus like this rather than a symptom, which is exactly why it is reported rather than hidden inside a denominator.
+
+**There is deliberately no floor on the dated share.** The floors in this slice live in one place and are named above; an eighth one invented here would be a second answer to "can this sample support a claim", which is the thing [`statistics.md`](statistics.md) refused to add for the same reason. The denominator is printed instead.
+
+The syndication-collapsed domain count is a different case and is **not** withheld for the same reason. It is withheld when no page **text** was compared, and `PageEvidence` has carried page text since BENCH-03, so the collapsed count renders whenever a snapshot exists. See [`source-quality.md`](source-quality.md).
 
 ## What none of these numbers can mean
 
@@ -139,4 +147,5 @@ The syndication-collapsed domain count is withheld on the same principle. With n
 - **Cost is a reservation at the worst case of an estimate band**, never an invoice.
 - **A stale task is still scored**, and the count is on the report so the reader can weigh it.
 - **Token containment is not entailment**, so citation accuracy is a containment rate rather than claim verification.
+- **A recency figure is about the datable sources only.** An undated source never counts as fresh and never enters the denominator, so the figure has to be read against the count of sources that could not be dated.
 - **`not measured` is not zero.** Every absence carries a reason, and no absence enters a denominator.

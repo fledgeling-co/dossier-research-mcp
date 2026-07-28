@@ -88,6 +88,10 @@ One addition: **syndication detection**, by shingled hashing of fetched page tex
 
 Parse publication dates from sources, compare against the task's as-of horizon, weight by source type using the existing rule that a standard from 2019 is current while a benchmark from 2019 is not.
 
+**Amended 28 July 2026.** Two things this line assumed did not exist. The weighting rule did not: `HORIZONS` in the product is keyed by source type alone, so a 2019 specification and a 2019 leaderboard graded identically, and BENCH-06 built the durability axis that separates them. Nor did the input: nothing recorded a publication date at all, which BENCH-08 discovered when it had to declare the whole dimension unavailable on every report. BENCH-16 closed that by reading a date from the page at fetch time, in [`../bench/citation-integrity.md`](../bench/citation-integrity.md).
+
+The part worth carrying forward is what closing it measured. Over the benchmark's own corpus of cited URLs, **43 of 72 pages carry no publication-date signal of any kind**, and modification dates outnumber publication dates on the pages that carry anything. So recency here is computed over a minority of a technical corpus's sources, by construction, and the share that could not be dated is reported beside it. A design that had assumed "parse publication dates from sources" would work would have produced a confident number over whichever quarter of the corpus happened to be datable.
+
 ### 9. Cost and wall clock
 
 Recorded per run. A backend that scores two points higher for six times the money is a finding, not a winner.

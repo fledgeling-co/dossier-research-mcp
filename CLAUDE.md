@@ -192,7 +192,9 @@ bench/                  the benchmark. NOT compiled into dist/ and NOT published
   src/score/confidence.ts  the confidence markers a report states, and what each governs
   src/score/calibration.ts pairs a stated confidence with the outcome; Brier + reliability
   src/score/refusal.ts     the two families where the right answer is not an answer
-  src/score/recency.ts     the durability axis the design assumed existed and did not
+  src/score/recency.ts     the durability axis the design assumed existed and did not,
+                        and the join that turns cited URLs plus dated pages into
+                        the graded list and the undated counts in one pass
   src/score/syndication.ts  near-duplicate detection over page text; the thresholds
                         and where each of them came from
   src/score/source-quality.ts  the source mix, the independent-domain count, and the
@@ -206,6 +208,13 @@ bench/                  the benchmark. NOT compiled into dist/ and NOT published
                         the rate limiter, the evidence snapshot and live.ts,
                         which wires the real adapters into one batch. Reaching a
                         network lives here and nowhere in src/score/.
+                        published.ts is the exception and is pure: the seven
+                        signals a page states a publication date with, ranked by
+                        how explicitly the publisher said "published", and the
+                        four refusals that keep a modification date, a comment
+                        timestamp, an issue number and an undecidable field
+                        order out. Three states, never an optional string: a
+                        page nobody read is not a page carrying no date.
                         docs/bench/citation-integrity.md
   src/run/cell.ts       what one matrix cell is; the resume key, the cell
                         record schema, the spread floor
