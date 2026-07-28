@@ -1,13 +1,15 @@
 import { spawn } from 'node:child_process';
 import { mkdtempSync, readFileSync, readdirSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { sha256Hex } from './corpus.js';
+import { runDetector, type DetectorIo } from './cli.js';
 
 /**
- * The wiring, proved by running the entry point rather than by importing it.
+ * The wiring, and then every command over the real argv.
  *
  * This file exists because of a defect this repo shipped: a module with nine
  * passing unit tests, imported nowhere, plus a changelog entry claiming the
@@ -15,8 +17,19 @@ import { sha256Hex } from './corpus.js';
  * passing tests over live code**, and the only difference an import-based test
  * can never see is whether anything calls the thing at all.
  *
- * So every case below spawns the real CLI, over the real argv, and asserts on
- * what actually came out. Nothing here imports a command handler.
+ * So the split below is deliberate, and it is the whole judgement in BENCH-14:
+ *
+ * - **One case spawns the real CLI**, because nothing an import can see proves
+ *   that the entry point is invoked. `cli.ts` guards its own invocation with an
+ *   `invokedDirectly` check, and a guard that silently stopped firing would make
+ *   `npm run bench:detector` print nothing and exit 0 while every other case
+ *   here stayed green. That case is the guard's guard.
+ * - **Everything else calls `runDetector` directly**, over the same argv the
+ *   process would have been handed, asserting on the same strings. Those cases
+ *   never needed a process, and paying for one cost more than time: the spawn
+ *   used to resolve tsx by a literal `../../../node_modules/.bin/tsx`, which
+ *   does not exist in a git worktree, so eleven cases failed for every runner
+ *   who had not run `npm install` inside one.
  *
  * Two commands reach the network and neither is exercised here: `capture`
  * fetches a page and `judge` calls a model. What is proved instead is that both
@@ -25,18 +38,54 @@ import { sha256Hex } from './corpus.js';
  */
 
 const CLI = fileURLToPath(new URL('./cli.ts', import.meta.url));
-const TSX = fileURLToPath(new URL('../../../node_modules/.bin/tsx', import.meta.url));
+
+/**
+ * tsx, through Node's own resolution rather than an assumed layout.
+ *
+ * `createRequire` walks ancestor `node_modules` directories exactly as an
+ * `import` would, so a worktree inside the repo finds the root install. A
+ * literal relative path finds nothing there, which was the defect.
+ */
+function resolveTsx(): string | undefined {
+  try {
+    return createRequire(import.meta.url).resolve('tsx/cli');
+  } catch {
+    return undefined;
+  }
+}
+
+const TSX_CLI = resolveTsx();
 
 interface Ran {
-  readonly code: number | null;
+  readonly code: number;
   readonly stdout: string;
   readonly stderr: string;
 }
 
-function run(args: readonly string[], stdin?: string): Promise<Ran> {
+/** Drive the command in this process, capturing what each sink was given. */
+async function run(args: readonly string[], stdin = ''): Promise<Ran> {
+  let stdout = '';
+  let stderr = '';
+  const io: DetectorIo = {
+    out: (text) => {
+      stdout += text;
+    },
+    err: (text) => {
+      stderr += text;
+    },
+    readStdin: () => Promise.resolve(stdin),
+  };
+  const code = await runDetector(args, io);
+  return { code, stdout, stderr };
+}
+
+/** Drive the real entry point as a process, the way a person runs it. */
+function spawnCli(tsx: string): Promise<{ code: number | null; stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
-    const child = spawn(TSX, [CLI, ...args], {
-      stdio: ['pipe', 'pipe', 'pipe'],
+    // `process.execPath` and tsx's own entry, rather than the `.bin` shim, so
+    // this does not depend on a shim existing or being executable either.
+    const child = spawn(process.execPath, [tsx, CLI], {
+      stdio: ['ignore', 'pipe', 'pipe'],
       // Inherited, so the corpus resolves the same way it does for a person
       // running the command, and hermetic so nothing can reach a model.
       env: { ...process.env, DOSSIER_HERMETIC: '1' },
@@ -53,12 +102,31 @@ function run(args: readonly string[], stdin?: string): Promise<Ran> {
     child.on('close', (code) => {
       resolve({ code, stdout, stderr });
     });
-    if (stdin !== undefined) child.stdin.write(stdin);
-    child.stdin.end();
   });
 }
 
 describe('the entry point actually runs (SELF-23)', () => {
+  it('is wired: the real CLI, spawned over its real argv, prints both families (WT-04)', async (ctx) => {
+    if (TSX_CLI === undefined) {
+      // Named rather than silent. A skipped test nobody notices is a test that
+      // has stopped working, so this says what is missing and how to fix it.
+      ctx.skip(
+        'tsx could not be resolved from this checkout, so the entry point cannot be run as a ' +
+          'process. Run `npm install` here or in any directory above this one, then re-run. ' +
+          'Every other case in this file runs in-process and still covers the command logic.',
+      );
+    }
+    const ran = await spawnCli(TSX_CLI);
+    expect(ran.stderr, ran.stderr).toBe('');
+    expect(ran.code).toBe(0);
+    expect(ran.stdout).toContain('# The support family');
+    expect(ran.stdout).toContain('# The registry family');
+    // Long enough to be the report rather than a banner, and on stdout so it can
+    // be redirected. Both are properties of the process rather than of the
+    // function, which is why they are asserted here as well.
+    expect(ran.stdout.length).toBeGreaterThan(1000);
+  }, 60_000);
+
   it('scores the corpus that ships, and prints both families', async () => {
     const ran = await run([]);
     expect(ran.stderr, ran.stderr).toBe('');
@@ -106,6 +174,16 @@ describe('the entry point actually runs (SELF-23)', () => {
       expect(ran.stdout, command).toContain(`bench:detector ${command}`);
     }
   }, 60_000);
+});
+
+describe('importing the entry point does not run it (WT-03)', () => {
+  it('scores nothing on import, so a test can import it without a corpus being read', () => {
+    // This file imported `./cli.js` at the top. Without the invocation guard
+    // that import would have scored the corpus and written the whole report to
+    // the real stdout before any case ran, which under a stdio protocol is the
+    // exact shape of defect `CLAUDE.md` bans.
+    expect(typeof runDetector).toBe('function');
+  });
 });
 
 describe('judge is reachable and refuses without confirmation', () => {
@@ -165,7 +243,10 @@ describe('construct writes a fixture whose digest the loader will accept', () =>
 
   it('refuses an empty stdin rather than freezing a blank page', async () => {
     const root = mkdtempSync(join(tmpdir(), 'detector-cli-'));
-    const ran = await run(['construct', 'empty', '--note', 'a note long enough to be real', '--corpus', root], '');
+    const ran = await run(
+      ['construct', 'empty', '--note', 'a note long enough to be real', '--corpus', root],
+      '',
+    );
     expect(ran.code).toBe(1);
     expect(ran.stderr).toContain('nothing arrived on stdin');
   }, 60_000);

@@ -1,5 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { argv, stderr, stdin, stdout } from 'node:process';
+import { pathToFileURL } from 'node:url';
 import { capturePage, writeConstructedFixture, writeFixture } from './capture.js';
 import { defaultCorpusRoot, detectorPaths, readDetectorCorpus } from './files.js';
 import { askCli, judgePass } from './judge.js';
@@ -15,23 +17,39 @@ import type { PageVerdict } from './schema.js';
  *
  * Diagnostics go to stderr and the report to stdout, so the report can be
  * redirected into a file without the progress lines landing in it.
+ *
+ * The command is a function of its arguments and its sinks, returning an exit
+ * code rather than assigning one, so a test can drive every branch without a
+ * subprocess. `bench/src/report/cli.ts` has the same shape for the same reason.
+ * What that buys is not only speed: a test that spawns has to find an
+ * interpreter on disk, and this file's used to be found by a literal path into
+ * `node_modules`, so eleven cases failed in any git worktree until somebody ran
+ * `npm install` inside it (BENCH-14).
  */
 
-function arg(name: string): string | undefined {
-  const index = process.argv.indexOf(name);
-  return index === -1 ? undefined : process.argv[index + 1];
+/** Where a command's output goes, and where its stdin comes from. */
+export interface DetectorIo {
+  readonly out: (text: string) => void;
+  readonly err: (text: string) => void;
+  /** The page text a constructed fixture is frozen from. */
+  readonly readStdin: () => Promise<string>;
 }
 
-function has(name: string): boolean {
-  return process.argv.includes(name);
+function arg(args: readonly string[], name: string): string | undefined {
+  const index = args.indexOf(name);
+  return index === -1 ? undefined : args[index + 1];
+}
+
+function has(args: readonly string[], name: string): boolean {
+  return args.includes(name);
 }
 
 /** Read the whole of stdin, for the page text a constructed fixture is built from. */
-async function readStdin(): Promise<string> {
-  if (process.stdin.isTTY === true) return '';
+async function readRealStdin(): Promise<string> {
+  if (stdin.isTTY === true) return '';
   let text = '';
-  process.stdin.setEncoding('utf8');
-  for await (const chunk of process.stdin) text += String(chunk);
+  stdin.setEncoding('utf8');
+  for await (const chunk of stdin) text += String(chunk);
   return text;
 }
 
@@ -55,80 +73,84 @@ Options for judge:
   --limit <n>        stop after n cases, for a dry run.
 `;
 
-async function main(): Promise<void> {
-  if (has('--help') || has('-h')) {
-    process.stdout.write(USAGE);
-    return;
+/**
+ * The whole command, over the arguments that follow the script name.
+ *
+ * Exported so a test can call it directly. It returns the exit code instead of
+ * setting `process.exitCode`, because a function that mutates the process
+ * cannot be called twice in one suite without the second call inheriting the
+ * first one's answer.
+ */
+export async function runDetector(args: readonly string[], io: DetectorIo): Promise<number> {
+  if (has(args, '--help') || has(args, '-h')) {
+    io.out(USAGE);
+    return 0;
   }
 
-  const root = arg('--corpus') ?? defaultCorpusRoot();
+  const root = arg(args, '--corpus') ?? defaultCorpusRoot();
 
-  if (process.argv[2] === 'capture') {
-    const url = process.argv[3];
-    const name = process.argv[4];
+  if (args[0] === 'capture') {
+    const url = args[1];
+    const name = args[2];
     if (url === undefined || name === undefined || !/^[a-z0-9-]+$/.test(name)) {
-      process.stderr.write(
+      io.err(
         'usage: bench:detector capture <url> <name>, where name is lowercase letters, digits and hyphens\n',
       );
-      process.exitCode = 1;
-      return;
+      return 1;
     }
     const captured = await capturePage(url);
     // The block goes to stdout so it can be redirected; the summary to stderr,
     // because stdout here is the thing being pasted into a case file.
-    process.stderr.write(
+    io.err(
       `fetched ${captured.url}\n  verdict ${captured.verdict}, ${String(captured.chars)} characters${captured.truncated ? ', cut short at the byte cap' : ''}\n\n`,
     );
-    process.stdout.write(`${writeFixture(root, name, captured)}\n`);
-    return;
+    io.out(`${writeFixture(root, name, captured)}\n`);
+    return 0;
   }
 
-  if (process.argv[2] === 'construct') {
-    const name = process.argv[3];
-    const note = arg('--note');
+  if (args[0] === 'construct') {
+    const name = args[1];
+    const note = arg(args, '--note');
     if (name === undefined || !/^[a-z0-9-]+$/.test(name) || note === undefined) {
-      process.stderr.write(
+      io.err(
         'usage: bench:detector construct <name> --note "why this page is written rather than captured" < page.txt\n',
       );
-      process.exitCode = 1;
-      return;
+      return 1;
     }
-    const text = await readStdin();
+    const text = await io.readStdin();
     if (text === '') {
-      process.stderr.write('nothing arrived on stdin; pipe the page text in\n');
-      process.exitCode = 1;
-      return;
+      io.err('nothing arrived on stdin; pipe the page text in\n');
+      return 1;
     }
     const block = writeConstructedFixture(root, name, {
       text,
       capturedAt: new Date().toISOString().slice(0, 10),
-      verdict: (arg('--verdict') ?? 'live') as PageVerdict,
-      httpStatus: Number(arg('--status') ?? 200),
-      completeHtml: has('--html'),
+      verdict: (arg(args, '--verdict') ?? 'live') as PageVerdict,
+      httpStatus: Number(arg(args, '--status') ?? 200),
+      completeHtml: has(args, '--html'),
       note,
     });
-    process.stderr.write(`wrote a constructed fixture, ${String(text.length)} characters\n\n`);
-    process.stdout.write(`${block}\n`);
-    return;
+    io.err(`wrote a constructed fixture, ${String(text.length)} characters\n\n`);
+    io.out(`${block}\n`);
+    return 0;
   }
 
   // Loaded after `capture`, since capture is how a corpus that does not load
   // yet gets its missing fixture.
   const corpus = readDetectorCorpus(root);
 
-  if (process.argv[2] === 'judge') {
-    if (!has('--confirm')) {
-      process.stderr.write(
+  if (args[0] === 'judge') {
+    if (!has(args, '--confirm')) {
+      io.err(
         `The judged pass calls a model once for each of the ${String(corpus.support.length)} support cases.\n` +
           'On the default path that spends the coding CLI subscription quota you already pay for, not a metered balance.\n' +
           'Re-run with --confirm to go ahead.\n',
       );
-      process.exitCode = 1;
-      return;
+      return 1;
     }
-    const bin = arg('--bin') ?? 'claude';
-    const timeoutMs = Number(arg('--timeout') ?? 180_000);
-    const limit = Number(arg('--limit') ?? corpus.support.length);
+    const bin = arg(args, '--bin') ?? 'claude';
+    const timeoutMs = Number(arg(args, '--timeout') ?? 180_000);
+    const limit = Number(arg(args, '--limit') ?? corpus.support.length);
     const cases = corpus.support.slice(0, Math.max(0, limit));
 
     let done = 0;
@@ -141,7 +163,7 @@ async function main(): Promise<void> {
       ask: async (prompt) => {
         const answer = await askCli(prompt, { bin, timeoutMs });
         done += 1;
-        process.stderr.write(`  judged ${String(done)}/${String(cases.length)}\n`);
+        io.err(`  judged ${String(done)}/${String(cases.length)}\n`);
         return answer;
       },
     });
@@ -149,13 +171,36 @@ async function main(): Promise<void> {
     const target = detectorPaths(root).judgedFile;
     mkdirSync(dirname(target), { recursive: true });
     writeFileSync(target, `${JSON.stringify(evidence, null, 2)}\n`, 'utf8');
-    process.stderr.write(
+    io.err(
       `\nwrote ${target}\n  ${String(evidence.verdicts.length)} verdicts, ${String(evidence.failures.length)} failures\n`,
     );
-    return;
+    return 0;
   }
 
-  process.stdout.write(renderReport(await scoreDetector(corpus)));
+  io.out(renderReport(await scoreDetector(corpus)));
+  return 0;
 }
 
-await main();
+/**
+ * Run only when invoked directly, never on import.
+ *
+ * A test that imports this module to drive the commands must not score the
+ * corpus and write to stdout as a side effect of the import.
+ *
+ * This guard is also the one way the split above could break the CLI silently:
+ * if it ever stopped firing, `npm run bench:detector` would print nothing and
+ * exit 0, and every in-process test would stay green while it did. That is why
+ * one case in `cli.test.ts` still spawns the real thing.
+ */
+const invokedDirectly = argv[1] !== undefined && import.meta.url === pathToFileURL(argv[1]).href;
+if (invokedDirectly) {
+  process.exitCode = await runDetector(argv.slice(2), {
+    out: (text) => {
+      stdout.write(text);
+    },
+    err: (text) => {
+      stderr.write(text);
+    },
+    readStdin: readRealStdin,
+  });
+}
