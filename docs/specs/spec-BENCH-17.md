@@ -129,6 +129,8 @@ interface CombinationEligibility {
 
 A combination is eligible when **every member in it** is. That direction is forced: a combination is scored as the union of its members, so a member whose own figure is withheld cannot be half of a union that is quoted.
 
+`EvaluateInput` also gains an optional `scoreSpread` callback beside `scoreCombination`, handed the same merged object. Without it the tie test still could not reach the production path, which is the first half of the brief's defect: `spreadsOverlap` was dead outside its own tests precisely because there was no field through which a spread could arrive. Optional rather than required, because a caller with one repetition per cell has no spread to build and forcing one would make it invent something; a partial supply is reported as `mixed` rather than hidden.
+
 `paretoFrontier` mirrors `rankBackends` gate for gate, in the same order and with the same reason vocabulary:
 
 1. scope not scorable, `scope-not-scorable`, carrying the aggregate's own sentence
@@ -184,4 +186,4 @@ What is wired instead is the join, end to end, under test: real cells go through
 
 ## Acceptance criteria, as tested
 
-Rows `COMB-40` through `COMB-52` in [`../test-plan.md`](../test-plan.md), written before the tests.
+Rows `COMB-40` through `COMB-53` in [`../test-plan.md`](../test-plan.md), written before the tests.

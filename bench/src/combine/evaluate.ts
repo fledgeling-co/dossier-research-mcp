@@ -24,6 +24,7 @@ import {
 } from './frontier.js';
 import { combinationEligibility, type CombinationEligibility } from './eligibility.js';
 import type { ScorableVerdict } from '../report/aggregate.js';
+import type { SpreadReport } from '../report/spread.js';
 import type { SeparationOracle } from '../report/rank.js';
 
 /**
@@ -65,6 +66,27 @@ export interface EvaluateInput {
    * for the credit split, so it is never called `2^n` times twice.
    */
   readonly scoreCombination: (merged: MergedCombination) => number;
+  /**
+   * The spread behind that score, when the caller has repetitions to build one
+   * from.
+   *
+   * The other half of this item's fix. `spreadsOverlap` was dead outside its
+   * own tests because there was no field here through which a spread could
+   * arrive, so every real frontier took the unchecked branch and a difference
+   * of 0.001 between two single runs produced a dominance verdict.
+   *
+   * A callback rather than a second return value from `scoreCombination`,
+   * because a spread is optional and a scorer that had to return one would
+   * force every caller who has no repetitions to invent something. Build it
+   * with `scoreSpread` from `spread-helpers.ts`, which is `summarise` from
+   * `bench/src/report/spread.ts` and therefore the same quartile definition,
+   * the same floor and the same withheld wording the report prints.
+   *
+   * Returning `null` for some combinations and a report for others is allowed
+   * and is reported honestly: the frontier says `mixed` rather than claiming
+   * every pair was checked.
+   */
+  readonly scoreSpread?: ((merged: MergedCombination) => SpreadReport | null) | undefined;
   /**
    * What that number is, and which way it points.
    *
@@ -115,6 +137,11 @@ export interface CombinationEvaluation {
   readonly memberIds: readonly string[];
   readonly merged: MergedCombination;
   readonly score: number;
+  /**
+   * The spread behind `score`, when the caller supplied one. Null otherwise,
+   * and null is a state the frontier reports rather than papers over.
+   */
+  readonly scoreSpread: SpreadReport | null;
   readonly costUsd: number;
   readonly overlap: OverlapProfile;
 }
@@ -267,11 +294,15 @@ export function evaluateCombinations(input: EvaluateInput): CombinationReport {
         `scoreCombination returned ${String(score)} for combination "${id}"; a score must be a finite number`,
       );
     }
+    // Taken from the same merged object as the score, so a spread can never
+    // describe a different combination from the number it sits beside.
+    const spread = input.scoreSpread?.(merged) ?? null;
     evaluations.push({
       id,
       memberIds: [...ids],
       merged,
       score,
+      scoreSpread: spread,
       costUsd: merged.costUsd,
       overlap: sourceOverlapProfile(chosen),
     });
@@ -282,6 +313,7 @@ export function evaluateCombinations(input: EvaluateInput): CombinationReport {
     score: e.score,
     costUsd: e.costUsd,
     robustness: e.overlap.robustness.worstCaseSurvivingShare,
+    scoreSpread: e.scoreSpread,
     // Folded from the members, worst first. A combination is the union of its
     // members, so it is only as scorable as the least scorable thing in it.
     eligibility: combinationEligibility(e.memberIds, input.eligibility),
@@ -463,6 +495,10 @@ export function evaluateScopes(
     readonly overallEligibility: CombinationEligibility;
     readonly maxExactMembers?: number;
     readonly separated?: SeparationOracle | undefined;
+    /** Per scope, so a spread describes the repetitions inside that scope. */
+    readonly scoreSpread?:
+      | ((merged: MergedCombination, scope: string) => SpreadReport | null)
+      | undefined;
   },
 ): ScopedCombinationReport {
   if (scopes.length === 0) {
@@ -503,6 +539,9 @@ export function evaluateScopes(
       scoreCombination: (merged) => scoreCombination(merged, scope.name),
       measure,
       eligibility: scope.eligibility,
+      ...(options.scoreSpread !== undefined
+        ? { scoreSpread: (merged: MergedCombination) => options.scoreSpread!(merged, scope.name) }
+        : {}),
       ...(options.separated !== undefined ? { separated: options.separated } : {}),
       ...(options.maxExactMembers !== undefined ? { maxExactMembers: options.maxExactMembers } : {}),
     }),
@@ -521,6 +560,9 @@ export function evaluateScopes(
       scoreCombination: (merged) => scoreCombination(merged, 'overall'),
       measure,
       eligibility: options.overallEligibility,
+      ...(options.scoreSpread !== undefined
+        ? { scoreSpread: (merged: MergedCombination) => options.scoreSpread!(merged, 'overall') }
+        : {}),
       ...(options.separated !== undefined ? { separated: options.separated } : {}),
       ...(options.maxExactMembers !== undefined ? { maxExactMembers: options.maxExactMembers } : {}),
     }),

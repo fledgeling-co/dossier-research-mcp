@@ -8,6 +8,7 @@ import {
   type CombinationEligibility,
   type CombinationMember,
   type EvaluateInput,
+  scoreSpread,
   type ScopedCombinationReport,
 } from './index.js';
 import { MAX_EXACT_MEMBERS } from './marginal.js';
@@ -642,5 +643,78 @@ describe('the adapter is inside the purity boundary (COMB-52)', () => {
     expect(src).not.toMatch(/from 'node:/);
     expect(src).not.toMatch(/\bfetch\s*\(/);
     expect(src).not.toMatch(/report\/cli\.js/);
+  });
+});
+
+describe('the tie test reaches the production path (COMB-53)', () => {
+  const members = [member('alpha', ['https://x.example.org/1']), member('beta', ['https://y.example.org/1'])];
+  // Two combinations 0.001 apart, which is the brief's headline number, and
+  // spreads that overlap heavily. Without a way to supply the spread there was
+  // no tie test on this path at all and `beta` dominated `alpha` outright.
+  const scores: Record<string, number> = { alpha: 0.8, beta: 0.801, 'alpha+beta': 0.802 };
+  const samples: Record<string, readonly number[]> = {
+    alpha: [0.7, 0.8, 0.9],
+    beta: [0.71, 0.801, 0.91],
+    'alpha+beta': [0.72, 0.802, 0.92],
+  };
+  const scoreCombination = (m: MergedCombination): number => scores[combinationId(m.memberIds)] ?? 0;
+
+  it('ties two combinations whose supplied spreads overlap, so neither dominates', () => {
+    const report = evaluate({
+      members,
+      scoreCombination,
+      scoreSpread: (m) => scoreSpread(samples[combinationId(m.memberIds)] ?? []),
+      measure: ACCURACY,
+    });
+    expect(report.frontier.withheld).toBeNull();
+    expect(report.frontier.separation).toBe('checked');
+    expect(report.frontier.dominated).toEqual([]);
+    expect(report.frontier.frontier?.map((c) => c.id).sort()).toEqual(['alpha', 'alpha+beta', 'beta']);
+  });
+
+  it('dominates on the same numbers when no spread is supplied, which is what used to always happen', () => {
+    const report = evaluate({ members, scoreCombination, measure: ACCURACY });
+    expect(report.frontier.separation).toBe('point');
+    expect(report.frontier.dominated.map((d) => d.id)).toContain('alpha');
+  });
+
+  it('carries the spread onto every evaluation, so a reader can see what was compared', () => {
+    const report = evaluate({
+      members,
+      scoreCombination,
+      scoreSpread: (m) => scoreSpread(samples[combinationId(m.memberIds)] ?? []),
+      measure: ACCURACY,
+    });
+    for (const c of report.combinations) {
+      expect(c.scoreSpread?.n).toBe(3);
+      expect(c.scoreSpread?.spread).not.toBeNull();
+    }
+  });
+
+  it('reports a partial supply as mixed rather than as checked', () => {
+    const report = evaluate({
+      members,
+      scoreCombination,
+      // Only the singletons get one. The pair does not, which is exactly the
+      // mixed state the separability sentence now has a word for.
+      scoreSpread: (m) =>
+        m.memberIds.length === 1 ? scoreSpread(samples[combinationId(m.memberIds)] ?? []) : null,
+      measure: ACCURACY,
+    });
+    expect(report.frontier.separation).toBe('mixed');
+  });
+
+  it('threads the same callback through evaluateScopes, per scope', () => {
+    const scoped = evaluateScopes(
+      [{ name: 'technical', members, eligibility: admitted(members) }],
+      scoreCombination,
+      ACCURACY,
+      {
+        overallEligibility: admitted(members),
+        scoreSpread: (m) => scoreSpread(samples[combinationId(m.memberIds)] ?? []),
+      },
+    );
+    expect(scoped.byScope[0]!.report.frontier.separation).toBe('checked');
+    expect(scoped.overall.frontier.separation).toBe('checked');
   });
 });

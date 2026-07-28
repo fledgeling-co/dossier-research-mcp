@@ -892,3 +892,4 @@ Two existing rows are **amended rather than replaced**, and the amendment is the
 | **COMB-50** | The completion floor arrives inside BENCH-08's verdict, and no code in `bench/src/combine/` compares a completion rate against a threshold of its own | unit: `evaluate`, `eligibility` | ✓ |
 | **COMB-51** | The join end to end: stored cells through `harvest` and `aggregate`, verdicts mapped onto members, frontier withheld with the report's reason word | unit: `eligibility` | ✓ |
 | **COMB-52** | `eligibility.ts` imports no filesystem, network or fetcher, so the whole directory stays pure with the adapter in it | unit: `evaluate` | ✓ |
+| **COMB-53** | A caller can supply a score spread per combination through `evaluateCombinations`, so the tie test reaches the production path rather than only its own tests | unit: `evaluate` | ✓ |

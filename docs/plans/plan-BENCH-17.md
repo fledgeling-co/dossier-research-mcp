@@ -18,7 +18,7 @@ Every decision is in the spec. This is the order of operations and the test list
 | `bench/src/combine/evaluate.test.ts` | eligibility threaded through; new cases for the join |
 | `bench/src/combine/eligibility.test.ts` | **new.** The end-to-end join from real cells |
 | `docs/bench/combinations.md` | the frontier section, the floors, and the recorded absence of a producer |
-| `docs/test-plan.md` | AC rows `COMB-40` to `COMB-52`, appended, before the tests |
+| `docs/test-plan.md` | AC rows `COMB-40` to `COMB-53`, appended, before the tests |
 | `CHANGELOG.md` | one entry under Unreleased, saying plainly that nothing was live |
 
 Nothing under `src/` changes. Nothing reaches `dist/`.
@@ -63,6 +63,7 @@ New:
 - `COMB-50` the completion floor arrives through the verdict, and nothing thresholds `worstCompletion`
 - `COMB-51` the join: real cells, `aggregate`, `eligibilityFromAggregate`, withheld
 - `COMB-52` purity holds. `eligibility.ts` imports no filesystem
+- `COMB-53` a caller can actually supply a spread, so the tie test is on the production path
 
 ## Risk, and what it would look like
 
