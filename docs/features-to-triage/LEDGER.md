@@ -35,3 +35,4 @@ serially, through the orchestrator.
 | BENCH-15 | Three primitives now exist twice | [brief](BENCH-15-duplicate-primitives.md) | Untriaged | | |
 | BENCH-16 | Nothing records when a source was published | [brief](BENCH-16-evidence-dates.md) | Untriaged | | |
 | BENCH-14 | A fresh worktree cannot run the suite | [brief](BENCH-14-worktree-tsx.md) | In Review | [spec](../specs/spec-BENCH-14.md) | [plan](../plans/plan-BENCH-14.md) |
+| BENCH-13 | The statistics | [brief](BENCH-13-statistics.md) | In Review | [spec](../specs/spec-BENCH-13.md) | [plan](../plans/plan-BENCH-13.md) |

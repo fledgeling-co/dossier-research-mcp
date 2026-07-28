@@ -155,7 +155,7 @@ export function rankBackends(
   scope: RankScope,
   candidates: readonly RankCandidate[],
   scopeScorable = true,
-  separated?: SeparationOracle | undefined,
+  separated?: SeparationOracle,
 ): Ranking {
   const excluded: { provider: string; why: string }[] = [];
 

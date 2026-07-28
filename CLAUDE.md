@@ -111,6 +111,13 @@ docs/                   the documentation set; README is the approachable entry 
   bench/reporting.md    stored cells to a report; both refusal rules, the two
                         floors and where each came from, and the numbers that
                         go above every score
+  bench/statistics.md   the four statistics, and the four places this suite
+                        refuses to make a claim: paired differences with a
+                        cluster bootstrap, standard errors clustered on
+                        category with the naive one beside them, pass^k
+                        beside pass@1, and completion as a validity floor.
+                        Carries the reason a category-scoped comparison can
+                        never be clustered
   bench/detector-eval.md  whether this product's own checking works. A labelled
                         corpus, a confusion matrix per arm, and every projection
                         between one detector's vocabulary and another's
@@ -193,6 +200,16 @@ bench/                  the benchmark. NOT compiled into dist/ and NOT published
                         both refusal rules, `rank.ts` withholds an ordering
                         the sample cannot support, and `cli.ts` is the only
                         file here that opens anything. docs/bench/reporting.md
+  src/stats/            the statistics the design had none of. Pure over stored
+                        numbers: a cluster bootstrap that draws CATEGORIES as
+                        units, a standard error clustered on category beside
+                        the naive one with the ratio between them, pass^k
+                        beside pass@1 on the floor `run/cell.ts` already sets,
+                        and one quantile for the whole read side. It adds no
+                        floor of its own: the completion floor lives on the
+                        verdict `report/aggregate.ts` already computes, because
+                        two answers to "can this sample support a claim" in one
+                        codebase is worse than either. docs/bench/statistics.md
   src/score/due-weight/ the viewpoint-coverage scorers. Pure functions over one
                         task and one report; the aggregate is what makes the
                         false-balance guard bite. docs/bench/due-weight.md

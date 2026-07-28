@@ -59,6 +59,17 @@ export interface ComparisonSummary {
   readonly sentence: string;
 }
 
+/**
+ * The separator between two provider ids in the lookup key.
+ *
+ * Printable, and named for the same reason `bench/src/stats/random.ts` names
+ * its own: the obvious choice for a character no provider id can contain is a
+ * NUL, and a NUL in a string literal shipped in v0.2.1, made the file binary to
+ * git and made it invisible to grep. A provider id is an enum member, so a pipe
+ * separates two of them just as well and leaves the file readable.
+ */
+const PAIR_SEPARATOR = '|';
+
 function scopeKey(scope: RankScope): string {
   return scope.kind === 'overall' ? 'overall' : scope.category;
 }
@@ -321,10 +332,11 @@ export function separatorFor(
   for (const c of list) {
     if (c.metric !== metric) continue;
     if (scopeKey(c.scope) !== scopeKey(scope)) continue;
-    index.set(`${c.a} ${c.b}`, c);
+    index.set(`${c.a}${PAIR_SEPARATOR}${c.b}`, c);
   }
   return (a, b) => {
-    const found = index.get(`${a} ${b}`) ?? index.get(`${b} ${a}`);
+    const found =
+      index.get(`${a}${PAIR_SEPARATOR}${b}`) ?? index.get(`${b}${PAIR_SEPARATOR}${a}`);
     if (found === undefined || found.result === null) return null;
     if (found.result.verdict === 'measured') return 'separated';
     if (found.result.verdict === 'no-measured-difference') return 'tied';

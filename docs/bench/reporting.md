@@ -38,6 +38,7 @@ npx tsx bench/src/report/cli.ts --cells bench/results/cells.jsonl > report.md
 | `--store <dir>` | `$DOSSIER_STORE_DIR` | the Dossier store; `reportPath` is relative to it |
 | `--evidence <dir>` | beside the registry cache | BENCH-03's snapshots, keyed by cell key |
 | `--min-tasks <n>` | 5 | tasks a category needs before it is scored |
+| `--min-completion <s>` | 0.6 | share of attempted cells a backend must complete before its figure is a number rather than `invalid` |
 | `--format <fmt>` | `markdown` | `markdown` or `json` |
 | `--as-of <date>` | today | the date staleness is measured against |
 
@@ -87,7 +88,9 @@ Condition 4's second half is the one worth reading twice, because a two-stage ag
 
 The floor is taken over the **weakest** task rather than the average, because one task run once is enough to make the figure partly an ordering of noise, and a rule that averaged that away would only bite when it did not matter.
 
-Even when all five conditions pass, two adjacent backends whose observed interquartile ranges overlap are reported **tied at this sample size** rather than ordered. That is a descriptive check over observed values and it is **not a significance test**. BENCH-13 owns bootstrap intervals, paired differences and standard errors clustered on category. The sentence saying so rides on every ranking, so nobody quotes the order without it.
+Even when all five conditions pass, two adjacent backends the sample cannot separate are reported **tied at this sample size** rather than ordered.
+
+**Amended 28 July 2026 by BENCH-13.** What decides that is now a paired difference with a cluster-bootstrap interval, over the tasks both backends answered, and the interquartile-overlap check survives only as the fallback where no interval can be computed. Which of the two ran is named on the ranking rather than left to be inferred from its wording, and the fallback still says on its face that it is a descriptive check over observed values and **not a significance test**. The statistics are [`statistics.md`](statistics.md).
 
 ### The under-sampled category
 
@@ -95,6 +98,7 @@ Two under-samples, named separately because they have different causes and diffe
 
 - **`under-sampled-corpus`** the category holds fewer than the minimum tasks. Nobody is scored in it. The fix is authoring tasks.
 - **`under-sampled-completed`** the category is big enough and *this backend* completed fewer than the minimum. Its figure is withheld and its completion rate is printed. The fix is re-running the failed cells. Without this, a backend that completed two of ten would be scored on whichever two it found easiest, which is the completion-rate lesson applied to the denominator.
+- **`under-completed`**, added 28 July 2026 by BENCH-13. The category is big enough, this backend completed enough distinct tasks, and too large a share of its **attempts** failed getting there. Its figure renders `invalid`. See [`statistics.md`](statistics.md) for where the share comes from.
 
 A third verdict, `nothing-completed`, is kept apart from both: a backend that ran nothing in a category is not the same as one that ran too little.
 
@@ -130,7 +134,7 @@ The syndication-collapsed domain count is withheld on the same principle. With n
 
 ## What none of these numbers can mean
 
-- **This is not a significance test.** Spreads are observed interquartile ranges over the results in hand.
+- **A spread is not an interval.** Spreads are observed interquartile ranges over the results in hand. The paired differences in [`statistics.md`](statistics.md) carry a real bootstrap interval, and only the second says anything about how much of a gap survives resampling.
 - **A withheld ranking is not a tie.** It means the sample cannot order the backends, which is a different statement from their being equal.
 - **Cost is a reservation at the worst case of an estimate band**, never an invoice.
 - **A stale task is still scored**, and the count is on the report so the reader can weigh it.
