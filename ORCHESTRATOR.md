@@ -63,7 +63,7 @@ BENCH-09 is hand-authoring work and is the long pole in wall-clock terms. It sta
 | BENCH-13 | The statistics | 02, 08 | **Merged** | `ai/bench-13` | 2209 tests; 180 comparisons, 0 runnable | |
 | BENCH-14 | A fresh worktree cannot run the suite | none | **Merged** | `ai/bench-14` | 14 pass in a bare worktree, was 11 failing | deferred child, from BENCH-11 |
 | BENCH-15 | Three primitives now exist twice | 04, 05, 11 | **Merged** | `ai/bench-15` | four primitives unified; my own claim corrected | deferred child, from BENCH-04/05/11 |
-| BENCH-16 | Nothing records when a source was published | 02, 03 | **Running** | | deferred child, from BENCH-08 |
+| BENCH-16 | Nothing records when a source was published | 02, 03 | **Merged** | `ai/bench-16` | 2521 tests; 14.6% of a real corpus datable | deferred child, from BENCH-08 |
 | BENCH-17 | The frontier claims most on least evidence | 08, 11, 13 | **Merged** | `ai/bench-17` | frontier gated; its own first fix was incomplete | from the audit |
 | BENCH-18 | Syndication has no Unicode normalisation | 07 | **Merged** | `ai/bench-18` | surrogate bug confirmed and worse | from the audit |
 | BENCH-19 | A spend gate missing, two entries untested | 09, 10, 14 | **Merged** | `ai/bench-19` | gate, wiring tests, transitive purity | from the audit |
@@ -248,3 +248,30 @@ Still open, in the audit's order: `bench/src/combine/` publishes a frontier with
   **`mm` is the decision worth recording**: in the shared table for accuracy, excluded from due-weight, because `5mm` is millimetres far more often than five million and admitting it there turns a silence into a spurious five million.
 
   **Two of four purity guards could not move, for a measured reason.** `import-graph.ts` follows `import type` edges, which `verbatimModuleSyntax` erases, and `combine/eligibility.ts` takes three types from `report/aggregate.ts`; following that erased edge reports seven files in `combine/` as reaching `node:child_process` eight hops out. Skipping type-only statements would reverse a decision BENCH-19 pinned with its own test. Needs an owner.
+
+## Complete: 19 of 19 merged, 28 July 2026
+
+2521 tests. Every original item, every deferred child, every audit finding.
+
+**BENCH-16 closed the last hole and its second read found 13 defects after the first green gate.** Three matter beyond this repo:
+
+A **quadratic scan on untrusted page text**: matching a JSON-LD block with a lazy quantifier scans to end-of-file once per *unclosed* `<script>` opening, and the cap counted only successful matches so it never stopped. Measured at 70ms, 1.1s and **17.9s** for 128 KiB, 512 KiB and 2 MiB, synchronously, against a 300-page budget. Reachable by accident, since a page cut at the byte cap loses its closing tag. Now 2ms on the same input, with a test.
+
+**Its own URL-path fix was incomplete, and the incompleteness was live in its own committed evidence.** A cited path that redirects, or answers 200 from a bot wall, still passed the `live` gate while serving nothing at the path it names. **10 of the 12 URL-path dates in its measured corpus were Federal Register documents answering from a bot check with no date on it, every one recorded as confidently dated.** That is BENCH-17's trap again: a fix that corrects the case in front of it and ships a row claiming the behaviour.
+
+**The comment-timestamp objection had been applied to the lowest-ranked signal and not the highest**, so `datePublished` on a `Comment` or a `Review` dated the page, grading it fresher than it is precisely when its own date is missing.
+
+**The measurement that matters most: 212 cited URLs, 31 datable (14.6%), 159 read in full stating no date, 22 never read.** Down from 41 before the review removed 10 false dates. So recency is now computable and will mostly report that it cannot be established, which is the honest answer and the same shape as BENCH-13's 180 comparisons and 0 runnable.
+
+## What the fleet is actually blocked on
+
+Not code. The corpus. Seven admitted tasks across four categories, every category below the five-task floor, so no comparison runs and no frontier scores. Every scorer, statistic, detector and frontier now exists and has almost nothing it can distinguish.
+
+BENCH-09 named the fix and did not apply it: **LiveDRBench problem inversion**. A single primary source at a stable URL is a lookup, not research, and the two shapes that survived its fail-first check were answers that are an absence and fabricated premises. That is the next piece of work and it is worth more than any remaining code.
+
+## Carried forward, needing an owner
+
+- `tests/concurrency.test.ts` guards a 5-second wall-clock stale-lock window inside a 105-file parallel suite. It has cost three separate investigations and is a flake generator.
+- Two of four purity guards cannot use the transitive walk, because it follows `import type` edges that `verbatimModuleSyntax` erases; fixing that would reverse a decision BENCH-19 pinned.
+- `docs/plan/benchmark.md` purpose 4 has no producer. What it lacks is a named measure over a merged union, not plumbing.
+- A soft 404 at a cited address, 200 with a not-found body, is still dated. Same limit resolvability already has.
