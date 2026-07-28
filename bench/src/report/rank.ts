@@ -41,14 +41,27 @@ export const OVERLAP_NOTE =
 export const PAIRED_NOTE =
   'Two backends are separated only where the paired difference between them, over the tasks they both answered, has a bootstrap interval that excludes zero. Categories are resampled as units, so within-category correlation is in the interval\'s width. Where no interval could be computed the tie falls back to an interquartile overlap, which is a descriptive check and not a significance test. Both are BENCH-13\'s.';
 
-/** What a paired comparison says about two adjacent backends. */
-export type SeparationVerdict = 'separated' | 'tied';
+/**
+ * What a paired comparison says about two adjacent backends.
+ *
+ * `better` carries which of the two the test put ahead, because the ordering
+ * here is by median and the paired difference is a mean over per-task
+ * differences. Those two can disagree, and when they do the report may not
+ * silently pick the one that happens to be printed first.
+ */
+export type SeparationVerdict =
+  | { readonly separated: true; readonly better: string | null }
+  | { readonly separated: false };
 
 /**
  * The oracle `rankBackends` consults before falling back to overlap.
  *
- * Returns null where it has no answer, which is the ordinary case on a corpus
- * too small to pair anything, and is why the overlap check stays.
+ * Returns null **only** where it has no comparison at all for the pair. A
+ * comparison that ran and was refused must come back as not separated rather
+ * than as null: falling back to the interquartile check there would answer with
+ * the weaker instrument a question the stronger one has already declined, and
+ * publish a category ordering out of a check that says on its face it is not a
+ * significance test.
  */
 export type SeparationOracle = (a: string, b: string) => SeparationVerdict | null;
 
@@ -317,7 +330,14 @@ export function rankBackends(
         tied = spreadsOverlap(previous.value, entry.value);
       } else {
         usedPaired = true;
-        tied = verdict === 'tied';
+        // Separated, and the test agrees with the direction the medians put
+        // them in. A paired difference is a mean over per-task differences and
+        // this ordering is by median, so the two can disagree; when they do,
+        // the honest answer is that the sample does not support the ordering
+        // rather than whichever instrument was consulted last.
+        tied =
+          !verdict.separated ||
+          (verdict.better !== null && verdict.better !== previous.provider);
       }
     }
     if (!tied) rank = index + 1;

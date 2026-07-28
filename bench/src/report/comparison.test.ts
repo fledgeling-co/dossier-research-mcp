@@ -184,12 +184,24 @@ describe('STAT-17 the separation oracle', () => {
     const agg = aggregate({ cells, corpus: twoCategoryCorpus() });
     const list = comparisons(agg);
     const oracle = separatorFor(list, 'accuracy', { kind: 'overall' });
-    expect(oracle('alpha', 'beta')).toBe('separated');
+    expect(oracle('alpha', 'beta')).toEqual({ separated: true, better: 'alpha' });
     // Order-insensitive: rank.ts asks about adjacent entries in score order,
     // which is not the order the comparison was built in.
-    expect(oracle('beta', 'alpha')).toBe('separated');
+    expect(oracle('beta', 'alpha')).toEqual({ separated: true, better: 'alpha' });
+    // No comparison at all is the only case that returns null, and it is the
+    // only case where the older interquartile check is allowed to decide.
     expect(oracle('alpha', 'nobody')).toBeNull();
-    expect(separatorFor(list, 'relevance', { kind: 'overall' })('alpha', 'beta')).toBeNull();
+  });
+
+  it('answers not-separated for a comparison that ran the gates and was refused', () => {
+    // The category scope always refuses, because one category is one cluster.
+    // Returning null there would hand the question back to the interquartile
+    // check, which would then publish a category ordering the paired test has
+    // just declined to make.
+    const cells = [...cellsFor('alpha', () => 0.9), ...cellsFor('beta', () => 0.2)];
+    const list = comparisons(aggregate({ cells, corpus: twoCategoryCorpus() }));
+    const oracle = separatorFor(list, 'accuracy', { kind: 'category', category: 'technical' });
+    expect(oracle('alpha', 'beta')).toEqual({ separated: false });
   });
 });
 
@@ -205,5 +217,69 @@ describe('STAT-09 reliability comes off the same task groups', () => {
     // Half credit is not a pass, which is what the default threshold means.
     expect(beta?.passAt1).toBe(0);
     expect(beta?.passHatK).toBe(0);
+  });
+});
+
+describe('STAT-20 one overall verdict, three consumers', () => {
+  it('does not invalidate a backend for failing a category nobody is scored in', () => {
+    // Category A is scorable and fully completed. Category B holds five tasks
+    // and this backend completed none of them, so nobody is scored there and it
+    // contributes nothing to the overall figure. Judging the overall figure on
+    // the whole-backend completion rate would call it invalid on the strength
+    // of cells that never entered it.
+    const aTasks = [1, 2, 3, 4, 5].map((n) => task(`a-${String(n)}`, 'technical'));
+    const bTasks = [1, 2, 3, 4, 5].map((n) => task(`b-${String(n)}`, 'contested'));
+    const cells = [
+      ...aTasks.flatMap((t) =>
+        [1, 2, 3].map((r) => scoredCell(t.id, 'alpha', r, 'technical', { accuracy: 0.9 })),
+      ),
+      ...bTasks.flatMap((t) =>
+        [1, 2, 3].map((r) =>
+          scoredCell(t.id, 'alpha', r, 'contested', {}, { outcome: 'failed', failureKind: '429' }),
+        ),
+      ),
+    ];
+    const agg = aggregate({ cells, corpus: corpus([...aTasks, ...bTasks]) });
+    const alpha = agg.backends[0];
+    expect(alpha?.completion.rate).toBeCloseTo(0.5, 12);
+    expect(alpha?.scorableCompletion.rate).toBe(1);
+    expect(alpha?.verdict.scorable).toBe(true);
+  });
+
+  it('calls a backend invalid overall when every category it has was under-completed', () => {
+    const tasks = [1, 2, 3, 4, 5].map((n) => task(`t-${String(n)}`, 'technical'));
+    const cells = tasks.flatMap((t) =>
+      [1, 2, 3].map((r) =>
+        r === 1
+          ? scoredCell(t.id, 'alpha', r, 'technical', { accuracy: 0.9 })
+          : scoredCell(t.id, 'alpha', r, 'technical', {}, { outcome: 'failed', failureKind: '429' }),
+      ),
+    );
+    const backend = aggregate({ cells, corpus: corpus(tasks) }).backends[0];
+    expect(backend?.verdict.scorable).toBe(false);
+    if (backend?.verdict.scorable === false) {
+      expect(backend.verdict.reason).toBe('under-completed');
+      expect(backend.verdict.why).toMatch(/invalid/);
+    }
+  });
+
+  it('keeps a backend with no scorable category out of every overall comparison', () => {
+    const cells = [...cellsFor('alpha', () => 0.9), ...cellsFor('beta', () => 0.2, { failEvery: 3 })];
+    const agg = aggregate({ cells, corpus: twoCategoryCorpus() });
+    const beta = agg.backends.find((b) => b.provider === 'beta');
+    expect(beta?.verdict.scorable).toBe(false);
+    const overall = comparisons(agg).filter((c) => c.scope.kind === 'overall');
+    expect(overall.every((c) => c.withheld !== null)).toBe(true);
+  });
+});
+
+describe('STAT-21 reliability inherits the completion floor', () => {
+  it('invalidates a backend whose surviving repetitions all passed', () => {
+    const cells = cellsFor('beta', () => 1, { failEvery: 3 });
+    const agg = aggregate({ cells, corpus: twoCategoryCorpus() });
+    const report = reliability(agg)[0];
+    expect(report?.passAt1).toBe(1);
+    expect(report?.valid).toBe(false);
+    expect(report?.invalidWhy).toMatch(/below the floor/);
   });
 });

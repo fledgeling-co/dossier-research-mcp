@@ -620,3 +620,82 @@ describe('the JSON carries the statistics, so nothing downstream parses prose', 
     expect(renderMarkdown(agg)).toBe(renderMarkdown(agg));
   });
 });
+
+describe('STAT-18 a refused comparison never falls back to the weaker check', () => {
+  it('ties every backend inside a category, because within one nothing can be clustered', () => {
+    // Two backends seventy points apart in every task of both categories, with
+    // spreads that do not overlap. The interquartile check would have ordered
+    // them, on a difference it says on its face it cannot establish. The paired
+    // test refuses within a category, and that refusal now decides: the numbers
+    // print, and every backend comes out tied at this sample size.
+    const markdown = renderMarkdown(comparable(() => ({ alpha: 0.9, beta: 0.2 })));
+    const section = markdown.slice(
+      markdown.indexOf('### Accuracy, technical'),
+      markdown.indexOf('### Accuracy, contested'),
+    );
+    expect(section).toContain('| 1 | alpha |');
+    expect(section).toContain('| 1 (tied) | beta |');
+    expect(section).toMatch(/excludes zero/);
+  });
+
+  it('states an overall ordering where the paired test does support one', () => {
+    // Three categories, so the overall figure clears the spread floor as well.
+    const categories = ['technical', 'contested', 'false-premise'] as const;
+    const tasks = categories.flatMap((c) =>
+      [1, 2, 3, 4, 5].map((n) => task(`${c}-${String(n)}`, c)),
+    );
+    const cells = categories.flatMap((c) =>
+      [1, 2, 3, 4, 5].flatMap((n) =>
+        [1, 2, 3].flatMap((r) => [
+          scoredCell(`${c}-${String(n)}`, 'alpha', r, c, { accuracy: 0.9 - n * 0.01 }),
+          scoredCell(`${c}-${String(n)}`, 'beta', r, c, { accuracy: 0.2 - n * 0.01 }),
+        ]),
+      ),
+    );
+    const markdown = renderMarkdown(aggregate({ cells, corpus: corpus(tasks) }));
+    const section = markdown.slice(markdown.indexOf('### Accuracy, overall'));
+    expect(section).toContain('| 1 | alpha |');
+    expect(section).toContain('| 2 | beta |');
+    expect(section).toMatch(/excludes zero/);
+  });
+});
+
+describe('STAT-20 the scorecard and the ranking cannot disagree', () => {
+  it('does not print invalid for a backend that failed only an unscored category', () => {
+    const aTasks = [1, 2, 3, 4, 5].map((n) => task(`a-${String(n)}`, 'technical'));
+    const bTasks = [1, 2, 3, 4, 5].map((n) => task(`b-${String(n)}`, 'contested'));
+    const cells = [
+      ...aTasks.flatMap((t) =>
+        [1, 2, 3].map((r) => scoredCell(t.id, 'alpha', r, 'technical', { accuracy: 0.9 })),
+      ),
+      ...bTasks.flatMap((t) =>
+        [1, 2, 3].map((r) =>
+          scoredCell(t.id, 'alpha', r, 'contested', {}, { outcome: 'failed', failureKind: '429' }),
+        ),
+      ),
+    ];
+    const markdown = renderMarkdown(aggregate({ cells, corpus: corpus([...aTasks, ...bTasks]) }));
+    const scorecard = markdown.slice(
+      markdown.indexOf('## Per-backend scorecard'),
+      markdown.indexOf('## Citations'),
+    );
+    expect(scorecard).not.toContain('invalid (');
+    expect(scorecard).toContain('90.0%');
+  });
+});
+
+describe('STAT-21 the reliability table is invalidated too', () => {
+  it('prints invalid rather than a perfect score built from the survivors', () => {
+    const cells = SIX.flatMap((t) =>
+      [1, 2, 3].map((r) =>
+        r === 1
+          ? scoredCell(t.id, 'gemini', r, 'technical', { accuracy: 1 })
+          : scoredCell(t.id, 'gemini', r, 'technical', {}, { outcome: 'failed', failureKind: '429' }),
+      ),
+    );
+    const markdown = renderMarkdown(aggregate({ cells, corpus: corpus(SIX) }));
+    const section = markdown.slice(markdown.indexOf('## Reliability'), markdown.indexOf('## Rankings'));
+    expect(section).toContain('| gemini | invalid (completed 33.3%) | invalid (completed 33.3%) |');
+    expect(section).toMatch(/below the floor of 60\.0%/);
+  });
+});

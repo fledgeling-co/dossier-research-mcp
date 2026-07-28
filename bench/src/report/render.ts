@@ -242,9 +242,13 @@ function scorecardFor(
     // under it does not get a number with a footnote; it gets the word
     // `invalid`, because a figure computed over whichever attempts survived is
     // the absence of a claim rather than a low one.
+    //
+    // Read off the aggregate's own overall verdict rather than re-derived from
+    // a completion rate here. Deriving it here disagreed with the comparison
+    // and the ranking, which asked a different question of the same backend.
     const invalid =
-      b.completion.rate !== null && b.completion.rate < agg.minCompletionShare
-        ? `invalid (completed ${PERCENT(b.completion.rate)}, floor ${PERCENT(agg.minCompletionShare)})`
+      !b.verdict.scorable && b.verdict.reason === 'under-completed'
+        ? `invalid (completed ${b.completion.rate === null ? 'nothing' : PERCENT(b.completion.rate)}, floor ${PERCENT(agg.minCompletionShare)})`
         : null;
     return [
       b.provider,
@@ -433,13 +437,15 @@ function candidatesFor(
       candidates: agg.backends.map((b: BackendSummary) => ({
         provider: b.provider,
         value: b.metrics[metric],
-        scorable: b.scorableCategories.length > 0,
-        why: `${b.provider} has no scorable category, so it has no overall figure`,
+        // One verdict, three consumers: the scorecard above, this ranking, and
+        // the paired comparison. They disagreed while each derived its own.
+        scorable: b.verdict.scorable,
+        why: b.verdict.scorable ? '' : b.verdict.why,
         completionRate: b.completion.rate,
         repetitionsMet: b.repetitionFloor.met,
         repetitionsWhy: b.repetitionFloor.why,
       })),
-      scopeScorable: agg.backends.some((b) => b.scorableCategories.length > 0),
+      scopeScorable: agg.backends.some((b) => b.verdict.scorable),
     };
   }
   const groups = agg.categoryGroups.filter((g) => g.category === scope);
@@ -655,17 +661,24 @@ function renderComparisons(analysis: Analysis): string {
 
 /** `pass@1` beside `pass^k`, which are two different products. */
 function renderReliability(analysis: Analysis): string {
-  const rows = analysis.reliability.map((r) => [
-    r.provider,
-    r.passAt1 === null ? 'not measured' : PERCENT(r.passAt1),
-    r.passHatK === null ? 'withheld' : PERCENT(r.passHatK),
-    String(r.k),
-    String(r.tasksCounted),
-    num(r.threshold),
-    r.metrics.length === 0 ? 'none' : r.metrics.join(', '),
-  ]);
+  const rows = analysis.reliability.map((r) => {
+    // Both figures are computed only over the repetitions that produced a
+    // report, so a backend that failed most of its attempts would otherwise
+    // read as perfectly reliable on the few that survived.
+    const invalid = r.valid ? null : `invalid (completed ${r.completionRate === null ? 'nothing' : PERCENT(r.completionRate)})`;
+    return [
+      r.provider,
+      invalid ?? (r.passAt1 === null ? 'not measured' : PERCENT(r.passAt1)),
+      invalid ?? (r.passHatK === null ? 'withheld' : PERCENT(r.passHatK)),
+      String(r.k),
+      String(r.tasksCounted),
+      num(r.threshold),
+      r.metrics.length === 0 ? 'none' : r.metrics.join(', '),
+    ];
+  });
 
   const withheld = analysis.reliability.filter((r) => r.passHatK === null && r.kWithheld !== '');
+  const invalidated = analysis.reliability.filter((r) => !r.valid);
 
   return [
     '## Reliability: pass@1 beside pass^k',
@@ -680,6 +693,9 @@ function renderReliability(analysis: Analysis): string {
           ['Backend', 'pass@1', 'pass^k', 'k', 'Tasks counted', 'Threshold', 'Pass metric'],
           rows,
         ),
+    ...(invalidated.length === 0
+      ? []
+      : ['', ...invalidated.map((r) => `- **${r.provider}** ${r.invalidWhy}`)]),
     ...(withheld.length === 0
       ? []
       : ['', ...withheld.map((r) => `- **${r.provider}** ${r.kWithheld}`)]),

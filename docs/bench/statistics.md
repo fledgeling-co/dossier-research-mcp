@@ -18,7 +18,7 @@ They do not replace [`reporting.md`](reporting.md)'s refusals; they extend them.
 
 - the `k >= 3` floor for `pass^k` is `spreadEligibility` from [`bench/src/run/cell.ts`](../../bench/src/run/cell.ts), imported and never restated;
 - the completion floor is a fourth arm on the verdict that already withholds an under-sampled category, checked last so neither existing floor changes behaviour;
-- the paired difference supersedes the interquartile-overlap tie check in `rank.ts` wherever it has an answer, and the overlap check survives only as the fallback;
+- the paired difference supersedes the interquartile-overlap tie check in `rank.ts` wherever a comparison exists for the pair, and the overlap check survives only where none was ever enumerated. A comparison that ran the gates and was refused ties the ranking rather than handing the question back;
 - a comparison runs only where the aggregate already says a figure may be quoted, using the same three gates and the same reason words.
 
 Nothing in `bench/src/stats/` reaches a filesystem, a network, a model or a wallet, and a test asserts it by reading the modules' own source.
@@ -77,6 +77,8 @@ Clustering on category means a **category-scoped comparison cannot be clustered 
 
 The consequence is real and worth knowing before reading a report: **only overall comparisons can ever produce a measured difference**, and an overall comparison needs at least two categories that both backends may be scored in. Per-category separation would need a sub-cluster the corpus does not have.
 
+So a per-category ranking still prints its numbers and reports **every backend tied at this sample size**, however far apart the medians look. That is not the tool failing to notice a gap; it is the tool declining to call a gap measured when the only instrument that could measure it has no replication to work with.
+
 ## 3. `pass@1` beside `pass^k`
 
 `pass@1` is what a user gets on one attempt. `pass^k` is whether the backend gets it right on **every** one of k, which is the number that matters for anything run unattended. A backend with high `pass@1` and low `pass^k` sometimes works, and reporting only the first sells it as one that does: the prior art's case is tau-bench, where agents at 61% pass@1 collapse to 25% pass@8.
@@ -114,10 +116,28 @@ The four floors compose in this order, and the report names which one fired:
 
 Already true before this slice, and locked by [`reporting.md`](reporting.md)'s metric registry: a `direction` of `none` makes a volume figure unrankable, and the citation panel renders two tables through two separate calls over two separate metric lists, so merging them takes editing a function rather than editing an array. Recorded here because the brief asks for it and because the reason is a statistical one: the prior art finds citation count and citation correctness close to orthogonal in current systems, and finds human preference tracking the count.
 
+## What the out-of-family review changed
+
+A `gpt-5.6-sol` review of this slice against the codebase raised seven findings. Five were real and are fixed; two are recorded here as decisions rather than defects, because a reviewer disagreeing with a documented choice is worth reading either way.
+
+**Fixed, and each was a way the report could have contradicted itself.**
+
+1. **A refused comparison used to fall back to the interquartile check.** Within a category the paired test always refuses, so the ranking would then order backends on the weaker instrument, which is exactly the ordering the refusal had just declined to make. The oracle now returns null **only** when there is no comparison at all; a comparison that ran the gates and was refused comes back as not separated, and the ranking ties. So a category ranking now prints its numbers with every backend tied at this sample size.
+2. **The separation oracle threw away which backend the test put ahead.** The ranking orders by median and the paired difference is a mean over per-task differences, so the two can disagree, and the report would then have printed an ordering its own test contradicted. The verdict now carries `better`, and a disagreement ties.
+3. **The scorecard and the ranking asked different questions of the same backend.** The scorecard called a backend invalid from its whole-backend completion rate while the comparison and the ranking admitted it because it had one scorable category. There is now one overall verdict on the aggregate, computed by the same four gates a category gets, over the completion of the scorable categories only, and all three consumers read it.
+4. **`pass@1` and `pass^k` ignored failures entirely.** They are computed over the repetitions that produced a report, so a backend with three passes and seven failures on every task read as 100% on both. That is the completion-rate failure appearing inside the reliability metric, where it would be hardest to spot. Both figures now render `invalid` below the same completion floor.
+5. **`pass^k` was counted over every repetition while `k` was the weakest task's count.** With tasks of three and five, a figure labelled `pass^3` required five passes on half the corpus. It is now counted over the **first `k`** repetitions of each task, so the label and the statistic agree. `pass@1` still uses every measured attempt, because it is not a `k`-indexed figure.
+
+**Recorded as decisions, not fixed.**
+
+- **The point estimate stays on the object when the interval crosses zero.** The reviewer read that as violating the rule. The rule is about what is *reported*: the rendered line carries the words and no number, and `verdict` is machine-readable as `no-measured-difference`. Nulling the field would also be cosmetic, since the bootstrap's own `estimate` sits one level down, and a rule with a hole is worse than a stated contract. **The contract is: read `verdict` before `pointEstimate`.** A point estimate under a crossing interval is not a difference.
+- **Both standard errors are the uncorrected estimators.** They are Miller's published forms, which is what the design of record says to copy, and the two acceptance tests are written against that decomposition: perfect within-category correlation gives exactly `sqrt(m)` and singleton clusters give exactly 1. A CR1 correction of `G / (G - 1)` would break both identities. It would also be the more conservative choice, so the omission understates uncertainty with few clusters, **in the flattering direction**, and that is a real limitation of these numbers rather than a property of them. Upgrading to CR1 or CR2 is the obvious next move once the corpus has enough categories for the difference to be worth the broken identities.
+
 ## What none of these numbers can mean
 
 - **A bootstrap interval is not a licence to rank.** It says how much of the observed gap survives resampling the categories in hand. It cannot speak about categories the corpus does not have.
 - **A clustered standard error corrects for the clustering it is told about.** Cluster is category. Two tasks in different categories that share a source, an entity or a week are still treated as independent, and a corpus this size is small enough that they might not be.
 - **A withheld comparison is not a tie**, and `no measured difference` is not equality. Both mean the sample cannot separate the two, which is a different statement.
 - **`pass^k` is a reliability measure over the repetitions bought**, not a probability.
+- **The standard errors are uncorrected for few clusters.** With a handful of categories both figures understate the uncertainty, and they understate it in the direction that flatters whichever backend is ahead. See the review section above.
 - **Nothing here rescues an underpowered corpus.** The fix is authoring tasks.

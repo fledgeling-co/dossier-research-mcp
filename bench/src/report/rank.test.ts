@@ -204,7 +204,7 @@ describe('STAT-17 a paired verdict decides the tie where one exists', () => {
       OVERALL,
       [candidate('gemini', [0.5, 0.6, 0.7]), candidate('openai', [0.45, 0.55, 0.65])],
       true,
-      () => 'separated',
+      () => ({ separated: true, better: 'gemini' }),
     );
     expect(ranking.entries?.map((e) => e.rank)).toEqual([1, 2]);
     expect(ranking.entries?.[1]?.tiedWithPrevious).toBe(false);
@@ -218,7 +218,7 @@ describe('STAT-17 a paired verdict decides the tie where one exists', () => {
       OVERALL,
       [candidate('gemini', [0.9, 0.91, 0.92]), candidate('openai', [0.1, 0.11, 0.12])],
       true,
-      () => 'tied',
+      () => ({ separated: false }),
     );
     expect(ranking.entries?.map((e) => e.rank)).toEqual([1, 1]);
     expect(ranking.entries?.[1]?.tiedWithPrevious).toBe(true);
@@ -240,6 +240,22 @@ describe('STAT-17 a paired verdict decides the tie where one exists', () => {
     expect(withNoAnswer.entries).toEqual(withNoOracle.entries);
     expect(withNoAnswer.separation).toBe('overlap');
     expect(withNoAnswer.note).toBe(OVERLAP_NOTE);
+  });
+
+  it('ties two backends when the paired test puts the lower median ahead', () => {
+    // The ordering here is by median and the paired difference is a mean over
+    // per-task differences, so the two can disagree. When they do, the report
+    // may not silently keep the ordering the weaker instrument produced.
+    const ranking = rankBackends(
+      'accuracy',
+      OVERALL,
+      [candidate('gemini', [0.9, 0.91, 0.92]), candidate('openai', [0.1, 0.11, 0.12])],
+      true,
+      () => ({ separated: true, better: 'openai' }),
+    );
+    expect(ranking.entries?.map((e) => e.provider)).toEqual(['gemini', 'openai']);
+    expect(ranking.entries?.map((e) => e.rank)).toEqual([1, 1]);
+    expect(ranking.entries?.[1]?.tiedWithPrevious).toBe(true);
   });
 
   it('names no separation check on a withheld ranking', () => {

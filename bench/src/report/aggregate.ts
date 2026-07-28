@@ -192,6 +192,25 @@ export interface CategoryGroup {
 export interface BackendSummary {
   readonly provider: string;
   readonly completion: CompletionCounts;
+  /**
+   * Completion over the categories this backend may be scored in.
+   *
+   * The overall figure is taken over the scorable categories only, so the
+   * completion behind it has to be measured over the same ones. Using the
+   * whole-backend rate instead lets a catastrophic run in a category nobody is
+   * scored in invalidate a figure it never entered.
+   */
+  readonly scorableCompletion: CompletionCounts;
+  /**
+   * The overall scope's own verdict, computed by the same four gates a category
+   * gets rather than inferred from `scorableCategories.length`.
+   *
+   * This exists because two consumers were deciding it separately and could
+   * disagree: the scorecard marked a backend invalid from its whole-backend
+   * completion rate while the comparison and the ranking admitted it because it
+   * had one scorable category. One verdict, three consumers.
+   */
+  readonly verdict: ScorableVerdict;
   readonly scorableCategories: readonly TaskCategory[];
   readonly excludedCategories: readonly { readonly category: TaskCategory; readonly why: string }[];
   readonly repetitionFloor: RepetitionFloor;
@@ -627,9 +646,66 @@ function buildCategoryGroups(
  * would be the under-sample rule enforced in one table and abandoned in the
  * next one down the page.
  */
+/**
+ * The overall scope's verdict for one backend.
+ *
+ * Scorable when it has at least one scorable category and completed enough of
+ * the attempts inside them. Not scorable otherwise, and the reason is the one
+ * that actually applies: a backend whose every category was withheld for
+ * under-completion is `under-completed` overall, not merely unscored, because
+ * `invalid` and `not measured` are different statements.
+ */
+function overallVerdict(
+  provider: string,
+  mine: readonly CategoryGroup[],
+  scorable: readonly CategoryGroup[],
+  scorableCompletion: CompletionCounts,
+  wholeCompletion: CompletionCounts,
+  minCompletionShare: number,
+): ScorableVerdict {
+  if (scorable.length > 0) {
+    if (
+      scorableCompletion.rate !== null &&
+      scorableCompletion.rate < minCompletionShare
+    ) {
+      return {
+        scorable: false,
+        reason: 'under-completed',
+        why:
+          `${provider} completed ${percent(scorableCompletion.rate)} of the cells it attempted in the categories it may be scored in, ` +
+          `below the floor of ${percent(minCompletionShare)}. The overall figure is rendered invalid rather than as a number.`,
+      };
+    }
+    return { scorable: true };
+  }
+  if (mine.some((g) => !g.verdict.scorable && g.verdict.reason === 'under-completed')) {
+    return {
+      scorable: false,
+      reason: 'under-completed',
+      why:
+        `${provider} has no scorable category, and at least one was withheld because too small a share of its attempts completed` +
+        (wholeCompletion.rate === null ? '' : ` (${percent(wholeCompletion.rate)} overall)`) +
+        `. There is no overall figure, and the absence is an invalid score rather than an unmeasured one.`,
+    };
+  }
+  if (wholeCompletion.completed === 0) {
+    return {
+      scorable: false,
+      reason: 'nothing-completed',
+      why: `${provider} completed nothing, so it has no overall figure.`,
+    };
+  }
+  return {
+    scorable: false,
+    reason: 'under-sampled-completed',
+    why: `${provider} has no category it may be scored in, so it has no overall figure.`,
+  };
+}
+
 function buildBackends(
   categoryGroups: readonly CategoryGroup[],
   providers: readonly string[],
+  minCompletionShare: number,
 ): BackendSummary[] {
   return providers.map((provider) => {
     const mine = categoryGroups.filter((g) => g.provider === provider);
@@ -654,9 +730,21 @@ function buildBackends(
       totalCostUsd += group.totalCostUsd;
     }
 
+    const wholeCompletion = mergeCompletion(mine.map((g) => g.completion));
+    const scorableCompletion = mergeCompletion(scorable.map((g) => g.completion));
+
     return {
       provider,
-      completion: mergeCompletion(mine.map((g) => g.completion)),
+      completion: wholeCompletion,
+      scorableCompletion,
+      verdict: overallVerdict(
+        provider,
+        mine,
+        scorable,
+        scorableCompletion,
+        wholeCompletion,
+        minCompletionShare,
+      ),
       scorableCategories: scorable.map((g) => g.category),
       excludedCategories: excluded,
       repetitionFloor: repetitionFloor(
@@ -738,7 +826,7 @@ export function aggregate(input: AggregateInput): BenchAggregate {
     minTasksPerCategory,
     minCompletionShare,
   );
-  const backends = buildBackends(categoryGroups, providers);
+  const backends = buildBackends(categoryGroups, providers, minCompletionShare);
 
   let registry = EMPTY_REGISTRY;
   for (const cell of cells) registry = addRegistry(registry, cell.registry);

@@ -48,6 +48,17 @@ export interface ReliabilityInput {
   readonly tasks: readonly TaskAttempts[];
   /** Defaults to 1. A partly-right answer is not something you rely on unattended. */
   readonly threshold?: number | undefined;
+  /**
+   * What this backend attempted and completed, so the figures can be invalidated.
+   *
+   * Without it, `pass@1` and `pass^k` are computed over whichever repetitions
+   * survived, and a backend with three passes and seven failures per task reads
+   * as 100% on both. That is the completion-rate failure appearing inside the
+   * reliability metric, which is the one place it would be hardest to spot.
+   */
+  readonly completion?: { readonly attempted: number; readonly completed: number } | undefined;
+  /** Below this share of attempts completed, both figures are invalid. */
+  readonly minCompletionShare?: number | undefined;
 }
 
 export interface ReliabilityReport {
@@ -73,6 +84,18 @@ export interface ReliabilityReport {
   readonly eligibility: SpreadEligibility;
   /** Empty when `passHatK` is present. */
   readonly kWithheld: string;
+  /** `completed / attempted`, or null when the caller did not say. */
+  readonly completionRate: number | null;
+  /**
+   * Whether these figures may be read as numbers at all.
+   *
+   * False when too large a share of the attempts behind them failed. Both rates
+   * are still on the object, because they are what was measured; what changes is
+   * that the report renders the word `invalid` instead of them.
+   */
+  readonly valid: boolean;
+  /** Empty when valid. */
+  readonly invalidWhy: string;
 }
 
 /**
@@ -111,17 +134,35 @@ export function passRates(input: ReliabilityInput): ReliabilityReport {
 
   let repetitions = 0;
   let passingRepetitions = 0;
-  let allPassed = 0;
   let k = Number.POSITIVE_INFINITY;
   for (const task of counted) {
     repetitions += task.values.length;
-    const passes = task.values.filter((v) => v >= threshold).length;
-    passingRepetitions += passes;
-    if (passes === task.values.length) allPassed += 1;
+    passingRepetitions += task.values.filter((v) => v >= threshold).length;
     k = Math.min(k, task.values.length);
   }
   const resolvedK = counted.length === 0 ? 0 : k;
   const eligibility = spreadEligibility(resolvedK);
+
+  // `pass^k` is counted over the FIRST k repetitions of each task, not over
+  // however many that task happened to have. `k` is the weakest task's count,
+  // so a task run five times would otherwise have to pass five to count toward
+  // a figure labelled `pass^3`, and the label and the statistic would disagree
+  // in the direction that understates reliability. Repetition indices are
+  // ordered, so taking the first k is a fixed rule rather than a choice about
+  // which attempts to keep.
+  let allPassed = 0;
+  for (const task of counted) {
+    const window = task.values.slice(0, resolvedK);
+    if (window.length > 0 && window.every((v) => v >= threshold)) allPassed += 1;
+  }
+
+  const completion = input.completion;
+  const minShare = input.minCompletionShare ?? 0;
+  const completionRate =
+    completion === undefined || completion.attempted === 0
+      ? null
+      : completion.completed / completion.attempted;
+  const valid = completionRate === null || completionRate >= minShare;
 
   return {
     provider: input.provider,
@@ -136,6 +177,11 @@ export function passRates(input: ReliabilityInput): ReliabilityReport {
     k: resolvedK,
     eligibility,
     kWithheld: eligibility.reportable && counted.length > 0 ? '' : withheldReason(eligibility, counted.length),
+    completionRate,
+    valid,
+    invalidWhy: valid
+      ? ''
+      : `${input.provider} completed ${((completionRate ?? 0) * 100).toFixed(1)}% of its attempted cells, below the floor of ${(minShare * 100).toFixed(1)}%. Both figures are computed over whichever repetitions survived, so they describe the repetitions that survived rather than the backend.`,
   };
 }
 

@@ -1,7 +1,7 @@
 import { TASK_CATEGORIES, type TaskCategory } from '../tasks/schema.js';
 import { isRankable, metricDescriptor, metricsOfFamily, type MetricId } from './metrics.js';
 import type { BenchAggregate, CategoryGroup, TaskGroup } from './aggregate.js';
-import type { RankScope, SeparationVerdict, WithheldReason } from './rank.js';
+import type { RankScope, SeparationOracle, WithheldReason } from './rank.js';
 import {
   NO_MEASURED_DIFFERENCE,
   pairedDifference,
@@ -92,8 +92,12 @@ function candidates(agg: BenchAggregate, scope: RankScope): readonly Candidate[]
   if (scope.kind === 'overall') {
     return agg.backends.map((b) => ({
       provider: b.provider,
-      scorable: b.scorableCategories.length > 0,
-      why: `${b.provider} has no scorable category, so it has no overall figure to compare`,
+      // The aggregate's own overall verdict, not `scorableCategories.length > 0`
+      // re-derived here. Deriving it here let a backend the scorecard printed as
+      // invalid still receive an overall comparison and a rank, which is two
+      // answers to whether the sample supports a claim in one report.
+      scorable: b.verdict.scorable,
+      why: b.verdict.scorable ? '' : b.verdict.why,
       repetitionsMet: b.repetitionFloor.met,
       repetitionsWhy: b.repetitionFloor.why,
       scorableCategories: new Set(b.scorableCategories),
@@ -175,7 +179,7 @@ export function comparisons(agg: BenchAggregate): readonly Comparison[] {
       // the same corpus counts rather than re-derived from what happened to run.
       const scopeScorable =
         scope.kind === 'overall'
-          ? agg.backends.some((b) => b.scorableCategories.length > 0)
+          ? agg.backends.some((b) => b.verdict.scorable)
           : agg.corpus.tasksByCategory[scope.category] >= agg.minTasksPerCategory;
 
       const list = [...candidates(agg, scope)].sort((x, y) =>
@@ -305,8 +309,9 @@ export function comparisonSummary(list: readonly Comparison[]): ComparisonSummar
  * measurement. Reported once per backend, with `k` and the threshold beside it.
  */
 export function reliability(agg: BenchAggregate): readonly ReliabilityReport[] {
-  return agg.providers.map((provider) =>
-    passRates({
+  return agg.providers.map((provider) => {
+    const backend = agg.backends.find((b) => b.provider === provider);
+    return passRates({
       provider,
       tasks: agg.taskGroups
         .filter((g) => g.provider === provider)
@@ -315,8 +320,22 @@ export function reliability(agg: BenchAggregate): readonly ReliabilityReport[] {
           metric: g.passMetric ?? 'none',
           values: g.passValues,
         })),
-    }),
-  );
+      // Completion goes in, and this is not decoration. `passValues` holds only
+      // the repetitions that produced a report, so a backend with three passes
+      // and seven failures on every task reads as 100% on both figures. That is
+      // the completion-rate failure appearing inside the reliability metric,
+      // where it would be hardest to spot, and the same floor invalidates it.
+      ...(backend === undefined
+        ? {}
+        : {
+            completion: {
+              attempted: backend.completion.attempted,
+              completed: backend.completion.completed,
+            },
+          }),
+      minCompletionShare: agg.minCompletionShare,
+    });
+  });
 }
 
 /**
@@ -332,7 +351,7 @@ export function separatorFor(
   list: readonly Comparison[],
   metric: MetricId,
   scope: RankScope,
-): (a: string, b: string) => SeparationVerdict | null {
+): SeparationOracle {
   const index = new Map<string, Comparison>();
   for (const c of list) {
     if (c.metric !== metric) continue;
@@ -342,10 +361,28 @@ export function separatorFor(
   return (a, b) => {
     const found =
       index.get(`${a}${PAIR_SEPARATOR}${b}`) ?? index.get(`${b}${PAIR_SEPARATOR}${a}`);
-    if (found === undefined || found.result === null) return null;
-    if (found.result.verdict === 'measured') return 'separated';
-    if (found.result.verdict === 'no-measured-difference') return 'tied';
-    return null;
+    // Never enumerated at all. Only here does the older interquartile check get
+    // to decide, because there is nothing better to decide with.
+    if (found === undefined) return null;
+    if (found.result === null) {
+      // Enumerated and refused. A gate the aggregate already applied refused
+      // it, and falling back to the overlap check would answer with the weaker
+      // instrument a question the stronger one has already declined. Tied means
+      // the sample cannot separate them, which is exactly what happened.
+      return { separated: false };
+    }
+    switch (found.result.verdict) {
+      case 'measured':
+        return { separated: true, better: found.result.betterBackend };
+      case 'no-measured-difference':
+      case 'too-few-shared-tasks':
+      case 'too-few-clusters':
+        return { separated: false };
+      default: {
+        const exhaustive: never = found.result.verdict;
+        return exhaustive;
+      }
+    }
   };
 }
 

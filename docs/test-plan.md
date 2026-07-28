@@ -840,3 +840,13 @@ Paired differences with cluster-bootstrap intervals, standard errors clustered o
 | **STAT-15** | No file in `bench/src/stats/` imports a filesystem, network, model or spend module | unit: `stats-purity` | ✓ |
 | **STAT-16** | A comparison inherits BENCH-08's gates and withholds with the same reason vocabulary | unit: `comparison` | ✓ |
 | **STAT-17** | A paired verdict decides `rank.ts`'s tie where one exists; interquartile overlap decides only where it does not | unit: `rank` | ✓ |
+
+Five further rows, added after the out-of-family review of this slice found each of them.
+
+| AC | Statement | Test | Status |
+|---|---|---|---|
+| **STAT-18** | A comparison that ran the gates and was refused ties the ranking, rather than handing the question back to the interquartile check | unit: `comparison`, `render` | ✓ |
+| **STAT-19** | A paired verdict whose direction disagrees with the median ordering ties, rather than keeping the ordering | unit: `rank` | ✓ |
+| **STAT-20** | One overall verdict decides the scorecard, the comparison and the ranking, so a backend cannot read invalid in one and be ranked in another | unit: `aggregate`, `render` | ✓ |
+| **STAT-21** | `pass@1` and `pass^k` render invalid below the completion floor, since both are computed over the repetitions that survived | unit: `reliability`, `render` | ✓ |
+| **STAT-22** | `pass^k` is counted over the first `k` repetitions of each task, so the label and the statistic agree | unit: `reliability` | ✓ |

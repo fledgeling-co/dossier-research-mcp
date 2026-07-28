@@ -110,3 +110,48 @@ describe('an unmeasured attempt is an absence, never a fail', () => {
     expect(report.metrics).toEqual(['accuracy', 'refusal']);
   });
 });
+
+describe('STAT-21 and STAT-22 what the review found', () => {
+  it('counts pass^k over the first k repetitions, so the label matches the statistic', () => {
+    // k is the weakest task's count, three. The five-repetition task passes its
+    // first three and fails its fourth. Counting all five would report pass^3
+    // as one half while measuring pass^5 on half the corpus.
+    const report = passRates({
+      provider: 'x',
+      tasks: [attempts('t1', [1, 1, 1]), attempts('t2', [1, 1, 1, 0, 1])],
+    });
+    expect(report.k).toBe(3);
+    expect(report.passHatK).toBe(1);
+    // pass@1 still uses every measured attempt: more data, and it is the
+    // probability a single attempt succeeds rather than a k-indexed figure.
+    expect(report.passAt1).toBeCloseTo(7 / 8, 12);
+  });
+
+  it('is invalid below the completion floor, because both figures ignore failures', () => {
+    // Three passes and six failures per task. Every surviving repetition passed,
+    // so without the gate this reads as a perfectly reliable backend.
+    const report = passRates({
+      provider: 'flaky',
+      tasks: [attempts('t1', [1, 1, 1]), attempts('t2', [1, 1, 1])],
+      completion: { attempted: 18, completed: 6 },
+      minCompletionShare: 0.6,
+    });
+    expect(report.passAt1).toBe(1);
+    expect(report.passHatK).toBe(1);
+    expect(report.completionRate).toBeCloseTo(1 / 3, 12);
+    expect(report.valid).toBe(false);
+    expect(report.invalidWhy).toMatch(/below the floor of 60\.0%/);
+    expect(report.invalidWhy).toMatch(/whichever repetitions survived/);
+  });
+
+  it('is valid at the floor, and valid when the caller states no completion', () => {
+    const atFloor = passRates({
+      provider: 'x',
+      tasks: [attempts('t1', [1, 1, 1])],
+      completion: { attempted: 5, completed: 3 },
+      minCompletionShare: 0.6,
+    });
+    expect(atFloor.valid).toBe(true);
+    expect(passRates({ provider: 'x', tasks: [attempts('t1', [1, 1, 1])] }).valid).toBe(true);
+  });
+});
