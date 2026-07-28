@@ -31,7 +31,24 @@ import {
 /**
  * The whole result, assembled and rendered.
  *
- * **This file must never import `node:fs` and must never reach a network.**
+ * **What this file can reach, stated accurately.** It used to say it must never
+ * import `node:fs` and must never reach a network, and a guard reading its own
+ * text agreed. Both were wrong. Through `./arms.js` it reaches the production
+ * citation collector, and from there `undici`, `node:net`, `node:dns/promises`
+ * and `node:fs`. That is four hops and two hops respectively, and no forbidden
+ * word appears in this file, which is why a same-file check could never have
+ * seen it.
+ *
+ * **Nothing is called, and the difference matters.** The registry arm drives
+ * `collectCitationEvidence` with a scripted transport, an offline page fetcher,
+ * an in-memory cache and a fixed clock, so scoring reaches no network and reads
+ * no file. This is **capability, not behaviour**: the detector has never made a
+ * network call, and saying otherwise would be a different and more alarming
+ * claim than the true one. What was false was the guarantee, not the conduct.
+ *
+ * The guard in `corpus.test.ts` now walks the import graph and asserts the
+ * narrow true thing: this module is impure, and `./arms.js` is the only edge by
+ * which it is. A new impurity through any other edge fails it.
  *
  * Two things ride on every result and neither is decoration. The **headline
  * counts** are the numbers the brief actually asks for, pulled out of the matrix

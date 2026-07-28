@@ -41,9 +41,21 @@ export const IMPURE_MODULES = [
   'undici',
 ] as const;
 
+/**
+ * Ways out of the static graph, which a static walk by definition cannot follow.
+ *
+ * `createRequire` hands a module the CommonJS resolver, so anything after it is
+ * invisible here. A walker that ignored it would return a clean graph for a
+ * module that requires `node:fs` by a computed name, and the guarantee would be
+ * worth nothing. Reported as an impure reach in its own right rather than
+ * chased, because the honest answer is "this module can reach things I cannot
+ * see", not a list.
+ */
+export const ESCAPE_HATCHES = ['createRequire'] as const;
+
 /** One forbidden import, and how the entry module reaches it. */
 export interface ImpureReach {
-  /** The forbidden specifier, e.g. `undici`. */
+  /** The forbidden specifier, e.g. `undici`, or an escape hatch by name. */
   readonly module: string;
   /** Absolute path of the file that imports it. */
   readonly file: string;
@@ -58,16 +70,30 @@ export interface ImpureReach {
 /** Every relative specifier `source` imports, in the order they appear. */
 function relativeSpecifiers(source: string): string[] {
   const found: string[] = [];
-  for (const m of source.matchAll(/from\s+'([^']+)'|import\('([^']+)'\)/g)) {
+  for (const m of source.matchAll(/from\s+['"]([^'"]+)['"]|import\(\s*['"]([^'"]+)['"]\s*\)/g)) {
     const specifier = m[1] ?? m[2] ?? '';
     if (specifier.startsWith('.')) found.push(specifier);
   }
   return found;
 }
 
-/** Whether `source` imports `module`, in either of the two forms this repo uses. */
+/**
+ * Whether `source` reaches `module`, in every form this repo can write it.
+ *
+ * Static import, `require`, and **dynamic import**, in either quote style. The
+ * dynamic form is not decoration: the guard this replaced caught
+ * `void import('node:fs/promises')` with a regex, and a lifted walker that
+ * matched only `from '...'` would have been a quiet loss of strictness dressed
+ * up as an upgrade. Its own test caught that, which is the argument for keeping
+ * the smuggling cases rather than trusting the walk.
+ */
 function imports(source: string, module: string): boolean {
-  return source.includes(`from '${module}'`) || source.includes(`require('${module}')`);
+  for (const quote of ["'", '"']) {
+    if (source.includes(`from ${quote}${module}${quote}`)) return true;
+    if (source.includes(`require(${quote}${module}${quote})`)) return true;
+    if (source.includes(`import(${quote}${module}${quote})`)) return true;
+  }
+  return false;
 }
 
 /**
@@ -138,6 +164,11 @@ export function findImpureImports(
     for (const module of forbidden) {
       if (imports(source, module)) {
         reaches.push({ module, file: next.file, path: next.path });
+      }
+    }
+    for (const hatch of ESCAPE_HATCHES) {
+      if (source.includes(hatch)) {
+        reaches.push({ module: hatch, file: next.file, path: next.path });
       }
     }
     for (const specifier of relativeSpecifiers(source)) {

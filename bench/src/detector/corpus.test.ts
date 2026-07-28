@@ -1,7 +1,9 @@
 import { mkdtempSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { findImpureImports, importGraph } from '../import-graph.js';
 import {
   DetectorCorpusError,
   labelCounts,
@@ -182,24 +184,50 @@ describe('labelCounts', () => {
   });
 });
 
-describe('SELF-04: the loader is pure', () => {
+describe('SELF-04: what the score can and cannot reach', () => {
   /**
-   * Any way a module can reach the filesystem, not just the static import.
-   * Copied deliberately from `bench/src/tasks/corpus.test.ts` rather than
-   * reworded: a second spelling of the same rule is how two checks end up
-   * enforcing different things.
+   * Decided on the **transitive** import graph, not on each file's own text.
+   *
+   * The previous version of this guard read each module's own source with two
+   * regexes and a forbidden-import list. It passed for as long as it existed
+   * while the claim it guarded was false, and it could not have done otherwise:
+   * `report.ts` reaches `undici` four hops away and `node:fs` two, and neither
+   * word appears anywhere in `report.ts`. A check and the property it asserts
+   * were of different kinds, and adding another name to the forbidden list
+   * would not have closed that. The walk is `bench/src/import-graph.ts`, shared
+   * with `bench/src/score/citations.test.ts` so there is one spelling of the
+   * rule rather than three.
+   *
+   * The claim is now split, because the truth is split.
    */
-  const FS_REACH =
-    /(?:from|import|require)\s*\(?\s*['"](?:node:)?fs(?:\/promises)?['"]|createRequire/;
-  const NET_REACH = /\bfetch\s*\(|node:https?|undici/;
 
-  const PURE = ['./corpus.ts', './schema.ts', './verdicts.ts', './confusion.ts', './report.ts'];
+  /** Genuinely pure: nothing reachable from these opens a file or a socket. */
+  const PURE = ['./corpus.ts', './schema.ts', './verdicts.ts', './confusion.ts'];
+
+  const at = (file: string): string => fileURLToPath(new URL(file, import.meta.url));
+
+  it('the walk follows edges, or every check below is vacuous', () => {
+    // `corpus.ts` imports siblings which import a package parser, so a walker
+    // that reached only the entry file would pass every assertion here while
+    // proving nothing. This is the guard's own guard.
+    const graph = importGraph(at('./corpus.ts'));
+    expect(graph.length).toBeGreaterThan(2);
+    expect(graph).toContain(at('./schema.ts'));
+  });
+
+  it('the walk still flags a module that really is impure', () => {
+    // Driven at the disk adapter, which reads files on purpose. A purity check
+    // that is green because it can no longer see anything is the failure this
+    // whole section is about.
+    expect(findImpureImports(at('./files.ts')).map((r) => r.module)).toContain('node:fs');
+  });
 
   it('reads no file and reaches no network, in any module the score passes through', () => {
     for (const file of PURE) {
-      const source = readFileSync(new URL(file, import.meta.url), 'utf8');
-      expect(source, file).not.toMatch(FS_REACH);
-      expect(source, file).not.toMatch(NET_REACH);
+      const reaches = findImpureImports(at(file));
+      // The message carries the path, so a future failure names the edge to
+      // change rather than only the module that was reached.
+      expect(reaches.map((r) => `${r.module} via ${r.path.join(' -> ')}`), file).toEqual([]);
     }
   });
 
@@ -212,16 +240,66 @@ describe('SELF-04: the loader is pure', () => {
     }
   });
 
+  /**
+   * `report.ts` is **not** pure, and this is the honest statement of what it is.
+   *
+   * It used to be in the list above and its own header used to say it "must
+   * never import `node:fs` and must never reach a network". Both were false.
+   * What is true is narrower and checkable: everything impure it can reach, it
+   * reaches through `./arms.js`, and the arms are handed an offline fetcher, a
+   * scripted transport, an in-memory cache and a fixed clock, so nothing is
+   * called. That is **capability, not behaviour** — the detector has never made
+   * a network call — and the difference is the one BENCH-11 got right with a
+   * resolve-hook trace and this guard got wrong with a regex.
+   *
+   * Asserting it positively rather than deleting the module from the list is
+   * what keeps this a guard. If somebody later makes `report.ts` impure by some
+   * *other* edge, this fails.
+   */
+  it('report.ts is impure, and the arms edge is the only way it is impure', () => {
+    const reaches = findImpureImports(at('./report.ts'));
+    expect(reaches.length).toBeGreaterThan(0);
+
+    // The two leaks the resolve-hook trace found, one per child of the arms.
+    expect(reaches.map((r) => r.module)).toEqual(
+      expect.arrayContaining(['undici', 'node:net', 'node:fs']),
+    );
+
+    // Every one of them, without exception, arrives through the arms.
+    for (const reach of reaches) {
+      expect(reach.path, `${reach.module} reached without passing through arms.ts`).toContain(
+        at('./arms.ts'),
+      );
+    }
+
+    // And the arms really are the edge: remove that one import and the rest of
+    // what `report.ts` pulls in is clean, which is what makes the sentence
+    // above a measurement rather than an assertion.
+    for (const sibling of ['./confusion.ts', './corpus.ts', './schema.ts', './verdicts.ts']) {
+      expect(findImpureImports(at(sibling)), sibling).toEqual([]);
+    }
+  });
+
   it('would catch a filesystem import added later, in any of its forms', () => {
-    for (const smuggled of [
+    // The one thing a graph walk cannot do is prove it would notice a form it
+    // does not parse. These are the spellings the walker matches, and the
+    // dynamic-import case is here because lifting the walk lost it once: the
+    // regex this guard replaced caught `void import(...)` and the first version
+    // of the walk did not. A form the codebase can write and this list omits is
+    // a hole with a green test over it.
+    const smuggled = [
       "import { readFileSync } from 'node:fs';",
       'import { readFileSync } from "node:fs";',
       "import { readFile } from 'node:fs/promises';",
       "void import('node:fs/promises');",
-      "const fs = require('fs');",
+      "const fs = require('node:fs');",
       "import { createRequire } from 'node:module';",
-    ]) {
-      expect(smuggled).toMatch(FS_REACH);
+    ];
+    const dir = mkdtempSync(join(tmpdir(), 'purity-'));
+    for (const [i, line] of smuggled.entries()) {
+      const file = join(dir, `smuggled-${String(i)}.ts`);
+      writeFileSync(file, line, 'utf8');
+      expect(findImpureImports(file).length, line).toBeGreaterThan(0);
     }
   });
 });
