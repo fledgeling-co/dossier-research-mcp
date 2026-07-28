@@ -59,7 +59,9 @@ export interface DatingCounts { dated: number; undated: number; unchecked: numbe
 export function recencyInputs(citedUrls, pages): { sources: RecencySource[]; dating: DatingCounts }
 ```
 
-`pages` is declared **structurally** here, as `containment.ts` declares `SourceEvidence`, so `bench/src/score/` keeps no dependency on the collector and its purity guard is unaffected. A cited URL with no page record at all counts `unchecked`: it was never fetched, which is the same absence as a page that would not load.
+`pages` is declared **structurally** here, as `containment.ts` declares `SourceEvidence`, so `bench/src/score/` keeps no dependency on the collector.
+
+> **A weaker claim than it first read, corrected 28 July 2026.** The original sentence ended "and its purity guard is unaffected", which is true and misleading: an out-of-family review checked and the `bench/src/score/` purity guard covers only `citations.ts`, `containment.ts`, `matrix.ts` and `identifiers.ts`, so it never covered `recency.ts` in the first place. `recency.ts` does reach `node:fs` transitively, through `src/research/evidence.ts` to `src/store/types.ts` to `src/research/failure.ts` to `src/local/cli.ts`. That chain predates this item and is untouched by it, and widening the guard to catch it is a separate piece of work with a real fix behind it rather than a one-line addition. `published.ts` itself was walked and is clean: five files, no impure reach. A cited URL with no page record at all counts `unchecked`: it was never fetched, which is the same absence as a page that would not load.
 
 `assessSourceRecency` already answers `undated` for a source with no date and `scoreRecency` already excludes those from the denominator, so acceptance criterion 3 needs no change to the scorer. It needs a test **at the caller**, which is the lesson BENCH-17 paid for: proving the extractor works in isolation is not proving the caller changed.
 
