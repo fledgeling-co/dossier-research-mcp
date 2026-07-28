@@ -301,7 +301,7 @@ describe('SELF-04: what the score can and cannot reach', () => {
       'import { readFileSync } from "node:fs";',
       "import { readFile } from 'node:fs/promises';",
       "void import('node:fs/promises');",
-      "const fs = require('node:fs');",
+      "const fs = require('fs');",
       "import { createRequire } from 'node:module';",
       'await fetch(someUrl);',
     ];

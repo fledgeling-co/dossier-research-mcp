@@ -137,6 +137,101 @@ describe('findImpureImports reports what is reached and how', () => {
     }
   });
 
+  it('a commented-out impure import does not trip the guard', () => {
+    // Direction one. Every form of comment, each naming something forbidden.
+    const dir = tree({
+      'a.ts': [
+        "// import { readFileSync } from 'node:fs';",
+        '/* import { connect } from "node:net"; */',
+        '/**',
+        " * Historically this did `const x = require('child_process')`.",
+        ' */',
+        'export const noop = (): void => undefined;',
+      ].join('\n'),
+    });
+    expect(findImpureImports(join(dir, 'a.ts'))).toEqual([]);
+  });
+
+  it('a real impure import on the same line as a comment still trips it', () => {
+    // Direction two, and the one that matters more. A guard that went quiet
+    // whenever a comment appeared nearby would be worse than no guard, because
+    // it would be green. Both orders, since a scanner can get one right and the
+    // other wrong.
+    const cases = {
+      'after.ts': "import { readFileSync } from 'node:fs'; // why this is here\nexport const r = readFileSync;\n",
+      'before.ts': "/* justified below */ import { readFileSync } from 'node:fs';\nexport const r = readFileSync;\n",
+      'between.ts': "import /* still an import */ { readFileSync } from 'node:fs';\nexport const r = readFileSync;\n",
+    };
+    for (const [name, text] of Object.entries(cases)) {
+      const dir = tree({ [name]: text });
+      expect(findImpureImports(join(dir, name)).map((r) => r.module), name).toContain('node:fs');
+    }
+  });
+
+  it('a URL in a string does not truncate the line and hide a real call', () => {
+    // The defect that made the scanner necessary. Stripping `//` to end of line
+    // without knowing what a string is deleted everything after the `//` in
+    // `https://`, taking the `fetch(` with it, and `fetch` is a global with no
+    // import to walk to. The walk returned clean for a module that opens
+    // sockets.
+    const dir = tree({
+      'a.ts': [
+        "const base = 'https://example.com/api';",
+        'export const go = async (): Promise<Response> => fetch(base);',
+      ].join('\n'),
+    });
+    expect(findImpureImports(join(dir, 'a.ts')).map((r) => r.module)).toContain('fetch()');
+  });
+
+  it('a URL in a string does not hide a forbidden import further down the file', () => {
+    const dir = tree({
+      'a.ts': [
+        "const docs = 'https://nodejs.org/api/fs.html';",
+        "import { readFileSync } from 'node:fs';",
+        'export const r = { docs, readFileSync };',
+      ].join('\n'),
+    });
+    expect(findImpureImports(join(dir, 'a.ts')).map((r) => r.module)).toContain('node:fs');
+  });
+
+  it('follows an edge whose specifier sits in a string beside a URL comment', () => {
+    const dir = tree({
+      'a.ts': "// see https://example.com/why\nimport './b.js';\n",
+      'b.ts': "import { readFileSync } from 'fs';\nexport const r = readFileSync;\n",
+    });
+    expect(findImpureImports(join(dir, 'a.ts')).map((r) => r.module)).toEqual(['fs']);
+  });
+
+  it('catches the bare builtin spellings, not only the node: ones', () => {
+    // `node:fs` and `fs` are the same module. The regex this walk replaced had
+    // `(?:node:)?`; a list carrying only the prefixed form is one a
+    // one-character edit walks straight past.
+    for (const [module, text] of Object.entries({
+      fs: "const fs = require('fs');\nexport default fs;\n",
+      child_process: "import { spawn } from 'child_process';\nexport default spawn;\n",
+      net: "import { connect } from 'net';\nexport default connect;\n",
+    })) {
+      const dir = tree({ 'a.ts': text });
+      expect(findImpureImports(join(dir, 'a.ts')).map((r) => r.module), module).toContain(module);
+    }
+  });
+
+  it('sees a forbidden import split across lines, the way the edge finder does', () => {
+    // The two used to disagree: the edge finder tolerated whitespace and the
+    // forbidden-module check did an exact `includes`, so one construct had two
+    // answers depending on which question was asked.
+    const dir = tree({ 'a.ts': "import { readFileSync }\n  from 'node:fs';\nexport const r = readFileSync;\n" });
+    expect(findImpureImports(join(dir, 'a.ts')).map((r) => r.module)).toContain('node:fs');
+  });
+
+  it('follows a relative require, not only a relative import', () => {
+    const dir = tree({
+      'a.ts': "const b = require('./b.js');\nexport default b;\n",
+      'b.ts': "import { readFileSync } from 'node:fs';\nexport const r = readFileSync;\n",
+    });
+    expect(findImpureImports(join(dir, 'a.ts')).map((r) => r.module)).toEqual(['node:fs']);
+  });
+
   it('does not mistake an explanation for a call', () => {
     // Several modules in this repo document at length why they do NOT call
     // `fetch` directly. A check that could not tell prose from code would force
