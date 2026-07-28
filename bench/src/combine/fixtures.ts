@@ -1,4 +1,5 @@
 import type { CombinationMember, MemberRun } from './member.js';
+import type { CombinationEligibility, MemberEligibility } from './eligibility.js';
 
 /**
  * Shared fixtures for the combination tests.
@@ -118,4 +119,33 @@ export function goldSourceScorer(goldUrls: readonly string[]): (merged: { citedU
     for (const url of merged.citedUrls) if (gold.has(url)) hit += 1;
     return gold.size === 0 ? 0 : hit / gold.size;
   };
+}
+
+/**
+ * An aggregate that admits everything, as one member's eligibility.
+ *
+ * Every acceptance row that predates BENCH-17 is threaded through this rather
+ * than rewritten, so a diff in one of their assertions is a real behaviour
+ * change and not an artefact of `eligibility` becoming required. The floors
+ * themselves are exercised by fixtures that fail them, in `frontier.test.ts`
+ * and `eligibility.test.ts`, which is where a permissive default cannot hide
+ * anything.
+ */
+const ADMITTED_MEMBER: MemberEligibility = {
+  verdict: { scorable: true },
+  repetitionFloor: {
+    met: true,
+    minRepetitions: 5,
+    floor: 3,
+    why: 'every task in this fixture completed at least 5 repetitions',
+  },
+};
+
+/** The same, for a whole member list, plus a scope that may be scored. */
+export function admitted(
+  members: readonly { readonly id: string }[],
+): CombinationEligibility {
+  const byId: Record<string, MemberEligibility> = {};
+  for (const m of members) byId[m.id] = ADMITTED_MEMBER;
+  return { scope: { scorable: true }, members: byId };
 }

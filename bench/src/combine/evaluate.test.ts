@@ -5,15 +5,57 @@ import {
   combinationId,
   evaluateCombinations,
   evaluateScopes,
+  type CombinationEligibility,
   type CombinationMember,
+  type EvaluateInput,
+  type ScopedCombinationReport,
 } from './index.js';
 import { MAX_EXACT_MEMBERS } from './marginal.js';
+import type { MergedCombination } from './merge.js';
 import type { MeasureLabel } from './frontier.js';
-import { eccentricTrio, failedRun, goldSourceScorer, member, run, subscriptionRun } from './fixtures.js';
+import {
+  admitted,
+  eccentricTrio,
+  failedRun,
+  goldSourceScorer,
+  member,
+  run,
+  subscriptionRun,
+} from './fixtures.js';
 
 const ACCURACY: MeasureLabel = { name: 'accuracy', direction: 'higher-is-better' };
 
 const countSources = (m: { citedUrls: readonly string[] }): number => m.citedUrls.length;
+
+/**
+ * `evaluateCombinations` with an aggregate that admits everything.
+ *
+ * `eligibility` became required in BENCH-17, and threading a permissive
+ * fixture through the pre-existing cases rather than rewriting them is what
+ * makes a diff in any assertion below a real behaviour change instead of an
+ * artefact of the new field. The floors are exercised where they bite, in
+ * `frontier.test.ts` and `eligibility.test.ts` and in the withheld cases at the
+ * bottom of this file.
+ */
+const evaluate = (
+  input: Omit<EvaluateInput, 'eligibility'> & { readonly eligibility?: CombinationEligibility },
+): ReturnType<typeof evaluateCombinations> =>
+  evaluateCombinations({ ...input, eligibility: input.eligibility ?? admitted(input.members) });
+
+/** The same for the scoped form, over the union of member ids across scopes. */
+const evaluateAllScopes = (
+  scopes: readonly { readonly name: string; readonly members: readonly CombinationMember[] }[],
+  scoreCombination: (merged: MergedCombination, scope: string) => number,
+  measure: MeasureLabel,
+): ScopedCombinationReport => {
+  const everyMember = scopes.flatMap((s) => [...s.members]);
+  return evaluateScopes(
+    scopes.map((s) => ({ ...s, eligibility: admitted(everyMember) })),
+    scoreCombination,
+    measure,
+    { overallEligibility: admitted(everyMember) },
+  );
+};
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -30,7 +72,7 @@ describe('evaluating the lattice costs nothing and reaches nothing (COMB-01)', (
     vi.stubGlobal('fetch', fetchSpy);
 
     const { members } = eccentricTrio();
-    const report = evaluateCombinations({
+    const report = evaluate({
       members,
       scoreCombination: countSources,
       measure: { name: 'source-count', direction: 'higher-is-better' },
@@ -42,7 +84,7 @@ describe('evaluating the lattice costs nothing and reaches nothing (COMB-01)', (
 
   it('says so in the report rather than leaving it to be assumed', () => {
     const { members } = eccentricTrio();
-    const report = evaluateCombinations({
+    const report = evaluate({
       members,
       scoreCombination: countSources,
       measure: { name: 'source-count', direction: 'higher-is-better' },
@@ -98,8 +140,8 @@ describe('a combination of one is that member exactly (COMB-04)', () => {
     };
 
     const members = [member('a', ['https://x.com/1']), member('b', ['https://y.com/2'])];
-    const full = evaluateCombinations({ members, scoreCombination: hashing, measure: ACCURACY });
-    const alone = evaluateCombinations({
+    const full = evaluate({ members, scoreCombination: hashing, measure: ACCURACY });
+    const alone = evaluate({
       members: [members[0]!],
       scoreCombination: hashing,
       measure: ACCURACY,
@@ -116,7 +158,7 @@ describe('the obscure member is not the most valuable one (COMB-12)', () => {
   const { members, centralUrls } = eccentricTrio();
 
   it('tops the source count, which is why a source count is the wrong value function', () => {
-    const byCount = evaluateCombinations({
+    const byCount = evaluate({
       members,
       scoreCombination: countSources,
       measure: { name: 'source-count', direction: 'higher-is-better' },
@@ -130,7 +172,7 @@ describe('the obscure member is not the most valuable one (COMB-12)', () => {
   });
 
   it('and comes last on the score, which is the number that decides', () => {
-    const byScore = evaluateCombinations({
+    const byScore = evaluate({
       members,
       scoreCombination: goldSourceScorer(centralUrls),
       measure: ACCURACY,
@@ -142,18 +184,19 @@ describe('the obscure member is not the most valuable one (COMB-12)', () => {
   });
 
   it('never reaches the frontier on its own once the score is what counts', () => {
-    const byScore = evaluateCombinations({
+    const byScore = evaluate({
       members,
       scoreCombination: goldSourceScorer(centralUrls),
       measure: ACCURACY,
     });
-    expect(byScore.frontier.frontier.map((c) => c.id)).not.toContain('obscure');
+    expect(byScore.scorable).toBe(true);
+    expect(byScore.frontier.frontier?.map((c) => c.id)).not.toContain('obscure');
     const dominated = byScore.frontier.dominated.find((d) => d.id === 'obscure');
     expect(dominated).toBeDefined();
   });
 
   it('says why in the notes, so the next reader does not reinvent the count', () => {
-    const byScore = evaluateCombinations({
+    const byScore = evaluate({
       members,
       scoreCombination: goldSourceScorer(centralUrls),
       measure: ACCURACY,
@@ -165,7 +208,7 @@ describe('the obscure member is not the most valuable one (COMB-12)', () => {
 describe('overlap stays a curve (COMB-14 through the evaluator)', () => {
   it('returns bins in ascending overlap and never an ordering on quality', () => {
     const { members, centralUrls } = eccentricTrio();
-    const report = evaluateCombinations({
+    const report = evaluate({
       members,
       scoreCombination: goldSourceScorer(centralUrls),
       measure: ACCURACY,
@@ -179,7 +222,7 @@ describe('overlap stays a curve (COMB-14 through the evaluator)', () => {
 
   it('carries the caution on every combination profile', () => {
     const { members } = eccentricTrio();
-    const report = evaluateCombinations({
+    const report = evaluate({
       members,
       scoreCombination: countSources,
       measure: { name: 'source-count', direction: 'higher-is-better' },
@@ -197,12 +240,12 @@ describe('the ceiling is one limit with one wording (COMB-22, COMB-23)', () => {
 
   it('refuses to enumerate above the member ceiling', () => {
     expect(() =>
-      evaluateCombinations({ members: tooMany, scoreCombination: countSources, measure: ACCURACY }),
+      evaluate({ members: tooMany, scoreCombination: countSources, measure: ACCURACY }),
     ).toThrow(/sampling is deliberately not offered/i);
   });
 
   it('still scores an explicit shortlist exactly, with no credit split', () => {
-    const report = evaluateCombinations({
+    const report = evaluate({
       members: tooMany,
       scoreCombination: countSources,
       measure: ACCURACY,
@@ -219,7 +262,7 @@ describe('the ceiling is one limit with one wording (COMB-22, COMB-23)', () => {
   it('caps the shortlist, so the ceiling cannot be walked around by hand', () => {
     const many = Array.from({ length: 5000 }, () => ['m0']);
     expect(() =>
-      evaluateCombinations({
+      evaluate({
         members: tooMany,
         scoreCombination: countSources,
         measure: ACCURACY,
@@ -231,7 +274,7 @@ describe('the ceiling is one limit with one wording (COMB-22, COMB-23)', () => {
   it('refuses a duplicated combination, which would double its weight in the curve', () => {
     const members = [member('a', ['https://x.com/1']), member('b', ['https://y.com/1'])];
     expect(() =>
-      evaluateCombinations({
+      evaluate({
         members,
         scoreCombination: countSources,
         measure: ACCURACY,
@@ -243,10 +286,10 @@ describe('the ceiling is one limit with one wording (COMB-22, COMB-23)', () => {
   it('refuses an empty combination and an unknown member', () => {
     const members = [member('a', [])];
     expect(() =>
-      evaluateCombinations({ members, scoreCombination: countSources, measure: ACCURACY, combinations: [[]] }),
+      evaluate({ members, scoreCombination: countSources, measure: ACCURACY, combinations: [[]] }),
     ).toThrow(/not a purchase/i);
     expect(() =>
-      evaluateCombinations({
+      evaluate({
         members,
         scoreCombination: countSources,
         measure: ACCURACY,
@@ -267,7 +310,7 @@ describe('per category as well as overall (COMB-30, COMB-31)', () => {
       member('deep', ['https://journal.example.org/paper', 'https://journal.example.org/second']),
     ];
 
-    const report = evaluateScopes(
+    const report = evaluateAllScopes(
       [
         { name: 'time-bound', members: timeBound },
         { name: 'primary-literature', members: literature },
@@ -294,7 +337,7 @@ describe('per category as well as overall (COMB-30, COMB-31)', () => {
   it('keeps a member absent from one scope in the lattice, contributing nothing there', () => {
     const withBoth = [member('a', ['https://x.com/1']), member('b', ['https://y.com/1'])];
     const withoutB = [member('a', ['https://x.com/2'])];
-    const report = evaluateScopes(
+    const report = evaluateAllScopes(
       [
         { name: 'full', members: withBoth },
         { name: 'partial', members: withoutB },
@@ -312,7 +355,7 @@ describe('per category as well as overall (COMB-30, COMB-31)', () => {
 
   it('refuses a member whose independence differs between scopes', () => {
     expect(() =>
-      evaluateScopes(
+      evaluateAllScopes(
         [
           { name: 'one', members: [member('a', [])] },
           { name: 'two', members: [{ id: 'a', independence: 'saw-other-members', runs: [] }] },
@@ -331,7 +374,7 @@ describe('failures and unmetered spend reach the report (COMB-37, COMB-38)', () 
       independence: 'independent',
       runs: [run('flaky', ['https://x.com/1']), failedRun('flaky')],
     };
-    const report = evaluateCombinations({
+    const report = evaluate({
       members: [half],
       scoreCombination: countSources,
       measure: { name: 'source-count', direction: 'higher-is-better' },
@@ -348,7 +391,7 @@ describe('failures and unmetered spend reach the report (COMB-37, COMB-38)', () 
       independence: 'independent',
       runs: [subscriptionRun('cli', ['https://x.com/1'])],
     };
-    const report = evaluateCombinations({
+    const report = evaluate({
       members: [sub],
       scoreCombination: countSources,
       measure: { name: 'source-count', direction: 'higher-is-better' },
@@ -364,7 +407,7 @@ describe('failures and unmetered spend reach the report (COMB-37, COMB-38)', () 
       independence: 'independent',
       runs: [failedRun('dead')],
     };
-    const report = evaluateCombinations({
+    const report = evaluate({
       members: [failedOnly],
       scoreCombination: countSources,
       measure: { name: 'source-count', direction: 'higher-is-better' },
@@ -378,7 +421,7 @@ describe('failures and unmetered spend reach the report (COMB-37, COMB-38)', () 
 describe('the report is honest about being point estimates (COMB-35)', () => {
   it('says a frontier from point estimates must not authorise a routing change alone', () => {
     const { members } = eccentricTrio();
-    const report = evaluateCombinations({
+    const report = evaluate({
       members,
       scoreCombination: countSources,
       measure: { name: 'source-count', direction: 'higher-is-better' },
@@ -390,5 +433,214 @@ describe('the report is honest about being point estimates (COMB-35)', () => {
 describe('combinationId', () => {
   it('is order independent, so a+b and b+a are one combination', () => {
     expect(combinationId(['b', 'a'])).toBe(combinationId(['a', 'b']));
+  });
+});
+
+describe('the numbers survive a withheld frontier (COMB-42)', () => {
+  const { members, centralUrls } = eccentricTrio();
+  const underSampled: CombinationEligibility = {
+    ...admitted(members),
+    scope: {
+      scorable: false,
+      reason: 'under-sampled-corpus',
+      why:
+        'the corpus holds 1 technical task, below the floor of 5. No backend is scored in this ' +
+        'category; the fix is authoring tasks, not re-running.',
+    },
+  };
+
+  it('withholds the frontier and still reports every score, cost and overlap profile', () => {
+    const report = evaluate({
+      members,
+      scoreCombination: goldSourceScorer(centralUrls),
+      measure: ACCURACY,
+      eligibility: underSampled,
+    });
+    expect(report.scorable).toBe(false);
+    expect(report.frontier.frontier).toBeNull();
+    expect(report.frontier.dominated).toEqual([]);
+    expect(report.frontier.withheld?.reason).toBe('scope-not-scorable');
+    // The numbers are the numbers. Only the ordering is withheld.
+    expect(report.combinations).toHaveLength(7);
+    for (const c of report.combinations) {
+      expect(Number.isFinite(c.score)).toBe(true);
+      expect(Number.isFinite(c.costUsd)).toBe(true);
+      expect(c.overlap.robustness).toBeDefined();
+    }
+  });
+
+  it('carries the scope verdict on the report, and says in the notes why nothing is stated', () => {
+    const report = evaluate({
+      members,
+      scoreCombination: goldSourceScorer(centralUrls),
+      measure: ACCURACY,
+      eligibility: underSampled,
+    });
+    expect(report.scope).toEqual(underSampled.scope);
+    expect(report.notes.join(' ')).toContain('below the floor of 5');
+    expect(report.notes.join(' ')).toMatch(/inherits the same limit/);
+  });
+});
+
+describe('a combination is only as eligible as its worst member (COMB-44, COMB-45)', () => {
+  const members = [member('a', ['https://x.com/1']), member('b', ['https://y.com/1'])];
+
+  it('blocks every combination holding a member the aggregate withheld (COMB-45)', () => {
+    const eligibility: CombinationEligibility = {
+      scope: { scorable: true },
+      members: {
+        ...admitted(members).members,
+        b: {
+          verdict: {
+            scorable: false,
+            reason: 'nothing-completed',
+            why: 'openai completed no technical task, so there is nothing to score.',
+          },
+          repetitionFloor: { met: true, minRepetitions: 5, floor: 3, why: '' },
+        },
+      },
+    };
+    const report = evaluate({
+      members,
+      scoreCombination: countSources,
+      measure: { name: 'source-count', direction: 'higher-is-better' },
+      eligibility,
+    });
+    // `a` is fine; `b` and `a+b` both hold a member that may not be scored, so
+    // one candidate remains and one candidate is not a frontier.
+    expect(report.frontier.excluded.map((e) => e.id).sort()).toEqual(['a+b', 'b']);
+    expect(report.frontier.withheld?.reason).toBe('too-few-candidates');
+    expect(report.frontier.withheld?.why).toContain('nothing to score');
+  });
+
+  it('treats a member the caller did not describe as not scorable, and names it (COMB-44)', () => {
+    const eligibility: CombinationEligibility = {
+      scope: { scorable: true },
+      members: { a: admitted(members).members['a']! },
+    };
+    const report = evaluate({
+      members,
+      scoreCombination: countSources,
+      measure: { name: 'source-count', direction: 'higher-is-better' },
+      eligibility,
+    });
+    expect(report.scorable).toBe(false);
+    expect(report.frontier.excluded.map((e) => e.id).sort()).toEqual(['a+b', 'b']);
+    expect(report.frontier.excluded.map((e) => e.why).join(' ')).toMatch(
+      /member "b" has no eligibility/,
+    );
+  });
+
+  it('carries a thin member up into every combination holding it', () => {
+    const eligibility: CombinationEligibility = {
+      scope: { scorable: true },
+      members: {
+        ...admitted(members).members,
+        b: {
+          verdict: { scorable: true },
+          repetitionFloor: {
+            met: false,
+            minRepetitions: 1,
+            floor: 3,
+            why: 'at least one task completed only 1 repetition, below the floor of 3.',
+          },
+        },
+      },
+    };
+    const report = evaluate({
+      members,
+      scoreCombination: countSources,
+      measure: { name: 'source-count', direction: 'higher-is-better' },
+      eligibility,
+    });
+    expect(report.frontier.withheld?.reason).toBe('sample-below-spread-floor');
+    expect(report.frontier.excluded.map((e) => e.id).sort()).toEqual(['a+b', 'b']);
+  });
+});
+
+describe('the completion floor arrives inside the verdict, never as a rule of our own (COMB-50)', () => {
+  it('no file in this directory names a completion threshold', () => {
+    // The brief noted that `evaluate.ts` computed `worstCompletion` and spent it
+    // on a prose note. The fix is NOT to threshold that number:
+    // MIN_COMPLETION_SHARE is already the fourth arm of `verdictFor`, so gating
+    // on the verdict applies it once. A second threshold here would be a fifth
+    // floor, disagreeing with the four in `aggregate.ts` the moment either moved.
+    const dir = fileURLToPath(new URL('.', import.meta.url));
+    const sources = readdirSync(dir).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts'));
+    for (const file of sources) {
+      // Comments stripped first, deliberately. `eligibility.ts` names the
+      // constant in prose to say where the floor lives, which is the opposite
+      // of using it, and a check that could not tell those apart would push the
+      // explanation out of the file.
+      const code = readFileSync(`${dir}${file}`, 'utf8')
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/^\s*\/\/.*$/gm, '');
+      expect(`${file}: ${code}`).not.toMatch(/MIN_COMPLETION_SHARE/);
+      expect(`${file}: ${code}`).not.toMatch(/minCompletionShare/);
+      // And no threshold of its own under another name.
+      expect(`${file}: ${code}`).not.toMatch(/completionRate\s*[<>]/);
+    }
+  });
+
+  it('withholds on a low completion rate only because the verdict said so', () => {
+    const half: CombinationMember = {
+      id: 'flaky',
+      independence: 'independent',
+      runs: [run('flaky', ['https://x.com/1']), failedRun('flaky'), failedRun('flaky')],
+    };
+    const sound = member('steady', ['https://y.com/1']);
+    const list = [half, sound];
+
+    // Same runs, same 33% completion, two different verdicts. The frontier
+    // follows the verdict rather than the rate, which is the whole point.
+    const admittedReport = evaluate({
+      members: list,
+      scoreCombination: countSources,
+      measure: { name: 'source-count', direction: 'higher-is-better' },
+    });
+    expect(admittedReport.scorable).toBe(true);
+    expect(admittedReport.combinations.find((c) => c.id === 'flaky')!.merged.completionRate).toBeCloseTo(
+      1 / 3,
+      9,
+    );
+
+    const withheldReport = evaluate({
+      members: list,
+      scoreCombination: countSources,
+      measure: { name: 'source-count', direction: 'higher-is-better' },
+      eligibility: {
+        scope: { scorable: true },
+        members: {
+          ...admitted(list).members,
+          flaky: {
+            verdict: {
+              scorable: false,
+              reason: 'under-completed',
+              why:
+                'flaky completed 33.3% of its attempted technical cells, below the floor of 60.0%. ' +
+                'The score is rendered invalid rather than as a number.',
+            },
+            repetitionFloor: { met: true, minRepetitions: 5, floor: 3, why: '' },
+          },
+        },
+      },
+    });
+    expect(withheldReport.scorable).toBe(false);
+    expect(withheldReport.frontier.excluded.map((e) => e.why).join(' ')).toMatch(/below the floor of 60\.0%/);
+  });
+});
+
+describe('the adapter is inside the purity boundary (COMB-52)', () => {
+  it('scans eligibility.ts along with the rest of the directory', () => {
+    const dir = fileURLToPath(new URL('.', import.meta.url));
+    const sources = readdirSync(dir).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts'));
+    // Named explicitly, because the adapter is the one file here that has seen a
+    // BenchAggregate and is therefore the likeliest place a filesystem import
+    // would arrive, through `report/cli.ts` on the way to loading one.
+    expect(sources).toContain('eligibility.ts');
+    const src = readFileSync(`${dir}eligibility.ts`, 'utf8');
+    expect(src).not.toMatch(/from 'node:/);
+    expect(src).not.toMatch(/\bfetch\s*\(/);
+    expect(src).not.toMatch(/report\/cli\.js/);
   });
 });
