@@ -1,4 +1,5 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -178,7 +179,14 @@ describe('VERIFY-03 the entry point is wired', () => {
     const committed = fileURLToPath(
       new URL('../../evidence/gold-verification.json', import.meta.url),
     );
-    const before = existsSync(committed);
+    // A digest, not `existsSync`. The hazard is the file being OVERWRITTEN with
+    // an empty report, and after that it still exists, so an existence check
+    // would pass over exactly the damage it was written to catch.
+    const digest = (): string =>
+      existsSync(committed)
+        ? createHash('sha256').update(readFileSync(committed)).digest('hex')
+        : 'absent';
+    const before = digest();
     const out = join(temp(), 'spawned-evidence.json');
     const ran = await spawnEntry(tsx, CLI, ['--dir', corpus(false), '--out', out]);
 
@@ -188,7 +196,7 @@ describe('VERIFY-03 the entry point is wired', () => {
     // Everything this command says is a diagnostic; stdout is left clear.
     expect(ran.stdout).toBe('');
     expect(existsSync(out)).toBe(true);
-    expect(existsSync(committed)).toBe(before);
+    expect(digest()).toBe(before);
   }, 60_000);
 
   it('names the missing binary and the fix in its skip reason', () => {

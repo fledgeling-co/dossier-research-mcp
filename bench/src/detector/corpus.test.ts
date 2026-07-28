@@ -281,11 +281,21 @@ describe('SELF-04: what the score can and cannot reach', () => {
       );
     }
 
-    // And the arms really are the edge: everything else `report.ts` imports is
-    // clean, which is what makes the sentence above a measurement rather than
-    // an assertion.
-    for (const sibling of ['./confusion.ts', './corpus.ts', './schema.ts', './verdicts.ts']) {
-      expect(findImpureImports(at(sibling)), sibling).toEqual([]);
+    // And the arms really are the edge. Asserting that every reported path
+    // passes through `arms.ts` is not enough on its own, because the walk
+    // memoises by file and reports the shortest path, so a module reachable two
+    // ways is only ever reported once. The claim is closed by enumerating
+    // `report.ts`'s own direct imports and proving every non-arms one is clean:
+    // if that set is exhaustive and all but one are pure, the one is the only
+    // edge, which is a measurement rather than an assertion.
+    const direct = [
+      ...readFileSync(at('./report.ts'), 'utf8').matchAll(/from '(\.\/[^']+)'/g),
+    ].map((m) => m[1] ?? '');
+    expect(new Set(direct)).toEqual(
+      new Set(['./confusion.js', './corpus.js', './arms.js', './schema.js', './verdicts.js']),
+    );
+    for (const sibling of direct.filter((d) => d !== './arms.js')) {
+      expect(findImpureImports(at(sibling.replace(/\.js$/, '.ts'))), sibling).toEqual([]);
     }
   });
 
