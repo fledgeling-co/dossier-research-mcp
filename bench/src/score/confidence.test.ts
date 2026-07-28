@@ -217,6 +217,26 @@ describe('CONF-U1 the boundary is read in code points, not code units', () => {
     expect(mentions(`x${SUPP}zephyr`, `${SUPP}zephyr`)).toBe(false);
     expect(mentions(`say ${SUPP}zephyr now`, `${SUPP}zephyr`)).toBe(true);
   });
+
+  /**
+   * The defect the boundary fix made reachable, found by an out-of-family review.
+   *
+   * A multi-word needle takes the regex path, and a rejected match there used to
+   * advance `lastIndex` by one code unit. A `u`-flagged regex will not begin a
+   * match in the middle of a surrogate pair, so beside a supplementary-plane
+   * character it snapped straight back and `exec` returned the identical match
+   * forever. It could not fire while `boundaryOk` wrongly accepted the match, so
+   * correcting the boundary is what opened it. `vitest`'s per-test timeout is
+   * what fails this if it is ever reintroduced.
+   */
+  it('terminates on the regex path when a rejected match sits on a surrogate pair', () => {
+    expect(findMention(`a${SUPP} zephyr`, `${SUPP} zephyr`)).toBe(-1);
+    expect(mentions(`a${SUPP} zephyr`, `${SUPP} zephyr`)).toBe(false);
+    // And still finds it where the boundary is genuinely clean.
+    expect(findMention(`say ${SUPP} zephyr now`, `${SUPP} zephyr`)).toBe(4);
+    // Every occurrence, without spinning on the rejected one.
+    expect(findAllMentions(`a${SUPP} zephyr and ${SUPP} zephyr`, `${SUPP} zephyr`)).toHaveLength(1);
+  });
 });
 
 describe('CALIB-17 a label that lands on a line break', () => {

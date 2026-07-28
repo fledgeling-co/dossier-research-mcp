@@ -394,11 +394,29 @@ describe('SYND-U5 normalisation is idempotent, so there is one coordinate system
     expect(normaliseForShingling(once.join(' '))).toEqual(once);
   });
 
-  it('holds for the awkward case where a case fold creates a composable pair', () => {
-    // An uppercase J with a combining caron has no precomposed form; lower-casing
-    // it lets a second pass compose it. `confidence.ts` documents the same edge.
-    const once = normaliseForShingling('J̌ is a letter and so is J̌ again ok');
-    expect(normaliseForShingling(once.join(' '))).toEqual(once);
+  /**
+   * The case that makes the second fold load-bearing, found by an out-of-family
+   * review of this change.
+   *
+   * An uppercase `J` with a combining caron has no precomposed form, so one NFKC
+   * pass leaves it two characters; lower-casing it creates a sequence that *does*
+   * compose, to `ǰ`. Folding once and stopping meant the strip then deleted the
+   * orphaned mark, because a combining mark is neither a letter nor a number, and
+   * the two spellings of one word tokenised differently. Idempotence alone did
+   * not catch it: the one-pass version is idempotent too, because the first pass
+   * has already destroyed the information.
+   */
+  it('folds a case-fold-composable pair onto one token, not onto two spellings', () => {
+    expect(normaliseForShingling('J̌word')).toEqual(['ǰword']);
+    expect(normaliseForShingling('ǰword')).toEqual(['ǰword']);
+    expect(normaliseForShingling('J̌word')).toEqual(normaliseForShingling('ǰword'));
+  });
+
+  it('is still idempotent with the second fold in place', () => {
+    for (const sample of ['J̌word', 'ǰword', 'T̈ and Áͅ', 'ordinary text']) {
+      const once = normaliseForShingling(sample);
+      expect(normaliseForShingling(once.join(' '))).toEqual(once);
+    }
   });
 });
 

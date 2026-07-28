@@ -136,3 +136,23 @@ Two normalisers answering two questions is not duplication. Making them identica
 - Retuning any threshold. Every constant keeps its value; the fix is upstream of them.
 - Any change to `due-weight/text.ts`, whose divergence is refuted above rather than confirmed.
 - The other normalisers. `verify/match.ts` and `units.ts` were read and already normalise.
+
+## Out-of-family review, and what it changed
+
+`gpt-5.6-sol` at high reasoning effort, read-only, over the whole change plus every downstream consumer. Four findings; every one reproduced by execution before it was acted on, and two of them were real.
+
+**1. High, accepted and fixed. The boundary fix made an infinite loop reachable.** `searchFrom` takes a regular expression path for a multi-word needle, and a rejected match advanced `lastIndex` by one UTF-16 code unit. A `u`-flagged pattern will not begin a match inside a surrogate pair, so beside a supplementary-plane character it snapped back and `exec` returned the identical match forever. Reproduced: `m.index` stayed at 1 across eight iterations with `lastIndex` set to 2 each time, and `findMention('a\u{10400} zephyr', '\u{10400} zephyr')` did not return.
+
+It **could not fire before this change**, because `boundaryOk` wrongly accepted the match and the loop exited on the first pass. Correcting the boundary is what opened it. That is the shape of defect this fleet keeps finding and it was found by the reviewer rather than by the runner. Fixed by advancing a whole code point, with a test that fails on the timeout if it is reintroduced (CONF-U2).
+
+**2. Medium, accepted and fixed. Folding once is not enough.** NFKC then lower-case is not a fixed point: an uppercase `J` with a combining caron has no precomposed form, so one pass leaves it two characters and lower-casing it creates a sequence that composes. Stopping there let the strip delete the orphaned mark, and `normaliseForShingling('J̌word')` gave `['j', 'word']` while `normaliseForShingling('ǰword')` gave `['ǰword']`. The same word in two spellings scoring zero against itself is precisely the failure this whole change is against.
+
+The reviewer also named why the original SYND-U5 test did not catch it, and was right: **the one-pass version is idempotent too**, because the first pass has already destroyed the information. Idempotence was the wrong property to assert alone. The test now asserts the fold as well (SYND-U7). `confidence.ts` already ran its fold twice for the same reason, which is the second time this change has found the sibling was ahead of it.
+
+**3. Medium, accepted as a limit, not fixed.** Folding shrinks the shingle set, and `MIN_SHINGLES` is measured after it. The reviewer built a 1,033-word page whose windows differ only by halfwidth against fullwidth digits: 1,024 distinct shingles before the fold, one after, which drops it below the floor and leaves its domains reported unchecked. Reproduced exactly.
+
+Left rather than patched, for a stated reason. It is this fold's intended behaviour at its adversarial extreme, since windows differing only by a compatibility distinction are exactly what the fold exists to merge, and a page whose every window folds onto one really does carry one distinguishable window. Gating the floor on the un-normalised count would put the length test and the comparison in two different coordinate systems, which is the class of defect this repo has already paid for twice. The direction is safe: the page is reported unchecked and named in `uncheckedDomains`, so the raw count is what the reader gets. Recorded on `MIN_SHINGLES` and in [`../bench/source-quality.md`](../bench/source-quality.md).
+
+**4. Low, accepted as unreachable, not fixed.** A needle carrying an unpaired surrogate matches inside a well-formed character, because a lone surrogate is neither `\p{L}` nor `\p{N}` and so demands no boundary. Reproduced: `mentions('\u{1F600}', '\uDE00')` is `true`. Pre-existing and unchanged by this item. A needle reaches that function from a task's gold set, which is UTF-8 YAML parsed through Zod, and an unpaired surrogate cannot survive that decode. Recorded on `boundaryOk` so the next reader knows it was looked at rather than missed.
+
+**What the reviewer checked and cleared**, recorded because a negative result from an adversarial pass is worth as much as a positive one: `m[0].length` is a UTF-16 length and `at + m[0].length` lands after a valid match; `findAllMentions`'s advance neither skips nor double-counts; no valid code point is now wrongly refused; nothing downstream reads a figure or a word back out of shingled text; and `withoutNormalisation` in the test file is a faithful copy of the old behaviour.

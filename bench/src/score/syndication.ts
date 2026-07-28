@@ -143,6 +143,18 @@ export const SYNDICATION_CONTAINMENT = 0.9;
  * and identical across hosts. Nothing here can distinguish that from real
  * syndication, which is why every cluster is reported with its URLs and its
  * scores rather than folded silently into a count.
+ *
+ * **The count is taken after normalisation, and that is reachable in principle.**
+ * Folding merges windows that differed only by a compatibility distinction, so a
+ * page whose distinctness rested entirely on one can drop below this floor: an
+ * out-of-family review built a 1,033-word page of halfwidth against fullwidth
+ * digits scoring 1,024 shingles before the fold and one after. That is this
+ * fold's intended behaviour at its adversarial extreme rather than a separate
+ * defect, and a page whose every window folds onto one really does carry one
+ * distinguishable window. It is left alone deliberately: gating the floor on the
+ * un-normalised count would put the length test and the comparison in two
+ * different coordinate systems, and the page is reported unchecked, which is the
+ * safe direction.
  */
 export const MIN_SHINGLES = 100;
 
@@ -237,11 +249,22 @@ export const SHINGLE_NORMALISATION = 'NFKC';
  * nothing that matters: inside a ten-word window those digits are still as
  * distinctive as they were, and the alternative, keeping `.` attached, puts
  * every sentence-ending full stop inside a token instead.
+ *
+ * **The fold runs twice, and the second pass is not belt and braces.** NFKC then
+ * lower-case is not a fixed point: an uppercase `J` with a combining caron has no
+ * precomposed form, so the first pass leaves it two characters and lower-casing
+ * it lets a second pass compose it to `ǰ`. Without the second pass the strip
+ * below then deletes the orphaned combining mark, because a mark is neither
+ * `\p{L}` nor `\p{N}`, and `J̌word` tokenises as `j`, `word` while `ǰword`
+ * tokenises as one token. That is the same word in two spellings scoring zero
+ * against itself, which is the defect this whole function exists to prevent.
+ * `confidence.ts` runs its fold twice for the same reason.
  */
 export function normaliseForShingling(text: string): string[] {
   const cleaned = text
     .normalize(SHINGLE_NORMALISATION)
     .toLowerCase()
+    .normalize(SHINGLE_NORMALISATION)
     .replace(/[^\p{L}\p{N}]+/gu, ' ')
     .trim();
   return cleaned === '' ? [] : cleaned.split(' ');

@@ -407,6 +407,13 @@ function escapeRegExp(text: string): string {
  * supplementary-plane letter returns that letter's lone *high* surrogate, which
  * `\p{L}` does not match either, so the defect was on both sides of the boundary
  * rather than only on the `h[at - 1]` an audit named.
+ *
+ * **A needle carrying an unpaired surrogate still matches inside a character**,
+ * because a lone surrogate is not `\p{L}` or `\p{N}` and so demands no boundary:
+ * `mentions('\u{1F600}', '\uDE00')` is `true`. Unchanged here and left alone. A
+ * needle reaches this from a task's gold set, which is UTF-8 YAML parsed through
+ * Zod, and an unpaired surrogate cannot survive that decode. Recorded rather
+ * than guarded so the next reader knows it was looked at.
  */
 function boundaryOk(h: string, at: number, length: number, needle: string): boolean {
   const guardLeft = isAlphanumeric(codePointAt(needle, 0));
@@ -443,7 +450,15 @@ function searchFrom(h: string, n: string, from: number): { at: number; length: n
   let m = re.exec(h);
   while (m !== null) {
     if (boundaryOk(h, m.index, m[0].length, n)) return { at: m.index, length: m[0].length };
-    re.lastIndex = m.index + 1;
+    // Advance past the whole code point, not one code unit. A `u`-flagged
+    // regex will not begin a match in the middle of a surrogate pair, so
+    // `lastIndex = m.index + 1` beside a supplementary-plane character snaps
+    // back to the same index and `exec` returns the identical match forever.
+    // It could not fire while `boundaryOk` wrongly ACCEPTED such a match, so
+    // fixing the boundary is what made this reachable: `findMention('a\u{10400}
+    // zephyr', '\u{10400} zephyr')` hung. Verified by watching `m.index` stay
+    // at 1 across eight iterations with `lastIndex` set to 2 each time.
+    re.lastIndex = m.index + (codePointAt(h, m.index)?.length ?? 1);
     m = re.exec(h);
   }
   return { at: -1, length: 0 };

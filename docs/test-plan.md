@@ -864,3 +864,10 @@ Syndication was the only text normaliser in the tree with no Unicode normalisati
 | **SYND-U5** | `normaliseForShingling` is idempotent, so a caller that normalised first cannot land in a second coordinate system | unit: `syndication` | ✓ |
 | **SYND-U6** | The character cap is applied to the raw text, before normalisation, so a compatibility expansion cannot carry a page past the resource bound | unit: `syndication` | ✓ |
 | **CONF-U1** | A term wedged between two supplementary-plane letters is not a mention, on either side of the boundary, while a non-letter neighbour still permits the match | unit: `confidence` | ✓ |
+
+Two further rows, added after the out-of-family review of this change found each of them. The first is a defect the fix itself made reachable.
+
+| AC | Statement | Test | Status |
+|---|---|---|---|
+| **CONF-U2** | The multi-word search path terminates when a rejected match sits on a surrogate pair, rather than returning the same match forever | unit: `confidence` | ✓ |
+| **SYND-U7** | A word whose case fold creates a composable sequence folds onto one token rather than two spellings, so the fold runs twice | unit: `syndication` | ✓ |
