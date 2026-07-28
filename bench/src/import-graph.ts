@@ -78,11 +78,22 @@ function withoutComments(source: string): string {
   return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
 }
 
-/** Every relative specifier `source` imports, in the order they appear. */
+/**
+ * Every relative specifier `source` imports, in the order they appear.
+ *
+ * Three forms, and the third is the one a walker forgets. `from '...'` covers
+ * static imports and re-exports, `import('...')` covers the dynamic form, and
+ * `import '...'` on its own is a side-effect import with no bindings. None
+ * exists in this tree today, and a walker that could not see one would return a
+ * clean graph for a module that imported an impure one purely for its effects,
+ * which is precisely the unfollowed edge this module exists to make impossible.
+ */
 function relativeSpecifiers(source: string): string[] {
   const found: string[] = [];
-  for (const m of source.matchAll(/from\s+['"]([^'"]+)['"]|import\(\s*['"]([^'"]+)['"]\s*\)/g)) {
-    const specifier = m[1] ?? m[2] ?? '';
+  const pattern =
+    /from\s+['"]([^'"]+)['"]|import\(\s*['"]([^'"]+)['"]\s*\)|import\s+['"]([^'"]+)['"]/g;
+  for (const m of source.matchAll(pattern)) {
+    const specifier = m[1] ?? m[2] ?? m[3] ?? '';
     if (specifier.startsWith('.')) found.push(specifier);
   }
   return found;

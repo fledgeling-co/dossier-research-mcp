@@ -191,8 +191,8 @@ describe('SELF-04: what the score can and cannot reach', () => {
    * The previous version of this guard read each module's own source with two
    * regexes and a forbidden-import list. It passed for as long as it existed
    * while the claim it guarded was false, and it could not have done otherwise:
-   * `report.ts` reaches `undici` four hops away and `node:fs` two, and neither
-   * word appears anywhere in `report.ts`. A check and the property it asserts
+   * `report.ts` reaches `undici` three hops away and `node:child_process` six,
+   * and neither word appears anywhere in `report.ts`. A check and the property it asserts
    * were of different kinds, and adding another name to the forbidden list
    * would not have closed that. The walk is `bench/src/import-graph.ts`, shared
    * with `bench/src/score/citations.test.ts` so there is one spelling of the
@@ -305,6 +305,8 @@ describe('SELF-04: what the score can and cannot reach', () => {
       "import { createRequire } from 'node:module';",
       'await fetch(someUrl);',
     ];
+    // The side-effect form is checked in `import-graph.test.ts` instead, since
+    // it is a property of the walk rather than of one file's own text.
     const dir = mkdtempSync(join(tmpdir(), 'purity-'));
     for (const [i, line] of smuggled.entries()) {
       const file = join(dir, `smuggled-${String(i)}.ts`);
