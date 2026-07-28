@@ -122,7 +122,7 @@ The third is the one that matters, and it is the same rule as the registries abo
 
 ### Four refusals, each a rule rather than a disposition
 
-**A modification date is never a publication date.** Any meta name containing `modif`, `updat`, `revis`, `lastmod`, `edited` or `changed` is refused before its value is read. That is a substring rule rather than an allowlist because the corpus carries `Updated Date`, `lastModifieddate` and `article:modified_time`, and no list anticipates every publisher's spelling. Where one was seen and refused, the `absent` detail says so, because "we saw a date and would not use it" is a different finding from "the page carries nothing".
+**A modification date is never a publication date.** Any meta name containing `modif`, `updat`, `revis`, `lastmod`, `last-mod`, `edited` or `changed` is refused before its value is read. That is a substring rule rather than an allowlist because the corpus carries `Updated Date`, `lastModifieddate` and `article:modified_time`, and no list anticipates every publisher's spelling. Where one was seen and refused, the `absent` detail says so, because "we saw a date and would not use it" is a different finding from "the page carries nothing".
 
 **A `<time>` element proves nothing on its own.** It is as likely to be a comment timestamp, a reading time or an event date. One is read only when the element itself declares it: a `pubdate` attribute, `itemprop="datePublished"`, or a class naming it published.
 
