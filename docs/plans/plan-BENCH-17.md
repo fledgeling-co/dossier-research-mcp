@@ -40,7 +40,7 @@ Commit at each numbered step. Six runners in this fleet were killed by capacity 
 
 Replace it with one `i < j` double loop evaluating each unordered pair once and testing domination both ways. Three consequences, all wanted:
 
-- **Half the comparisons**, not double. The current worst case is `n(n-1)` for an undominated set; this is `n(n-1)/2` always. The complexity comment on the function is updated rather than left describing the old shape.
+- **Half the worst case, and a slower best case.** With nothing dominated the old `find` did `n(n-1)` comparisons and this does `n(n-1)/2`. But `find` short-circuited, so where almost everything is dominated by the first candidate it did `O(n)` and this does `n(n-1)/2` regardless. That trade is the price of the accounting: which pairs a short circuit visits depends on input order, and a separability sentence describing the pairs actually compared cannot rest on that. The complexity comment on the function states both ends rather than only the flattering one.
 - **First-in-input-order is preserved.** With `i` ascending outermost, the potential dominators of the candidate at index `k` are visited as `0, 1, ..., k-1, k+1, ...`, which is input order. `COMB-24`'s existing assertion holds unchanged.
 - **The separability accounting becomes order-independent**, and is then decided at candidate level anyway, which is equivalent and O(n).
 

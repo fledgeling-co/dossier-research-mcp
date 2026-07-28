@@ -502,14 +502,21 @@ function withheldResult(
  * at the member ceiling: about two billion comparisons at the very top, and
  * about 32,000 at the eight-member size the brief actually describes. Each
  * unordered pair is evaluated **once** and read in both directions, which is
- * half the work the earlier per-candidate `find` did on an undominated set and
- * is what makes the pair accounting behind the separability sentence
- * order-independent rather than a function of which pairs a short circuit
- * happened to visit. Left quadratic rather than made clever because the
- * comparison is three numbers and because a three-dimensional skyline algorithm
- * is a well-known source of subtle ordering bugs; if the top of the range ever
- * becomes the ordinary case this is the place to revisit, with a test already
- * pinning the answer.
+ * half the work the earlier per-candidate `find` did on a set where nothing is
+ * dominated. It is worth naming the other end of that trade rather than only
+ * the flattering half: `find` short-circuited, so on a set where almost
+ * everything is dominated by the first candidate it did `O(n)` work and this
+ * does `n(n-1)/2` regardless. The trade is deliberate. Which pairs a short
+ * circuit happens to visit depends on input order, and the separability
+ * sentence has to describe the pairs that were actually compared, so an
+ * accounting that changes with the order of the input is an accounting nobody
+ * can check.
+ *
+ * Left quadratic rather than made clever because the comparison is three
+ * numbers and because a three-dimensional skyline algorithm is a well-known
+ * source of subtle ordering bugs; if the top of the range ever becomes the
+ * ordinary case this is the place to revisit, with a test already pinning the
+ * answer.
  */
 export function paretoFrontier(
   candidates: readonly FrontierCandidate[],
