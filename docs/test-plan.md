@@ -920,3 +920,22 @@ Two rows below are corrections rather than additions, and both are marked in pla
 | **GATE-16** | The walk follows every form a relative import can take, including the side-effect and `require` forms, and an edge it cannot resolve throws naming the specifier and the parent rather than being skipped | unit: `import-graph` | ✓ |
 | **GATE-17** | Comment stripping is symmetric and proven in both directions: a commented-out impure import does not trip the guard, and a real impure import sharing a line with a comment does. A URL inside a string does not truncate the line and hide a real call | unit: `import-graph` | ✓ |
 | **GATE-18** | Both spellings of every builtin are forbidden, so `require('fs')` cannot walk past a list carrying only `node:fs` | unit: `import-graph`, `corpus` | ✓ |
+
+## BENCH-15: three primitives now exist twice
+
+Four primitives existed in two copies each, with different answers, across `bench/`. One of the four moved a score. The code is [`bench/src/score/noise-shapes.ts`](../bench/src/score/noise-shapes.ts), [`bench/src/score/source-identity.ts`](../bench/src/score/source-identity.ts), [`bench/src/score/numbers.ts`](../bench/src/score/numbers.ts), [`bench/src/score/due-weight/numbers.ts`](../bench/src/score/due-weight/numbers.ts) and [`bench/src/combine/member.ts`](../bench/src/combine/member.ts).
+
+| AC | Statement | Test | Status |
+|---|---|---|---|
+| **DUP-01** | One `maskDateShapes` exists, under `bench/src/score/`. Both numeric readers call it, and neither file declares a date pattern of its own | unit: `shared-primitives` | ✓ |
+| **DUP-02** | The shared mask blanks every shape either author masked: ISO, slashed with a two- or four-digit year, `YYYY/MM/DD`, bare `YYYY-MM` with a real month, written-out dates in both orders with arbitrary whitespace and any case, bare `MONTH YYYY`, clock times, and URLs | unit: `noise-shapes` | ✓ |
+| **DUP-03** | The mask is length-preserving and fills with `#`, so a magnitude word on the far side of a masked date is no longer read as the figure's own. `revenue was 1.2 2026-07-27 billion` is one point two, not one point two billion | unit: `noise-shapes`, `numbers` | ✓ |
+| **DUP-04** | `MONTH` matches the twelve names and their standard abbreviations only, on a word boundary, so `novel 2026` and `decade 2026` keep their figure | unit: `noise-shapes`, `due-weight/numbers` | ✓ |
+| **DUP-05** | Both readers now answer the divergence table identically: a two-digit slashed year, a bare `YYYY-MM`, a clock time and a doubly-spaced upper-case written date all yield no figure on either side | unit: `shared-primitives` | ✓ |
+| **DUP-06** | One magnitude table. `due-weight/numbers.ts` declares no exponents of its own, and a test asserts the resolved vocabulary and both attachment sets **by literal name**, including that `mm` is shared but excluded from due-weight and why | unit: `shared-primitives` | ✓ |
+| **DUP-07** | One tolerance comparator. `matchesTolerance` is gone, every caller uses `withinTolerance`, and the four arms answer identically to what the deleted copy answered, including significant figures against a zero | unit: `shared-primitives`, `due-weight/numbers` | ✓ |
+| **DUP-08** | One exported `sourceIdentity`. `combine/identity.ts` and `score/due-weight/index.ts` both reach it, and neither writes the fold | unit: `shared-primitives`, `source-identity` | ✓ |
+| **DUP-09** | The fold's boundary is pinned by name: the two "same document" callers apply it, and `score/matrix.ts`, `score/source-quality.ts` and `score/citations.ts` deliberately do not, because they answer the product's independent-source question with the product's own counter | unit: `shared-primitives` | ✓ |
+| **DUP-10** | `completionRate` is `null` for an empty denominator and a number otherwise. A member that never ran no longer prints as one that failed everything, an all-failed member still reads `0`, and `worstCompletion` excludes a null rather than counting it as zero | unit: `member`, `merge`, `evaluate` | ✓ |
+| **DUP-11** | `tokenContainment` and `shingleContainment` each carry a comment naming the other's exported symbol, the object it measures, and why the two cannot merge | unit: `shared-primitives` | ✓ |
+| **DUP-12** | The one permitted completion comparison in `bench/src/combine/` survives the nullable change: the enumeration guard that bans a fifth completion floor still sees `worstCompletion < 1` and nothing else | unit: `evaluate` | ✓ |
