@@ -66,7 +66,7 @@ BENCH-09 is hand-authoring work and is the long pole in wall-clock terms. It sta
 | BENCH-16 | Nothing records when a source was published | 02, 03 | Queued | | deferred child, from BENCH-08 |
 | BENCH-17 | The frontier claims most on least evidence | 08, 11, 13 | **Merged** | `ai/bench-17` | frontier gated; its own first fix was incomplete | from the audit |
 | BENCH-18 | Syndication has no Unicode normalisation | 07 | **Merged** | `ai/bench-18` | surrogate bug confirmed and worse | from the audit |
-| BENCH-19 | A spend gate missing, two entries untested | 09, 10, 14 | **Running** | | from the audit |
+| BENCH-19 | A spend gate missing, two entries untested | 09, 10, 14 | **Merged** | `ai/bench-19` | gate, wiring tests, transitive purity | from the audit |
 
 ## Context contract
 
@@ -225,3 +225,12 @@ Still open, in the audit's order: `bench/src/combine/` publishes a frontier with
   **BENCH-18 confirmed the surrogate lead and found it worse than reported**: both sides of the boundary were affected, not just the indexing expression named, and the needle's own ends too. Its sharpest consumer is `refusal.ts`, which filters fabricated entities through `mentions()`, so a false positive scores a correctly-refusing report as asserting the fabrication. It refuted the other half of the lead with evidence: the NFKC and NFC divergence between two normalisers is deliberate and load-bearing.
 
   Its fix made a latent infinite loop **reachable**, caught by Codex review: advancing by one code unit after a rejected match snaps back forever inside a surrogate pair, which could not fire while the boundary was wrongly accepting those matches. And it mutation-tested its own claim that vitest's timeout would catch a reintroduced loop, found that false because the spin blocks the event loop, and corrected the comment, spec and AC row to say a hung gate is what happens.
+- **28 Jul, BENCH-19 merged.** 2360 tests. All three criteria proven by **mutation rather than assertion**: remove the confirm branch and ten cases fail; kill each entry guard and that CLI's one spawn case fails while its in-process cases stay green; put `report.ts` back in the pure list and the guard fails, printing the path to `node:child_process` through `arms.js`.
+
+  `bench:failcheck` now refuses without `--confirm`, naming the count, mode and binary, and quoting that binary's **recorded** billing and caution from `src/local/cli.ts` rather than asserting one. Verified: exit 1, matching its sibling. Nothing spawns before confirmation, including the identity probe.
+
+  The transitive trace found **more than the audit did**: six modules by three chains, including `node:child_process` six hops out. Still capability rather than behaviour, since the arms take a scripted transport, and the changelog says so.
+
+  **The finding worth carrying forward: a second adversarial read found 14 defects after the first gate was already green, and four were the same shape as the bug this item exists to fix.** `--concurrency abc` became `NaN`, ran zero probes, wrote "no task already passed", exited 0 and **overwrote the committed evidence** — a typo silently destroying the corpus's admission record while reporting success. A regex comment-stripper ate `fetch(` from any line holding a URL. And a smuggling test case had been edited to a weaker form to make it pass, which CP §5 bans and which is the same worked-around-a-red-test pattern this fleet keeps finding in itself.
+
+  A green gate is evidence that the checks you wrote pass, and nothing more.
