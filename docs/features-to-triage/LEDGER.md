@@ -28,6 +28,9 @@ serially, through the orchestrator.
 | BENCH-08 | Reporting and comparison | [brief](BENCH-08-reporting.md) | In Review | [spec](../specs/spec-BENCH-08.md) | [plan](../plans/plan-BENCH-08.md) |
 | BENCH-09 | The seed task corpus | [brief](BENCH-09-seed-corpus.md) | In Review | [spec](../specs/spec-BENCH-09.md) | [plan](../plans/plan-BENCH-09.md) |
 | BENCH-10 | Self-eval of Dossier's own checking | [brief](BENCH-10-self-eval.md) | In Review | [spec](../specs/spec-BENCH-10.md) | [plan](../plans/plan-BENCH-10.md) |
-| BENCH-11 | Which combination is best | [brief](BENCH-11-combinations.md) | Untriaged | | |
+| BENCH-11 | Which combination is best | [brief](BENCH-11-combinations.md) | In Review | [spec](../specs/spec-BENCH-11.md) | [plan](../plans/plan-BENCH-11.md) |
 | BENCH-12 | A finished report is an input to the next one | [brief](BENCH-12-report-as-input.md) | In Review | [spec](../specs/spec-BENCH-12.md) | [plan](../plans/plan-BENCH-12.md) |
 | BENCH-13 | The statistics | [brief](BENCH-13-statistics.md) | Untriaged | | |
+| BENCH-14 | A fresh worktree cannot run the suite | [brief](BENCH-14-worktree-tsx.md) | Untriaged | | |
+| BENCH-15 | Three primitives now exist twice | [brief](BENCH-15-duplicate-primitives.md) | Untriaged | | |
+| BENCH-16 | Nothing records when a source was published | [brief](BENCH-16-evidence-dates.md) | Untriaged | | |

@@ -1,7 +1,7 @@
 # BENCH-11: Which combination is best
 
 **ID:** BENCH-11
-**Status:** Triage
+**Status:** In Review
 **Created:** 2026-07-27
 **Last updated:** 2026-07-27
 **Brief:** [BENCH-11](../features-to-triage/BENCH-11-combinations.md) · **Design of record:** [benchmark.md](../plan/benchmark.md)
@@ -152,3 +152,47 @@ The panel routing in `src/providers/registry.ts` currently joins a paid backend 
 - *Medium, Product Logic.* The product's merge also carries a spoken judgement about overlap — a warning above one level, an approving note below another. That judgement is right for a live panel telling an operator what their money bought and wrong here, where the brief forbids a direction. The written explanation must be left where it is and not imported into the measurement.
 - *Low, Operational.* The written explanation of the measures is one file per item in this repo. This item gets its own beside the others rather than growing another item's.
 
+
+**Codex cross-family spec review — 2026-07-27**
+
+Reviewer: `gpt-5.6-sol` at `max` effort, read-only, grounded in the repository. Verdict as returned: **MATERIAL DEFECTS**, thirteen findings. Eleven accepted, one accepted in part, one rejected in part. Eight of them changed code rather than only wording.
+
+Two notes on running it. The first attempt was lost: Codex found this repo's own `code-review` skill and spent the run following that workflow instead of answering, so the prompt was re-issued with skill-following forbidden. And a `max`-effort review takes well over ten minutes, so it has to run detached rather than in a foreground call.
+
+1. *Accepted, and it changed the code.* **The value being optimised was undefined.** The scorers expose no common score on purpose: source quality refuses to blend, citation accuracy and volume stay two numbers, and a Brier score is lower-is-better. A frontier over an unnamed "score" would either average incomparable things or rank a lower-is-better measure upside down with nothing downstream able to tell. The score axis is now a **named measure with a declared direction**, an unnamed one is refused, and a lower-is-better one is inverted once with every reported figure stated back in the caller's own units.
+
+2. *Accepted, and it changed the scope statement.* **A stored cell cannot represent the method or the crawl-lane axis.** The cell key is task, provider and repetition only, so two variants differing solely by lane or tier collide on one key and the store keeps the last. Those axes are supported only where the caller labels the members itself, and the missing coordinate is recorded as a gap belonging to the run harness rather than papered over.
+
+3. *Accepted as a wording fix.* **`mergeEvidence` is a source merge, not a report merge.** It carries no merged prose and its `overlapRatio` is not pairwise Jaccard. The code was already right; the spec overstated it, and `merge.ts` now says exactly what is reused and what is built here.
+
+4. *Accepted, and it corrected a stale claim of mine.* **Fetched page text is stored**, by the citation snapshot, which my triage said did not exist. Corrected. The related point stands: a cell carries a report *path*, not text, so the caller loads it, which is also why this slice takes text and never a path.
+
+5. *Accepted.* **`findConvergence` takes claims that a model extracted.** Obtaining them that way inside a benchmark run would break the no-model rule and the zero-cost rule at once. Claims must be authored or extracted by a deterministic rule fixed before scoring, nothing on the default path calls it, and the module says so.
+
+6. *Accepted, and it changed the code.* **Member bundling versus singleton equivalence.** The identity holds at the **member** level, which is the only reading under which it is statable once a member is a set, and both halves are now proven. Members must also be **disjoint**: a run in two members double-counts evidence and cost, and a credit split over overlapping members is not a Shapley value of anything. Comparing one repetition against five is two evaluations, not one lattice.
+
+7. *Accepted, and it changed a name.* **"Average the loss across every subset" is the Banzhaf value, not the Shapley value.** Both are computed and both ship under their own names. The ceiling's arithmetic was also wrong in my comment, which cited re-merging cost the implementation caches away; it now names the binding cost, which is 2^n merges and 2^n calls to the caller's scorer. The shortlist escape is now capped, since an unbounded one walks around the ceiling one line at a time.
+
+8. *Accepted, and it changed the code.* **`canonicaliseUrl` preserves `http` versus `https` deliberately**, which is right for counting independent sources and wrong for asking whether two members read the same document. Unfolded, a pair reports no overlap at all, understating the money question in the direction that flatters a combination. The fold is layered in `identity.ts`, naming the due-weight scorer that made the same call, and the duplication between the two is recorded rather than resolved by restructuring another merged item's file.
+
+9. *Accepted, and it changed the code.* **Failures and unmetered spend would bias the frontier.** Failed runs are carried so completion rate stays measurable, and cost splits three ways: metered dollars, subscription runs counted and never costed, and runs whose spend cannot be established.
+
+10. *Accepted in part.* **Persisted-input integrity.** The bounded-array half is done. The path-traversal half does not apply to this slice, which takes text and never a path, and that is the reason it takes text; it is recorded for whoever writes the loader.
+
+11. *Accepted as a stated limit.* **No uncertainty policy.** The frontier now defers to BENCH-08's separability rule where spreads are supplied, and where they are not it says on every result that it is a point-estimate frontier and must not authorise a routing change on its own.
+
+12. *Rejected in part, accepted in part.* The actionable half is done: the frontier's input type excludes overlap and no exported function ranks by it. The rest, that a caller could rank on a number handed to them, is true of any library and is stated as a limit rather than pretended away.
+
+13. *Accepted.* **Two measurements were underdefined.** "Most others" is now strictly more than half of **members**, not runs, and robustness is the **minimum** with the full distribution and the mean beside it. Both were choices that change domination outcomes, so neither is left implicit.
+
+## Plan — 2026-07-27
+
+Implementation plan: [`docs/plans/plan-BENCH-11.md`](../plans/plan-BENCH-11.md) (Plan size: Standard).
+
+## Progress — 2026-07-28
+
+Delivered on `ai/bench-11`, rebased onto `main` after BENCH-08, BENCH-10 and BENCH-12 merged. Gate run twice, green both times: 2113 tests passing, 2 skipped. Stdio smoke against `dist/index.js` green on eight checks, including that the tool count is unchanged at 37 and that no combination tool was added, since this slice adds no MCP surface.
+
+**A product defect found and fixed.** `mergeEvidence` labels provenance per run because keying on the provider name collapses several runs of one backend into one label, at which point every source looks unique to it and the overlap reads zero however much the runs shared. The label was the first six characters of the run id, so two ids sharing a six-character prefix reintroduced that exact collapse from the other direction, silently. Found by building a second consumer of the merge, and the test was run against the pre-fix implementation and fails there.
+
+**What was not done, and why.** The routing in `src/providers/registry.ts` is untouched, deliberately: this slice produces the measurement that would justify changing it, and doing both in one change would leave nobody able to check the second against the first. The duplication between `identity.ts`'s scheme fold and the private one in `bench/src/score/due-weight/index.ts` is recorded rather than resolved, because unifying them restructures another merged item's file mid-fleet.

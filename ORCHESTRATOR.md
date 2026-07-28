@@ -1,6 +1,6 @@
 # Orchestrator: the Dossier benchmark
 
-**Started** 27 July 2026 · **Integration branch** `main` · **Fleet size** 13 items, up to 8 concurrent
+**Started** 27 July 2026 · **Integration branch** `main` · **Fleet size** 16 items, up to 8 concurrent
 
 This file is the memory, not the transcript. A fresh session resumes the whole fleet from here alone. If context is compacted, re-read this file, `CLAUDE.md` and `docs/plan/benchmark.md` before doing anything else.
 
@@ -57,10 +57,13 @@ BENCH-09 is hand-authoring work and is the long pole in wall-clock terms. It sta
 | BENCH-07 | Source quality and syndication | 01 | **Merged** | `ai/bench-07` | syndication, 12 critic defects |
 | BENCH-08 | Reporting and comparison | 02, scorers | **Merged** | `ai/bench-08` | 1863 tests; found its own defect twice |
 | BENCH-09 | The seed task corpus | 01 | **Merged** | `ai/bench-09` | 1001 tests; 7 admitted, 20 quarantined, $0 spent |
-| BENCH-10 | Self-eval of Dossier's own checking | 01, 03 | **Running** | | |
-| BENCH-11 | Which combination is best | 02, scorers | **Running** | | |
+| BENCH-10 | Self-eval of Dossier's own checking | 01, 03 | **Merged** | see log | |
+| BENCH-11 | Which combination is best | 02, scorers | **Merged** | see log | |
 | BENCH-12 | A finished report is an input to the next one | none | **Merged** | `ai/bench-12` | 1717 tests; ships `research_ground` |
-| BENCH-13 | The statistics | 02, 08 | Ready | | |
+| BENCH-13 | The statistics | 02, 08 | **Running** | | |
+| BENCH-14 | A fresh worktree cannot run the suite | none | **Running** | | deferred child, from BENCH-11 |
+| BENCH-15 | Three primitives now exist twice | 04, 05, 11 | Queued | | deferred child, from BENCH-04/05/11 |
+| BENCH-16 | Nothing records when a source was published | 02, 03 | Queued | | deferred child, from BENCH-08 |
 
 ## Context contract
 
@@ -167,3 +170,8 @@ What actually bounds the cost is not the concurrency number, it is **committing 
   **A real pipeline gap, needing an owner:** recency is permanently unavailable and says so on every report. The durability axis BENCH-06 built needs a publication date per source, and neither the cell store nor BENCH-03's `PageEvidence` records one; `PageEvidence` carries when a page was *checked*, which is not the same thing. Approximating from fetch time would grade every source fresh. Closing it means recording a publication date at evidence-collection time, which is BENCH-02 or BENCH-03 territory rather than a reporting fix.
 
   BENCH-13 is unblocked by this merge.
+- **28 Jul, BENCH-10 and BENCH-11 merged; three deferred children added.** Twelve of thirteen original items are in. The fleet's own runners surfaced work that needs an owner, and it now has ledger rows rather than living in a report nobody reads twice.
+
+  **BENCH-10 measured what this design costs.** Containment passed 11 of 23 bad citations as supporting where the judged pass let none through, and the cause is structural rather than tunable: a contradiction states the opposite of a page using that page's own numbers. That number is now in the product's tool description, because the design forbade a model in the scoring loop precisely so this could be measured rather than argued about. From the same corpus, 22 of 30 pages resolve HTTP 200 and do not support the claim attached to them, so reading a green link as a sound citation scores identically to answering "supports" to everything.
+
+  **BENCH-11 found a shipped defect** by building a second consumer of `mergeEvidence`, which labelled provenance with the first six characters of a run id. Two ids sharing that prefix collapsed into one label and overlap then reported zero however much the runs shared. Its Codex review also caught `canonicaliseUrl` folding `http` and `https` together, understating overlap in the direction that flatters a combination.
