@@ -56,6 +56,18 @@ function resolveTsx(): string | undefined {
 
 const TSX_CLI = resolveTsx();
 
+/**
+ * Why the one process-dependent case skipped, when it does.
+ *
+ * A constant rather than an inline string so it can be asserted on. A skip
+ * reason only ever prints in the environment that cannot check it, which is
+ * exactly the wording nobody notices going wrong.
+ */
+const TSX_MISSING =
+  'tsx could not be resolved from this checkout, so the entry point cannot be run as a ' +
+  'process. Run `npm install` here or in any directory above this one, then re-run. ' +
+  'Every other case in this file runs in-process and still covers the command logic.';
+
 interface Ran {
   readonly code: number;
   readonly stdout: string;
@@ -110,11 +122,7 @@ describe('the entry point actually runs (SELF-23)', () => {
     if (TSX_CLI === undefined) {
       // Named rather than silent. A skipped test nobody notices is a test that
       // has stopped working, so this says what is missing and how to fix it.
-      ctx.skip(
-        'tsx could not be resolved from this checkout, so the entry point cannot be run as a ' +
-          'process. Run `npm install` here or in any directory above this one, then re-run. ' +
-          'Every other case in this file runs in-process and still covers the command logic.',
-      );
+      ctx.skip(TSX_MISSING);
     }
     const ran = await spawnCli(TSX_CLI);
     expect(ran.stderr, ran.stderr).toBe('');
@@ -183,6 +191,20 @@ describe('importing the entry point does not run it (WT-03)', () => {
     // the real stdout before any case ran, which under a stdio protocol is the
     // exact shape of defect `CLAUDE.md` bans.
     expect(typeof runDetector).toBe('function');
+  });
+});
+
+describe('the one process-dependent case degrades honestly (WT-05)', () => {
+  it('names the missing binary and the fix in its skip reason', () => {
+    // Asserted rather than trusted, because this string only ever prints in an
+    // environment that by definition cannot run the case that prints it. A
+    // reason reading "skipped" would satisfy the runner and tell a reader
+    // nothing, which is the weak form of this option the brief warns about.
+    expect(TSX_MISSING).toContain('tsx');
+    expect(TSX_MISSING).toContain('npm install');
+    // And it says what is still covered, so a reader does not read one skip as
+    // the whole file having stopped.
+    expect(TSX_MISSING).toMatch(/in-process/);
   });
 });
 

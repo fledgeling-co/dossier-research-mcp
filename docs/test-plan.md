@@ -805,3 +805,15 @@ The one slice whose acceptance is a *negative*: it must cost nothing and reach n
 | **COMB-37** | A failed run contributes no text and no sources, and still counts in the completion rate | unit: `merge` | ✓ |
 | **COMB-38** | A subscription run is counted and never costed, so it cannot sit at the cheap end of the frontier for free | unit: `merge` | ✓ |
 | **COMB-39** | The overlap identity folds `http` onto `https`, and matches the due-weight scorer's answer | unit: `overlap` | ✓ |
+
+### BENCH-14: the suite in a fresh worktree
+
+The whole feature pipeline runs in git worktrees, and a worktree has no `node_modules` of its own. These rows cover the harness rather than the product: what has to be true for a runner on a branch they did not write to trust a red test.
+
+| AC | Requirement | Test | Status |
+|---|---|---|---|
+| **WT-01** | The detector CLI's command logic is callable in-process: arguments in, exit code out, output through injected sinks rather than the process streams | unit: `cli` | ✓ |
+| **WT-02** | Every command branch (score, `--help`, the `judge` refusal, `capture` validation, `construct`) is proved without spawning anything, so no assertion depends on finding an interpreter on disk | unit: `cli` | ✓ |
+| **WT-03** | Importing the entry module does not run it: no corpus is scored and nothing reaches stdout as an import side effect | unit: `cli` | ✓ |
+| **WT-04** | The entry point is still proved wired by one real process over real argv, and that process's interpreter is resolved through Node's own resolution rather than an assumed layout | unit: `cli` | ✓ |
+| **WT-05** | When the interpreter cannot be resolved the one process-dependent case skips rather than fails, and its reason names the missing binary, the fix, and what is still covered | unit: `cli` | ✓ |
