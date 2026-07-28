@@ -677,8 +677,15 @@ export function paretoFrontier(
 
   const total = paired + spread + point;
   const checked = paired + spread;
+  // Two facts, because either alone gets a case wrong. Pair counts alone call a
+  // set where exactly one candidate carries a spread "point", and the unchecked
+  // sentence then says no spreads were supplied when one was. Candidate counts
+  // alone cannot see an oracle, which decides pairs rather than candidates. So:
+  // checked when every pair had an instrument, point only when no pair had one
+  // AND nobody supplied a spread, and mixed for everything between.
+  const withSpread = eligible.filter((c) => c.scoreSpread != null).length;
   const separation: FrontierResult['separation'] =
-    checked === total ? 'checked' : checked === 0 ? 'point' : 'mixed';
+    checked === total ? 'checked' : checked === 0 && withSpread === 0 ? 'point' : 'mixed';
 
   return {
     frontier,
