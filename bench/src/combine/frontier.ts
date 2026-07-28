@@ -151,12 +151,16 @@ export interface FrontierCandidate {
    * is worse than either, and a frontier is a *stronger* claim than a ranking:
    * saying a combination is dominated says nobody should ever buy it.
    *
+   * A pair where **only one** side carries a spread is tied rather than
+   * compared on its point estimates, so supplying this for some combinations
+   * and not others cannot penalise the ones you measured. It used to: the
+   * overlap check needs both sides, so such a pair fell through to a raw
+   * comparison and 0.001 eliminated the candidate that had been measured.
+   *
    * Omitted on **every** candidate, the frontier is a point-estimate frontier
-   * and says so in `SEPARABILITY_UNCHECKED`. Omitted on **some**, the pairs
-   * that had one were checked and the pairs that did not were not, which is
-   * `SEPARABILITY_MIXED`; that state used to advertise the checked sentence
-   * over pairs compared as point estimates, and the candidate carrying the
-   * spread was the one it eliminated.
+   * and says so in `SEPARABILITY_UNCHECKED`. Omitted often enough that some
+   * pair has neither side measured, that pair alone is a point comparison and
+   * the result says `SEPARABILITY_MIXED`.
    */
   readonly scoreSpread?: SpreadReport | null | undefined;
   /**
@@ -211,6 +215,13 @@ export interface FrontierOptions {
    * has no comparison at all for the pair; a comparison that ran the gates and
    * was refused comes back as not separated, and the pair is tied.
    *
+   * **It must be symmetric.** The sweep evaluates each unordered pair once and
+   * reads it in both directions, so it calls this with one argument order only
+   * and flips the answer. `comparison.ts`'s `separatorFor` is symmetric by
+   * construction, looking up both orders in one map, and an oracle keyed on
+   * ordered pairs would have half its answers ignored rather than contradicted.
+   * Stated here because it is a requirement a caller cannot infer.
+   *
    * Nothing supplies one today. `bench/src/combine/` has no consumer and the
    * statistics are computed over backends rather than over combinations, so
    * this is the seam a future consumer fills rather than a wire that is live.
@@ -225,20 +236,20 @@ export interface FrontierOptions {
  * reworded into a claim the evidence does not support.
  */
 export const SEPARABILITY_CHECKED =
-  'Every pair compared here was checked: two combinations whose observed score spreads overlap are ' +
-  'treated as tied on that axis, so neither dominates the other on a score difference this sample ' +
-  'cannot establish. That is the same descriptive check bench/src/report/rank.ts applies before ' +
-  'ordering two backends, imported rather than restated. It is not a significance test. Where a paired ' +
-  'difference with a bootstrap interval was supplied it decided instead, and where it was not, the ' +
-  'interquartile overlap did.';
+  'Every pair compared here was checked, so no combination was called dominated on a score difference ' +
+  'this sample cannot establish. Where both combinations carried a score spread, an overlap between ' +
+  'them was treated as a tie. Where only one carried a spread the pair was tied outright, because a ' +
+  'difference between a measured value and an unmeasured one is not one the sample establishes. And ' +
+  'where a paired difference with a bootstrap interval was supplied, it decided instead. The overlap ' +
+  'rule is the same descriptive check bench/src/report/rank.ts applies before ordering two backends, ' +
+  'imported rather than restated. It is not a significance test.';
 
 export const SEPARABILITY_MIXED =
-  'Some pairs were checked and some were not. Where both combinations carried a score spread, an ' +
-  'overlap between them was treated as a tie; where either did not, the pair was compared as two point ' +
-  'estimates and any difference was taken at face value. The distinction matters in the direction ' +
-  'nobody expects: a candidate that carries a spread can be eliminated by one that does not, so ' +
-  'supplying evidence for some combinations and not others penalises the ones you measured. Read a ' +
-  'dominance verdict here as checked only for the pairs that had the evidence.';
+  'Some pairs were checked and some were not. A pair where either combination carried a score spread ' +
+  'was decided by the spread rule, and a pair where neither did was compared as two point estimates ' +
+  'with any difference taken at face value. So a dominance verdict here is checked only for the pairs ' +
+  'that had the evidence, and the ones that did not are exactly as strong a claim as a point estimate ' +
+  'can carry, which is not very.';
 
 export const SEPARABILITY_UNCHECKED =
   'No score spreads were supplied, so this is a point-estimate frontier: every score difference, however ' +
@@ -411,11 +422,31 @@ function compareScore(
     // `rank.ts` ties on exactly this disagreement.
     return { verdict: pairedVerdict === point ? pairedVerdict : 'tied', instrument: 'paired' };
   }
-  if (a.scoreSpread != null && b.scoreSpread != null) {
+  const aSpread = a.scoreSpread ?? null;
+  const bSpread = b.scoreSpread ?? null;
+  if (aSpread !== null && bSpread !== null) {
     return {
-      verdict: spreadsOverlap(a.scoreSpread, b.scoreSpread) ? 'tied' : byPoint(a, b),
+      verdict: spreadsOverlap(aSpread, bSpread) ? 'tied' : byPoint(a, b),
       instrument: 'spread',
     };
+  }
+  if (aSpread !== null || bSpread !== null) {
+    // Exactly one side was measured, and the pair is **tied**.
+    //
+    // This is the second half of the trap, and it is a behaviour rather than a
+    // sentence. `spreadsOverlap` needs both sides, so a pair with one spread and
+    // one bare point estimate used to fall through to a raw comparison: 0.001
+    // eliminated the candidate that had actually been measured, and supplying
+    // evidence for some combinations and not others penalised the ones you
+    // measured. Fixing only the sentence would have left that intact.
+    //
+    // Tying is `spreadsOverlap`'s own rule one step out. It already treats a
+    // supplied report whose spread was withheld below the floor as overlapping,
+    // "because two values whose uncertainty is unknown cannot be separated",
+    // and an absent report is less information than a withheld one rather than
+    // more. Domination says nobody should ever buy the loser; that cannot rest
+    // on a comparison where one side's uncertainty was never established.
+    return { verdict: 'tied', instrument: 'spread' };
   }
   return { verdict: byPoint(a, b), instrument: 'point' };
 }
@@ -684,15 +715,13 @@ export function paretoFrontier(
 
   const total = paired + spread + point;
   const checked = paired + spread;
-  // Two facts, because either alone gets a case wrong. Pair counts alone call a
-  // set where exactly one candidate carries a spread "point", and the unchecked
-  // sentence then says no spreads were supplied when one was. Candidate counts
-  // alone cannot see an oracle, which decides pairs rather than candidates. So:
-  // checked when every pair had an instrument, point only when no pair had one
-  // AND nobody supplied a spread, and mixed for everything between.
-  const withSpread = eligible.filter((c) => c.scoreSpread != null).length;
+  // Decided purely on the pairs, which is now exactly equivalent to deciding it
+  // on the candidates and is a claim about what happened rather than about what
+  // was supplied. A pair counts as checked when either side carried a spread,
+  // because that is enough for the spread rule to reach a verdict on it, so the
+  // only unchecked pair is one where neither side was measured at all.
   const separation: FrontierResult['separation'] =
-    checked === total ? 'checked' : checked === 0 && withSpread === 0 ? 'point' : 'mixed';
+    checked === total ? 'checked' : checked === 0 ? 'point' : 'mixed';
 
   return {
     frontier,

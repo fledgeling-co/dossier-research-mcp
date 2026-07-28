@@ -872,6 +872,7 @@ Two further rows, added after the out-of-family review of this change found each
 | **CONF-U2** | The multi-word search path terminates when a rejected match sits on a surrogate pair, rather than returning the same match forever. The spin is synchronous, so a reintroduction hangs the suite rather than failing the case; the row is honest about which | unit: `confidence` | ✓ |
 | **SYND-U7** | A word whose case fold creates a composable sequence folds onto one token rather than two spellings, so the fold runs twice | unit: `syndication` | ✓ |
 ### BENCH-17 — the frontier's floors
+### BENCH-17: the frontier's floors
 
 Appended 28 July 2026. `bench/src/combine/` published a Pareto frontier with none of the four floors `bench/src/report/` enforces and no path by which a tie test could reach it. Calling a combination dominated says nobody should ever buy it, which is a stronger claim than an ordering, so these rows are mostly about what the frontier now refuses to say.
 
@@ -885,11 +886,11 @@ Two existing rows are **amended rather than replaced**, and the amendment is the
 | **COMB-43** | A candidate carrying no eligibility at all is refused as `eligibility-not-supplied`, never defaulted to eligible | unit: `frontier` | ✓ |
 | **COMB-44** | A member absent from the eligibility map is not scorable, and the reason names the member | unit: `evaluate` | ✓ |
 | **COMB-45** | A combination is eligible only when every member in it is, because its score is the union of them | unit: `evaluate` | ✓ |
-| **COMB-46** | With some candidates carrying a spread and some not, the mixed sentence is used and the checked one is not; the candidate holding the spread is not eliminated by a bare point estimate | unit: `frontier` | ✓ |
+| **COMB-46** | A pair where only one side carries a spread is tied, so the candidate that was measured is never eliminated by a bare point estimate; and where a pair had neither side measured the mixed sentence is used rather than the checked one | unit: `frontier` | ✓ |
 | **COMB-47** | The checked sentence appears only when every eligible candidate carries a spread | unit: `frontier` | ✓ |
 | **COMB-48** | An injected paired verdict decides a pair where it has one, and the interquartile overlap decides only where it does not | unit: `frontier` | ✓ |
 | **COMB-49** | A paired verdict that separates a pair in the opposite direction to the point estimates ties, rather than letting either dominate | unit: `frontier` | ✓ |
-| **COMB-50** | The completion floor arrives inside BENCH-08's verdict, and no code in `bench/src/combine/` compares a completion rate against a threshold of its own | unit: `evaluate`, `eligibility` | ✓ |
-| **COMB-51** | The join end to end: stored cells through `harvest` and `aggregate`, verdicts mapped onto members, frontier withheld with the report's reason word | unit: `eligibility` | ✓ |
+| **COMB-50** | The completion floor arrives inside BENCH-08's verdict; the only completion comparison anywhere in `bench/src/combine/` is `worstCompletion < 1`, which decides whether to print a note, and the test enumerates every such comparison rather than pattern-banning one spelling of it | unit: `evaluate`, `eligibility` | ✓ |
+| **COMB-51** | The join end to end: stored cells through `harvest` and `aggregate`, verdicts mapped onto members, frontier withheld with the report's reason word. The scope gate is read off the corpus counts rather than off what happened to run, and the overall scope never reports a completion failure as a corpus failure | unit: `eligibility` | ✓ |
 | **COMB-52** | `eligibility.ts` imports no filesystem, network or fetcher, so the whole directory stays pure with the adapter in it | unit: `evaluate` | ✓ |
 | **COMB-53** | A caller can supply a score spread per combination through `evaluateCombinations`, so the tie test reaches the production path rather than only its own tests | unit: `evaluate` | ✓ |

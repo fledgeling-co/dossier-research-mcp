@@ -578,8 +578,20 @@ describe('the completion floor arrives inside the verdict, never as a rule of ou
         .replace(/^\s*\/\/.*$/gm, '');
       expect(`${file}: ${code}`).not.toMatch(/MIN_COMPLETION_SHARE/);
       expect(`${file}: ${code}`).not.toMatch(/minCompletionShare/);
-      // And no threshold of its own under another name.
-      expect(`${file}: ${code}`).not.toMatch(/completionRate\s*[<>]/);
+      // Every comparison against any completion-shaped value, aliased or not,
+      // enumerated rather than pattern-banned. The earlier version of this
+      // check greped for `completionRate` followed by an operator, and
+      // `evaluate.ts` aliases the value one statement before comparing it, so a
+      // future `if (worstCompletion < 0.6) return withheld` would have walked
+      // straight past a test whose whole job is to stop exactly that.
+      const comparisons = [
+        ...code.matchAll(/\b(\w*[cC]ompletion\w*)\s*(<=|>=|<|>)\s*([\w.]+)/g),
+      ].map((m) => `${m[1] ?? ''} ${m[2] ?? ''} ${m[3] ?? ''}`);
+      for (const found of comparisons) {
+        // The one permitted comparison decides whether to PRINT a note, not
+        // whether a figure may be quoted. Anything else is a fifth floor.
+        expect(`${file}: ${found}`).toContain('worstCompletion < 1');
+      }
     }
   });
 
@@ -695,10 +707,11 @@ describe('the tie test reaches the production path (COMB-53)', () => {
     const report = evaluate({
       members,
       scoreCombination,
-      // Only the singletons get one. The pair does not, which is exactly the
-      // mixed state the separability sentence now has a word for.
+      // Only `alpha` gets one, so the pair between `beta` and `alpha+beta` has
+      // neither side measured. That is the one genuinely mixed shape: a pair
+      // where either side carries a spread still reaches the spread rule.
       scoreSpread: (m) =>
-        m.memberIds.length === 1 ? scoreSpread(samples[combinationId(m.memberIds)] ?? []) : null,
+        combinationId(m.memberIds) === 'alpha' ? scoreSpread(samples['alpha'] ?? []) : null,
       measure: ACCURACY,
     });
     expect(report.frontier.separation).toBe('mixed');

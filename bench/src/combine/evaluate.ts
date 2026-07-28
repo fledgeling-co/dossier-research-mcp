@@ -80,7 +80,12 @@ export interface EvaluateInput {
    * force every caller who has no repetitions to invent something. Build it
    * with `scoreSpread` from `spread-helpers.ts`, which is `summarise` from
    * `bench/src/report/spread.ts` and therefore the same quartile definition,
-   * the same floor and the same withheld wording the report prints.
+   * the same floor number and the same withheld wording the report prints. One
+   * difference is the caller's to honour rather than this module's to enforce:
+   * `aggregate.ts` passes the completed count separately, so a metric that four
+   * of five completed cells could not measure cannot claim a five-sample
+   * spread, while the helper judges the floor on the length of the list handed
+   * to it. Hand it one value per completed measurement and the two agree.
    *
    * Returning `null` for some combinations and a report for others is allowed
    * and is reported honestly: the frontier says `mixed` rather than claiming

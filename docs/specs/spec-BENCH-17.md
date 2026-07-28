@@ -146,11 +146,11 @@ When withheld, `frontier` is `null` and `dominated` is empty. The numbers are st
 
 Three states rather than two, which is the trap fix:
 
-- every eligible candidate carries a spread, so every pair had both: `SEPARABILITY_CHECKED`
-- none does: `SEPARABILITY_UNCHECKED`
-- some do and some do not: `SEPARABILITY_MIXED`, which names the count and says plainly that the pairs without one were compared as point estimates
+- every compared pair reached an instrument: `SEPARABILITY_CHECKED`
+- no pair did, and nobody supplied a spread: `SEPARABILITY_UNCHECKED`
+- some pairs did and some did not: `SEPARABILITY_MIXED`
 
-Deciding this on the candidates rather than on the pairs is what makes it O(n) and order-independent, and it is exactly equivalent: every pair has both spreads if and only if every candidate has one. A fourth constant covers the withheld case, where nothing was compared and neither sentence would be true.
+**Amended after the adversarial review**, which found the first attempt fixed the sentence and not the behaviour. A pair where exactly one side carries a spread is now **tied**, on `spreadsOverlap`'s own rule that two values whose uncertainty is unknown cannot be separated. That makes a pair checked when **either** side was measured, so the classification is decided purely on the pairs and the three sentences are each true of the result they ride on. A fourth constant covers the withheld case, where nothing was compared and none of the three would be true.
 
 `SEPARABILITY_CHECKED`'s current text asserts that "evaluateCombinations sets no score spread and offers no parameter through which one could arrive". That sentence is the defect describing itself and stops being true in this change, so it is rewritten rather than left to become a lie.
 

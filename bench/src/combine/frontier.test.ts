@@ -357,11 +357,14 @@ describe('the separability claim follows what actually happened (COMB-35, COMB-4
     expect(result.pairs).toEqual({ total: 1, paired: 0, spread: 0, point: 1 });
   });
 
-  it('says mixed rather than checked when only some did (COMB-46)', () => {
+  it('says mixed rather than checked when a pair had neither side measured (COMB-46)', () => {
     // The trap, reproduced against the old code and fixed here. `paretoFrontier`
     // set the checked sentence when SOME candidate had a spread, while the
     // comparison needs BOTH, so pairs with one spread fell through to a raw
     // point comparison under a sentence claiming the sample had been asked.
+    // Three candidates, one spread: two pairs reach the spread rule and the
+    // pair between the two bare candidates does not, which is a genuinely
+    // mixed result and now says so.
     const result = paretoFrontier(
       [spread('alpha', 0.8, [0.79, 0.8, 0.81]), at('beta', 0.801, 1, 0.5), at('gamma', 0.7, 1, 0.5)],
       ACCURACY,
@@ -370,23 +373,44 @@ describe('the separability claim follows what actually happened (COMB-35, COMB-4
     expect(result.separability).toBe(SEPARABILITY_MIXED);
     expect(result.separation).toBe('mixed');
     expect(result.separability).not.toBe(SEPARABILITY_CHECKED);
-    expect(result.pairs.total).toBe(3);
-    expect(result.pairs.point).toBeGreaterThan(0);
+    expect(result.pairs).toEqual({ total: 3, paired: 0, spread: 2, point: 1 });
+    // And the sentence is true of this result rather than of a different one.
+    expect(SEPARABILITY_MIXED).toMatch(/Some pairs were checked and some were not/);
   });
 
-  it('warns that the candidate carrying the evidence is the one a mixed set penalises (COMB-46)', () => {
-    // Worse than an overstated sentence, and this is the fixture that shows it:
+  it('does not let a bare point estimate eliminate the candidate that was measured (COMB-46)', () => {
+    // The trap's second half, and it is a behaviour rather than a sentence.
     // `alpha` carries a spread of 0.79 to 0.81 and `beta` is a bare 0.801, so
-    // `spreadsOverlap` never runs and 0.001 eliminates the candidate that was
-    // actually measured.
+    // `spreadsOverlap` has only one side to work with. It used to fall through
+    // to a raw comparison and 0.001 eliminated the candidate that had actually
+    // been measured, which made supplying evidence a liability. The pair is now
+    // tied, on `spreadsOverlap`'s own rule that two values whose uncertainty is
+    // unknown cannot be separated.
     const result = paretoFrontier(
       [spread('alpha', 0.8, [0.79, 0.8, 0.81]), at('beta', 0.801, 1, 0.5)],
       ACCURACY,
       SCORABLE,
     );
-    expect(result.dominated.map((d) => d.id)).toEqual(['alpha']);
-    expect(result.separability).toBe(SEPARABILITY_MIXED);
-    expect(SEPARABILITY_MIXED).toMatch(/can be eliminated by one that does not/);
+    expect(result.dominated).toEqual([]);
+    expect(result.frontier?.map((c) => c.id).sort()).toEqual(['alpha', 'beta']);
+    // One pair, decided by the spread rule, so every pair here was checked.
+    expect(result.pairs).toEqual({ total: 1, paired: 0, spread: 1, point: 0 });
+    expect(result.separation).toBe('checked');
+  });
+
+  it('still lets a one-sided pair be separated on cost or robustness', () => {
+    // Tied on score is not immune. `cheap` cannot out-score `dear` on evidence
+    // this thin, and it does not have to: it is strictly cheaper.
+    const result = paretoFrontier(
+      [
+        { ...spread('cheap', 0.8, [0.79, 0.8, 0.81]), costUsd: 1 },
+        { ...at('dear', 0.801, 9, 0.5) },
+      ],
+      ACCURACY,
+      SCORABLE,
+    );
+    expect(result.dominated.map((d) => d.id)).toEqual(['dear']);
+    expect(result.dominated[0]!.why).toMatch(/cannot be separated on accuracy/);
   });
 
   it('keeps the two sentences honest about what each is', () => {

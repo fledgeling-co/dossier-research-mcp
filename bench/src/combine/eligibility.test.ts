@@ -208,14 +208,70 @@ describe('the adapter refuses what it cannot vouch for', () => {
     expect(eligibility.members['lane']!.verdict.scorable).toBe(false);
   });
 
-  it('reports a category the corpus holds no task of at all, which the aggregate has no verdict for', () => {
+  it('reports a category the corpus holds no task of at all with the real count', () => {
     const eligibility = eligibilityFromAggregate(
       agg,
       { kind: 'category', category: 'contested' },
       memberProviders,
     );
     expect(eligibility.scope.scorable).toBe(false);
-    expect(eligibility.scope.scorable ? '' : eligibility.scope.why).toMatch(/no contested task at all/);
+    const why = eligibility.scope.scorable ? '' : eligibility.scope.why;
+    expect(why).toContain('the corpus holds 0 contested tasks');
+    expect(why).toContain(`below the floor of ${String(MIN_TASKS_PER_CATEGORY)}`);
+  });
+
+  it('reads the scope gate off the corpus counts, never off what happened to run', () => {
+    // The defect this pins: reading the gate off `categoryGroups` decides a
+    // property of the CORPUS from the cells a backend happened to produce.
+    // `comparison.ts` is explicit that the scope gate is "read off the same
+    // corpus counts rather than re-derived from what happened to run", and an
+    // empty cell store over a full corpus is where the two answers diverge.
+    const tasks = Array.from({ length: MIN_TASKS_PER_CATEGORY * 2 }, (_, i) =>
+      task(`t${String(i)}`, 'technical'),
+    );
+    const nothingRan = aggregate({ cells: [], corpus: corpus(tasks) });
+    expect(nothingRan.categoryGroups).toHaveLength(0);
+    expect(nothingRan.corpus.tasksByCategory.technical).toBe(MIN_TASKS_PER_CATEGORY * 2);
+
+    const eligibility = eligibilityFromAggregate(
+      nothingRan,
+      { kind: 'category', category: 'technical' },
+      memberProviders,
+    );
+    // The corpus is fine. It is the members that have nothing, and that is a
+    // different verdict with a different fix.
+    expect(eligibility.scope.scorable).toBe(true);
+    expect(eligibility.members['gemini']!.verdict.scorable).toBe(false);
+  });
+
+  it('does not report a completion failure as a corpus failure on the overall scope', () => {
+    // `aggregate.ts` says in terms that the four reasons "have different causes
+    // and different fixes, so they are never flattened into one word".
+    // Hard-coding a corpus reason here told a reader to author tasks when the
+    // real cause was a backend completing a fifth of its attempts.
+    const tasks = Array.from({ length: MIN_TASKS_PER_CATEGORY }, (_, i) =>
+      task(`t${String(i)}`, 'technical'),
+    );
+    const flaky = aggregate({
+      cells: tasks.flatMap((t) => [
+        scoredCell(t.id, 'gemini', 1, 'technical', { accuracy: 0.8 }),
+        ...Array.from({ length: 4 }, (_, r) =>
+          scoredCell(t.id, 'gemini', r + 2, 'technical', {}, { outcome: 'failed' }),
+        ),
+      ]),
+      corpus: corpus(tasks),
+    });
+    const backend = flaky.backends.find((b) => b.provider === 'gemini')!;
+    expect(backend.verdict.scorable).toBe(false);
+    const cause = backend.verdict.scorable ? '' : backend.verdict.reason;
+
+    const eligibility = eligibilityFromAggregate(flaky, { kind: 'overall' }, [
+      { id: 'gemini', providers: ['gemini'] },
+    ]);
+    expect(eligibility.scope.scorable).toBe(false);
+    // The scope's reason is the backend's own, never a fabricated corpus one.
+    expect(eligibility.scope.scorable ? '' : eligibility.scope.reason).toBe(cause);
+    expect(cause).not.toBe('under-sampled-corpus');
   });
 });
 

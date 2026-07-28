@@ -125,42 +125,60 @@ export function combinationEligibility(
 /**
  * The scope's verdict, read the way `comparison.ts` reads its scope gate.
  *
- * For a category, the answer is a property of the corpus rather than of any
- * backend, so every `CategoryGroup` in an under-sampled category carries the
- * *same* `under-sampled-corpus` verdict with the same provider-independent
- * sentence. Lifting that sentence is what makes a withheld frontier print the
- * report's own words rather than a paraphrase that drifts from them.
+ * For a category the gate is the **corpus count**, not what happened to run,
+ * which is `comparison.ts`'s own wording: "read off the same corpus counts
+ * rather than re-derived from what happened to run". Reading it off
+ * `categoryGroups` instead would decide a property of the corpus from the
+ * cells a backend happened to produce, so an empty cell store over a corpus of
+ * ten tasks would report a corpus that holds none.
  *
- * A category the corpus holds no tasks of at all produces no groups, so there
- * is no sentence to lift. That case is worded here because BENCH-08 has no
- * verdict for it: it never crosses a provider with a category nobody authored.
+ * The **sentence** is still lifted rather than written, wherever the aggregate
+ * wrote one. Every `CategoryGroup` in an under-sampled category carries the
+ * same `under-sampled-corpus` verdict with the same provider-independent
+ * words, so lifting it is what makes a withheld frontier print the report's own
+ * sentence. The fallback below is reached only when no provider has a cell in
+ * the category, which is the one case the aggregate never writes a sentence
+ * for, and it is built from the same two numbers.
  */
 function scopeVerdict(agg: BenchAggregate, scope: EligibilityScope): ScorableVerdict {
   if (scope.kind === 'category') {
+    const tasksInCorpus = agg.corpus.tasksByCategory[scope.category];
+    if (tasksInCorpus >= agg.minTasksPerCategory) return { scorable: true };
     for (const group of agg.categoryGroups) {
       if (group.category !== scope.category) continue;
       if (!group.verdict.scorable && group.verdict.reason === 'under-sampled-corpus') {
         return group.verdict;
       }
-      // A group exists and the corpus floor did not fire, so the scope is fine
-      // and whatever withheld this backend is the backend's own business.
-      return { scorable: true };
     }
     return {
       scorable: false,
       reason: 'under-sampled-corpus',
       why:
-        `the corpus holds no ${scope.category} task at all, so there is nothing to score in this ` +
-        'category and no combination of backends can change that. The fix is authoring tasks.',
+        `the corpus holds ${String(tasksInCorpus)} ${scope.category} task${tasksInCorpus === 1 ? '' : 's'}, ` +
+        `below the floor of ${String(agg.minTasksPerCategory)}. No backend is scored in this category; ` +
+        'the fix is authoring tasks, not re-running.',
     };
   }
   if (agg.backends.some((b) => b.verdict.scorable)) return { scorable: true };
+  // Every backend was refused, each for its own reason. The reason word is
+  // taken from the first refusal rather than invented, because
+  // `aggregate.ts` is explicit that `under-sampled-corpus`,
+  // `nothing-completed`, `under-sampled-completed` and `under-completed` "have
+  // different causes and different fixes, so they are never flattened into one
+  // word". Hard-coding a corpus reason here told a reader to author tasks when
+  // the real cause was a backend completing a fifth of its attempts. Every
+  // backend's own sentence is carried, so the mixture is visible.
+  const refusals = agg.backends.filter((b) => !b.verdict.scorable);
+  const first = refusals[0]?.verdict;
   return {
     scorable: false,
-    reason: 'under-sampled-corpus',
+    reason: first !== undefined && !first.scorable ? first.reason : 'nothing-completed',
     why:
       'no backend may be scored overall, so there is no scope for a frontier to be stated in. ' +
-      agg.backends.map((b) => (b.verdict.scorable ? '' : b.verdict.why)).join(' ').trim(),
+      refusals
+        .map((b) => (b.verdict.scorable ? '' : b.verdict.why))
+        .filter((w) => w !== '')
+        .join(' '),
   };
 }
 

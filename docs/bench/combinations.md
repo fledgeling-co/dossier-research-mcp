@@ -116,7 +116,7 @@ A frontier is stated only when all four hold, and the result names the one that 
 
 A combination is only as eligible as its **worst** member, because its score is the union of its members: a member whose own figure was withheld cannot be half of a union that gets quoted.
 
-`MIN_COMPLETION_SHARE` needs no gate of its own here. It is already the fourth arm of `verdictFor`, so it arrives inside the verdict with the other three. `mergeCombination` computes a completion rate and the report prints the worst one as a note; thresholding that as well would be a fifth floor, disagreeing with the four in `aggregate.ts` the first time either moved. Nothing in `bench/src/combine/` compares a completion rate against anything, and a test asserts it by reading the source.
+`MIN_COMPLETION_SHARE` needs no gate of its own here. It is already the fourth arm of `verdictFor`, so it arrives inside the verdict with the other three. `mergeCombination` computes a completion rate and the report prints the worst one as a note; thresholding that as well would be a fifth floor, disagreeing with the four in `aggregate.ts` the first time either moved. **Nothing here thresholds a completion rate to decide whether a figure may be quoted.** The one comparison that exists is `worstCompletion < 1`, which decides whether to print that note, and a test enumerates every completion comparison in the directory and fails on any other. That test is written to enumerate rather than to ban one spelling, because the value is aliased a statement before it is compared and a pattern matching only `completionRate <` would have walked straight past a floor added under the alias.
 
 When a frontier is withheld the numbers still print. Every combination keeps its score, its cost and its overlap profile, which is `rank.ts`'s own posture one claim stronger: the numbers are the numbers, and it is the sample that cannot order them.
 
@@ -136,7 +136,11 @@ Without spreads the frontier is still computed and says so, rather than presenti
 - **unchecked**, when no pair did and nobody supplied a spread;
 - **mixed**, when some pairs were checked and some were not.
 
-The old code set the checked sentence when **some** candidate had a spread, while the comparison needs **both**. A mixed set therefore advertised the stronger sentence over pairs compared as point estimates. It is worse than an overstated sentence, and the fixture that shows it is in the tests: `alpha` carries a spread of 0.79 to 0.81 and `beta` is a bare 0.801, so `spreadsOverlap` never runs and 0.001 eliminates the candidate that was actually measured. **Supplying evidence for some combinations and not others penalised the ones you measured.**
+The old code set the checked sentence when **some** candidate had a spread, while the comparison needs **both**. A mixed set therefore advertised the stronger sentence over pairs compared as point estimates.
+
+**The sentence was the smaller half.** `spreadsOverlap` needs both sides, so a pair with one spread and one bare point estimate fell through to a raw comparison: `alpha` carrying a spread of 0.79 to 0.81 lost to a bare 0.801, and the candidate that had actually been measured was the one eliminated. Supplying evidence for some combinations and not others **penalised the ones you measured**. Fixing only the wording would have left that intact, so a pair where exactly one side carries a spread is now **tied**. That is `spreadsOverlap`'s own rule one step out: it already treats a supplied report whose spread was withheld below the floor as overlapping, "because two values whose uncertainty is unknown cannot be separated", and an absent report is less information than a withheld one rather than more. Such a pair can still be separated on cost or robustness, which is where a genuine difference lives.
+
+So a pair counts as checked when **either** side carried a spread, and the only unchecked pair is one where neither side was measured at all.
 
 
 ### Per category, not one global winner
