@@ -617,11 +617,35 @@ describe('CLI-32: a CLI is run with stdin closed, in a scratch directory', () =>
     const work = cliWorkDir(root);
     const { existsSync, readdirSync } = await import('node:fs');
     expect(existsSync(work), 'the directory itself is the contract').toBe(true);
-    expect(work.startsWith(root), 'and it lives under the store, not the cwd').toBe(true);
+    // This assertion used to require the opposite, and the requirement was the
+    // defect. Putting the scratch directory under the store left every CLI
+    // panel member one `..` from `reports/`, `runs/`, `sessions/` and
+    // `ledger.jsonl` — every other member's finished report, readable.
+    //
+    // That matters more here than it would elsewhere. A panel beats a single
+    // backend only because its members answer independently, and
+    // `countsAsCorroboration` treats two members agreeing as two sources. A
+    // member that read the others first is an echo, and nothing downstream can
+    // tell an echo from agreement. It was observed before it was found: one CLI
+    // member summarised two others' reports and its own run was billed as an
+    // independent voice.
+    expect(work.startsWith(root), 'it must NOT live under the store').toBe(false);
     expect(
       readdirSync(work).filter((f) => f !== '.git' && f !== '.gitignore'),
       'nothing in it worth reaching for',
     ).toHaveLength(0);
+  });
+
+  it('does not sit above anything Dossier wrote, whatever the store path is', async () => {
+    // Stronger than "not under this store": the scratch directory must not be
+    // an ancestor of a store either, since `..` walks both ways badly.
+    const root = await mkdtemp(join(tmpdir(), 'wd-'));
+    const work = cliWorkDir(root);
+    expect(root.startsWith(work), 'and the store must not sit under it').toBe(false);
+    // Two different stores share one scratch directory, which is intended: it
+    // is scratch, it holds nothing, and one per store would multiply the
+    // directories without isolating anything that is not already isolated.
+    expect(cliWorkDir(await mkdtemp(join(tmpdir(), 'wd2-')))).toBe(work);
   });
 
   it('closes stdin, so a CLI that waits for input does not hang', async () => {

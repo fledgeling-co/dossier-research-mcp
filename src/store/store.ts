@@ -84,14 +84,24 @@ export class Store {
   }
 
   async init(): Promise<void> {
+    const dirs = ['runs', 'journal', 'reports'].map((d) => join(this.root, d));
     await Promise.all([
       // 0700/0600 throughout. The store holds research prompts, full reports
       // and a spend ledger; under a typical 022 umask every one of those was
       // world-readable on a shared machine.
-      mkdir(join(this.root, 'runs'), { recursive: true, mode: 0o700 }),
-      mkdir(join(this.root, 'journal'), { recursive: true, mode: 0o700 }),
-      mkdir(join(this.root, 'reports'), { recursive: true, mode: 0o700 }),
+      ...dirs.map((d) => mkdir(d, { recursive: true, mode: 0o700 })),
     ]);
+    // `mkdir` applies its mode only when it creates the directory, so a store
+    // that predates the mode above keeps whatever the umask gave it — 0755 on a
+    // default macOS install, which is how 92 finished reports came to be
+    // world-readable on this machine. Re-applied on every boot rather than at
+    // creation, so an existing store heals instead of staying wrong forever.
+    //
+    // Best-effort: a store on a filesystem that does not carry POSIX modes is
+    // not a reason to refuse to start.
+    await Promise.all(
+      [this.root, ...dirs].map((d) => chmod(d, 0o700).catch(() => undefined)),
+    );
   }
 
   /**

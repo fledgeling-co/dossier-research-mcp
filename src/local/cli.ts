@@ -1,7 +1,7 @@
 import { execFileSync, spawn } from 'node:child_process';
-import { accessSync, constants, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { accessSync, chmodSync, constants, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { access, realpath } from 'node:fs/promises';
-import { homedir } from 'node:os';
+import { homedir, tmpdir, userInfo } from 'node:os';
 import { delimiter, dirname, join, resolve } from 'node:path';
 
 /**
@@ -728,17 +728,37 @@ export function normaliseModelName(model: string): string {
  * consider trusted, and exits non-zero. It is the only CLI that does, which is
  * why Codex reported "failed to answer" while the other three answered.
  *
- * A dedicated, empty, git-initialised scratch directory under the store fixes
- * both. Codex's guard is satisfied rather than disabled, which is the better
- * trade: `--skip-git-repo-check` would have made the probe work by turning off
- * the check that exists to stop an agent editing files nobody can revert.
+ * A dedicated, empty, git-initialised scratch directory fixes both. Codex's
+ * guard is satisfied rather than disabled, which is the better trade:
+ * `--skip-git-repo-check` would have made the probe work by turning off the
+ * check that exists to stop an agent editing files nobody can revert.
+ *
+ * **It must not live under the store, and the first version did.** The store
+ * holds `reports/`, `runs/`, `sessions/` and `ledger.jsonl`, so a scratch
+ * directory inside it put every CLI panel member exactly one `..` from every
+ * other member's finished report. That is worse than the problem it replaced,
+ * in a way peculiar to this product: a panel is worth more than one backend
+ * only because its members answer independently, and `countsAsCorroboration`
+ * treats two members agreeing as two sources. A member that read the others
+ * first is not a second source, it is an echo, and nothing downstream can tell
+ * the difference. Observed in the wild before it was found here — one CLI
+ * member summarised two other members' reports.
+ *
+ * So the scratch directory goes somewhere with nothing of Dossier's above it.
+ * The store's own permissions are tightened alongside, because defence that
+ * depends on a single path choice is one refactor from being gone.
  */
-export function cliWorkDir(storeDir: string): string {
-  const dir = join(storeDir, 'cli-workdir');
+export function cliWorkDir(_storeDir: string): string {
+  // Deliberately NOT derived from storeDir. The parameter is kept so callers
+  // read unchanged and so this comment sits where the old path was built.
+  const dir = join(tmpdir(), `dossier-cli-workdir-${String(userInfo().uid)}`);
   try {
     mkdirSync(dir, { recursive: true, mode: 0o700 });
     // Empty and git-initialised: enough for Codex to consider it trusted, with
     // nothing in it worth reaching for.
+    // 0700 on a shared temp root is the whole isolation story here, so it is
+    // set explicitly rather than left to the umask.
+    chmodSync(dir, 0o700);
     if (!existsSync(join(dir, '.git'))) {
       execFileSync('git', ['init', '--quiet'], { cwd: dir, stdio: 'ignore' });
       writeFileSync(join(dir, '.gitignore'), '*\n', { mode: 0o600 });
