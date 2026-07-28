@@ -1,4 +1,5 @@
 import type { Tolerance } from '../tasks/schema.js';
+import { maskDateShapes } from './noise-shapes.js';
 import {
   AMBIGUOUS_SCALE_SUFFIXES,
   canonicaliseUnit,
@@ -177,45 +178,19 @@ export interface NumberMention {
  */
 const NUMERAL = /(?<![\d.])(?:(?<![\w])[-−])?(?:\d{1,3}(?:,\d{3})+|\d+|(?=\.\d))(?:\.\d+)?(?:[eE][+-]?\d+)?/g;
 
-const MONTH = '(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*';
-
 /**
- * Date-shaped runs, blanked before any number is read.
+ * Date, time and URL runs blanked before any number is read.
  *
- * `2026-07-01` holds a `07`, and because an unstated unit is compatible with any
- * gold unit, a gold value of seven would otherwise be recovered from a
- * publication date. The whole shape is masked rather than a rule about the
- * character after a number, because `2026-07-27` and `50-60%` have the same
- * shape at the hyphen: any rule sharp enough to drop the date also drops the
- * range, and a range is how a report writes two figures at once.
+ * The rule and every shape live in `noise-shapes.ts`, which is the **one**
+ * implementation both numeric readers share. This module and
+ * `due-weight/numbers.ts` each carried their own until BENCH-15, and each missed
+ * exactly what the other caught; the union, and the two places they genuinely
+ * disagreed, are decided there.
  *
- * Masking preserves length, so every index this module returns still refers to
- * the same position in the caller's string.
- *
- * The due-weight scorer arrived at the same rule independently and its own
- * comment records the same debt from the other side. See `deferred work` in
- * `docs/bench/scoring.md`: the two implementations should become one now that
- * both have merged, and neither could safely edit the other's file while both
- * were in flight.
+ * Re-exported here because this module's callers have always imported it from
+ * here, and because the mask is part of what `readNumbers` promises.
  */
-const DATE_SHAPES = new RegExp(
-  [
-    String.raw`\d{4}-\d{2}-\d{2}`,
-    String.raw`\d{4}/\d{2}/\d{2}`,
-    String.raw`\d{1,2}/\d{1,2}/\d{4}`,
-    String.raw`\d{1,2}(?:st|nd|rd|th)?\.?\s+${MONTH}\.?,?\s+\d{4}`,
-    String.raw`${MONTH}\.?\s+\d{1,2}(?:st|nd|rd|th)?,?\s+\d{4}`,
-  ].join('|'),
-  'gi',
-);
-
-/** Replace a run with the same number of spaces, so every offset survives. */
-const blank = (run: string): string => ' '.repeat(run.length);
-
-/** Date runs blanked. Exported so the rule is testable on its own. */
-export function maskDateShapes(text: string): string {
-  return text.replace(DATE_SHAPES, blank);
-}
+export { maskDateShapes };
 
 /**
  * Read every number in `text`, with every plausible reading of each.
