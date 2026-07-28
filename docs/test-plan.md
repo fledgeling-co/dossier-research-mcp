@@ -850,3 +850,17 @@ Five further rows, added after the out-of-family review of this slice found each
 | **STAT-20** | One overall verdict decides the scorecard, the comparison and the ranking, so a backend cannot read invalid in one and be ranked in another | unit: `aggregate`, `render` | ✓ |
 | **STAT-21** | `pass@1` and `pass^k` render invalid below the completion floor, since both are computed over the repetitions that survived | unit: `reliability`, `render` | ✓ |
 | **STAT-22** | `pass^k` is counted over the first `k` repetitions of each task, so the label and the statistic agree | unit: `reliability` | ✓ |
+
+## BENCH-18: the costume a wire story arrives in
+
+Syndication was the only text normaliser in the tree with no Unicode normalisation, and it failed open: two printings of one wire story differing only in typographic dress were counted as two independent domains, which overstates source independence in the direction that flatters the backend. The code is [`bench/src/score/syndication.ts`](../bench/src/score/syndication.ts); the reference is [`bench/source-quality.md`](bench/source-quality.md).
+
+| AC | Statement | Test | Status |
+|---|---|---|---|
+| **SYND-U1** | Two printings of one story differing only by the Alphabetic Presentation Forms ligature run collapse to one story at resemblance 1, where the un-normalised pair does not | unit: `syndication` | ✓ |
+| **SYND-U2** | The same holds for fullwidth digits and for a precomposed page against its decomposed spelling | unit: `syndication` | ✓ |
+| **SYND-U3** | Four independently written articles about one event still score 0 against each other, and one of them dressed in the same ligature costume still does not merge with a plain one | unit: `syndication` | ✓ |
+| **SYND-U4** | The normalisation form is an exported constant a test can assert, alongside every other judgement call in the module | unit: `syndication` | ✓ |
+| **SYND-U5** | `normaliseForShingling` is idempotent, so a caller that normalised first cannot land in a second coordinate system | unit: `syndication` | ✓ |
+| **SYND-U6** | The character cap is applied to the raw text, before normalisation, so a compatibility expansion cannot carry a page past the resource bound | unit: `syndication` | ✓ |
+| **CONF-U1** | A term wedged between two supplementary-plane letters is not a mention, on either side of the boundary, while a non-letter neighbour still permits the match | unit: `confidence` | ✓ |
