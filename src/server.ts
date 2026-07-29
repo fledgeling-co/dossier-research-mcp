@@ -6,6 +6,7 @@ import { backendLimitations, describeAuth, loadConfig, type Config } from './con
 import { assertStoreName, resolveCorpusClient, type CorpusClient } from './corpus/files.js';
 import { LocalCorpus } from './corpus/local.js';
 import { probeAllBrowserTools, renderBrowserTools } from './local/browser.js';
+import { renderTactics } from './research/site-tactics.js';
 import {
   CLI_ADAPTERS,
   checkAllHeadlessArgv,
@@ -322,10 +323,14 @@ export function renderPanel(panel: PanelDecision): string[] {
         // instruction: which tool, and how it reaches the session they are
         // already logged into. Telling someone to "use browser tooling" when
         // they have told you which one they have is a wasted sentence.
+        // Driver first, then the per-site detail. The general capability is
+        // one sentence and the tactics are a list; putting the list first ran
+        // the sentence onto the end of its last bullet.
         (crawl.driver === null
           ? ' Dossier drives no browser. Set DOSSIER_BROWSER_PROVIDER to the driver you have — `research_doctor` lists what is on this machine — and this recommendation will name it and how to reach your logged-in session.'
           : ` Dossier drives no browser, and you drive **${crawl.driver.label}**. Reaching your existing session: ${crawl.driver.reachesExistingSession}` +
-            (crawl.driver.caution === undefined ? '' : ` ⚠ ${crawl.driver.caution}`)),
+            (crawl.driver.caution === undefined ? '' : ` ⚠ ${crawl.driver.caution}`)) +
+        renderTactics(crawl.sites),
     );
   }
   if (panel.rejected.length > 0) {
