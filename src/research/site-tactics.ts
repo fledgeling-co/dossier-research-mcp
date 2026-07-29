@@ -52,30 +52,48 @@ export const SITE_TACTICS: readonly SiteTactic[] = [
     label: 'Reddit',
     tactics: [
       {
-        // Established here: `curl` with a non-browser user-agent against
-        // `reddit.com/r/programming/search.json` returned 403, and
-        // `oauth.reddit.com` without a token returned 403.
+        // Demoted to first place from nowhere, after the app-registration route
+        // was tried and found closed. Same shape as the LinkedIn answer, and
+        // for once the free route is not a poor substitute: the index has the
+        // pages, and reaching them needs no credential and breaks no terms.
         how:
-          'Register a free app at reddit.com/prefs/apps (type "script"), then use OAuth client_credentials ' +
-          'against oauth.reddit.com. Free, official, documented rate limits, and no third party sees the query.',
+          'Search the index, not the site: `site:reddit.com/r/<sub>` through any panel backend. No credential, ' +
+          'nothing to register, and it reaches the same public threads. This is the route to reach for first.',
         provenance: 'verified',
       },
       {
-        // "Logged-in" and "established" are both load-bearing. Tested on 29 July
-        // 2026: a FRESH Playwright Chromium, before any sign-in was attempted,
-        // was served Reddit's "You've been blocked by network security" page at
-        // /prefs/apps. Automating a browser is not the same as using yours.
+        // "Established" and "logged-in" are both load-bearing. Tested 29 July
+        // 2026: a FRESH Playwright Chromium, before any sign-in, was served
+        // "You've been blocked by network security" at /prefs/apps.
         how:
           'Your own established browser profile, already signed in — not an automated one. A fresh Playwright ' +
-          'Chromium is served a network-security block page before it can even reach the login form, so this ' +
-          'route means a driver that attaches to the browser you already use, such as chrome-devtools-mcp with ' +
-          '--autoConnect.',
+          'Chromium is served a network-security block page before it can even reach a login form, so this means ' +
+          'a driver that ATTACHES to the browser you already use, such as chrome-devtools-mcp with --autoConnect.',
         provenance: 'verified',
       },
     ],
     deadEnds: [
       {
-        // Both statuses observed directly rather than inferred from docs.
+        // The correction. This file previously recommended registering a script
+        // app as the primary route. Walked end to end on 29 July 2026 and it
+        // does not complete: `create app` returns only a link to the
+        // Responsible Builder Policy and creates nothing.
+        //
+        // The gate is not a form to fill in harder. Reddit's own text routes
+        // Data API requests to those with "a valid moderation use case", and
+        // the support form itself says developers should go through Devvit
+        // first and to use the form only for what Devvit cannot support. Devvit
+        // builds apps that live ON Reddit — games and mod tools. A research
+        // tool reading Reddit is neither of those things, so there is no
+        // sanctioned route for it, rather than a slow one.
+        what:
+          'Registering an app at reddit.com/prefs/apps. Self-serve creation ended around November 2025: ' +
+          '`create app` now returns a link to the Responsible Builder Policy and creates nothing. Approval is ' +
+          'routed to moderation use cases, and the request form directs developers to Devvit first — which ' +
+          'builds apps hosted on Reddit, not tools that read it. Credentials issued before the change still work.',
+        provenance: 'verified',
+      },
+      {
         what:
           'The old `.json` endpoints. `reddit.com/r/…/search.json` answers 403 to a non-browser user-agent, ' +
           'and `oauth.reddit.com` answers 403 without a token. Advice that says otherwise predates the change.',
@@ -84,8 +102,8 @@ export const SITE_TACTICS: readonly SiteTactic[] = [
       {
         what:
           'Driving a fresh automated browser at it. Playwright Chromium with a clean profile is served ' +
-          '"You\u2019ve been blocked by network security" on /prefs/apps, with no login attempted — so the block ' +
-          'is on the browser, not the account.',
+          '"You\u2019ve been blocked by network security", with no login attempted — the block is on the ' +
+          'browser, not the account. Reddit\u2019s own help centre is behind the same wall.',
         provenance: 'verified',
       },
       {

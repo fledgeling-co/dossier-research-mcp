@@ -31,7 +31,23 @@ describe('the recorded tactics', () => {
     const reddit = tacticFor('reddit.com');
     const dead = reddit?.deadEnds.find((d) => d.what.includes('.json'));
     expect(dead?.provenance).toBe('verified');
-    expect(reddit?.tactics[0]?.how).toMatch(/prefs\/apps/);
+  });
+
+  it('does not send anyone to register a Reddit app, because that route is closed', () => {
+    // This file shipped in 0.13.x recommending exactly that, and it was wrong.
+    // Walked end to end on 29 July 2026: `create app` returns only a link to
+    // the Responsible Builder Policy and creates nothing. The gate is not a
+    // form to try harder at — approval is routed to moderation use cases, and
+    // the request form sends developers to Devvit, which builds apps hosted ON
+    // Reddit rather than tools that read it.
+    const reddit = tacticFor('reddit.com');
+    // prefs/apps may only appear as a dead end, never as a tactic.
+    expect(reddit?.tactics.some((x) => x.how.includes('prefs/apps'))).toBe(false);
+    const closed = reddit?.deadEnds.find((d) => d.what.includes('prefs/apps'));
+    expect(closed?.provenance).toBe('verified');
+    expect(closed?.what).toMatch(/Devvit/);
+    // And the free route it was displaced by leads instead.
+    expect(reddit?.tactics[0]?.how).toMatch(/site:reddit\.com/);
   });
 
   it('does not claim a vendor’s account as its own finding', () => {
