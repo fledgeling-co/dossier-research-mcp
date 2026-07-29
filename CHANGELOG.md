@@ -8,6 +8,31 @@ This project follows [semantic versioning](https://semver.org/). Until 1.0 the m
 
 ## [Unreleased]
 
+### Added
+
+- `research_doctor` now reports which backends' web search looks broken, judged
+  from their own finished runs rather than from a probe. A run that completes and
+  cites nothing at all is the signature of a search that did not run, and the
+  backend then writes a fluent report explaining why it could not research. The
+  panel says so before the slot is spent, instead of the merge saying so after.
+  A backend is only called failing after two consecutive sourceless runs, because
+  one happens for reasons that are not the backend's fault, and it clears the
+  moment it cites something again. It is a warning, never a silent exclusion.
+
+### Fixed
+
+- `research_synthesise` could overflow a caller's context. Six merged runs
+  returned about 50,000 characters in one result and blew the token limit. It now
+  takes `maxTokens` (default 20,000) and trims claim lists and the source registry
+  to fit, saying how many lines it withheld. When the registry is trimmed the
+  instruction changes with it: the report says how many of the sources it is
+  showing and that nothing outside the shown list may be cited, rather than
+  telling the caller to cite only from a list whose tail they were never shown.
+  The overflow was on the free `distil: "caller"` path, which returns early and
+  is the default whenever no utility model is configured.
+
+## [0.15.0] - 2026-07-29
+
 ### Fixed
 
 - `research_verify_citations` no longer scores a bot-blocked publisher as a failed

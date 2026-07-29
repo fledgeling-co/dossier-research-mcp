@@ -23,6 +23,7 @@ import {
 import { extractPlan } from './plan.js';
 import { KeyedMutex, Mutex } from './spend.js';
 import { StreamSupervisor } from './stream.js';
+import { recordSearchOutcome } from '../local/search-health.js';
 import { extractCitedUrls, normaliseCitations } from './report.js';
 import { describeOverlap, mergeEvidence, type RunEvidence } from './synthesise.js';
 
@@ -1124,6 +1125,17 @@ export class Runner {
         // the fact that the run is over. Line ~1094 saves again with the title
         // merged in, which is idempotent.
         await this.store.saveRun(next);
+
+        // Record what this backend's search actually produced, now that the
+        // report is on disk and counted. Best-effort and deliberately after the
+        // terminal save: a health record is diagnostics, and losing one must
+        // never cost a report that has already been paid for.
+        try {
+          await recordSearchOutcome(this.store.root, next.provider, next.sourceCount);
+        } catch {
+          // Nothing to do and nothing worth failing a finished run over.
+        }
+
         if (this.onFinalise) {
           // Title/summary generation is best-effort: a utility-model hiccup must
           // not lose a report that already cost dollars to produce.

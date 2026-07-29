@@ -1,4 +1,5 @@
 import type { Config } from '../config.js';
+import { healthOf, readSearchHealth } from '../local/search-health.js';
 import { BROWSER_TOOLS } from '../local/browser.js';
 import { modelFamily, normaliseModelName } from '../local/cli.js';
 import type { DeepResearchClient } from '../gemini/client.js';
@@ -179,6 +180,9 @@ export class ProviderRegistry {
       cliModels: probedModelsFor(this.storeDir, this.localModels),
       freeLaneMax: this.freeLaneMax,
       browserProvider: this.browserProvider,
+      // Read here, at the same seam the probed models are read, so
+      // `assemblePanelAmong` stays a pure function of its arguments.
+      searchUnhealthy: unhealthyBackends(this.storeDir),
     });
   }
 }
@@ -519,6 +523,19 @@ export interface PanelNeed extends RoutingNeed {
    */
   readonly allowList?: boolean;
   /**
+   * Backends whose recent finished runs cited nothing at all, keyed by provider id.
+   *
+   * Passed in rather than read here, because this module stays pure: routing is
+   * a decision about capability and billing, and a function that opens a file to
+   * make it becomes untestable and machine-dependent at the same time.
+   *
+   * A warning rather than an exclusion, and that is a deliberate limit. The
+   * evidence is a pattern across two runs, not a fact about this question, and a
+   * backend silently dropped from a panel is a harder thing to debug than one
+   * that joins with a note against its name.
+   */
+  readonly searchUnhealthy?: readonly string[];
+  /**
    * The model each CLI backend was probed as serving, keyed by provider id.
    *
    * Passed in rather than read here, for the same reason the provider set is:
@@ -559,6 +576,25 @@ const LARGE_DOMAIN_FILTER = 20;
  * builds providers from environment and PATH, so a test asserting which
  * backends joined would otherwise depend on what the developer has installed.
  */
+
+/**
+ * Backends whose recent finished runs cited nothing, from the health record.
+ *
+ * Failure here is silence, on purpose: an unreadable or absent record means no
+ * warning, never a warning about everything. This gates nothing that spends
+ * money, so the fail-closed rule that governs the ledger does not apply, and
+ * warning about a backend on the strength of a corrupt file would train someone
+ * to ignore the warning.
+ */
+function unhealthyBackends(storeDir: string): readonly string[] {
+  try {
+    const record = readSearchHealth(storeDir);
+    return [...record].filter(([, outcomes]) => healthOf(outcomes) === 'failing').map(([id]) => id);
+  } catch {
+    return [];
+  }
+}
+
 export function assemblePanelAmong(
   configured: readonly ResearchProvider[],
   need: PanelNeed,
@@ -676,6 +712,18 @@ export function assemblePanelAmong(
 
   const members = [...freeFinal, ...paidFinal];
   const total = sumBands(members.map((m) => m.cost));
+
+  // Named before the run rather than discovered in the merge. `mergeContribution`
+  // already reports a member that cited nothing, but only once the slot is spent;
+  // this is the same fact one step earlier, where it can still change a decision.
+  const unhealthySeated = members.filter((m) => (need.searchUnhealthy ?? []).includes(m.provider.id));
+  if (unhealthySeated.length > 0) {
+    notes.push(
+      `Web search looks broken on ${unhealthySeated.map((m) => m.provider.label).join(', ')}: ` +
+        'recent finished runs cited no sources at all. Seated anyway, because that evidence is about earlier questions rather than this one, ' +
+        'but expect a fluent report with nothing behind it. `research_doctor` has the detail.',
+    );
+  }
 
   if (members.length === 0 && notes.length === 0) {
     notes.push('No configured provider can do this. See the rejections.');

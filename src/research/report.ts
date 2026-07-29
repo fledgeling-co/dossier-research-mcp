@@ -324,3 +324,27 @@ export function clampToTokens(text: string, maxTokens: number): { text: string; 
     truncated: true,
   };
 }
+
+/**
+ * Take whole lines while they fit a character budget, reporting what was left.
+ *
+ * Whole lines rather than a character cut, because these lists are one claim per
+ * line and half a claim is worse than no claim: it reads as a complete finding
+ * that happens to end oddly. The dropped count is returned rather than logged,
+ * so the caller is told a number instead of being left to infer one from a list
+ * that simply stops.
+ */
+export function takeWithin(
+  lines: readonly string[],
+  maxChars: number,
+): { taken: string[]; dropped: number } {
+  const taken: string[] = [];
+  let used = 0;
+  for (const line of lines) {
+    const cost = line.length + 1;
+    if (used + cost > maxChars) break;
+    taken.push(line);
+    used += cost;
+  }
+  return { taken, dropped: lines.length - taken.length };
+}

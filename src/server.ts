@@ -29,6 +29,7 @@ import {
   type CliArgvCheck,
   type CliId, cliWorkDir } from './local/cli.js';
 import { describeProbeAge, readModelCache, writeModelCache } from './local/model-cache.js';
+import { describeSearchHealth, readSearchHealth } from './local/search-health.js';
 import {
   DEFAULT_BASE_AGENT,
   RESEARCH_AGENT_INSTRUCTION,
@@ -56,6 +57,7 @@ import {
 } from './research/prompt.js';
 import {
   clampToTokens,
+  takeWithin,
   estimateTokens,
   findSection,
   grepReport,
@@ -155,6 +157,7 @@ export {
 } from './research/archetypes.js';
 export {
   clampToTokens,
+  takeWithin,
   estimateTokens,
   extractCitedUrls,
   findSection,
@@ -2186,6 +2189,15 @@ function registerEvidenceTools(server: FastMCP, deps: ServerDeps): void {
         .enum(['auto', 'model', 'caller'])
         .default('auto')
         .describe('Who writes the merged report. auto = a model if one is configured, otherwise you. caller = always you, and always free.'),
+      maxTokens: z
+        .number()
+        .int()
+        .min(2_000)
+        .max(100_000)
+        .default(20_000)
+        .describe(
+          'Ceiling on the returned text. Six merged runs produce more claims than any caller can read in one go, and an unbounded merge has overflowed a context window. Claim lists are trimmed to fit and say how many were withheld; the source registry is never trimmed, because the report tells you to cite only from it.',
+        ),
     }),
     execute: async (args) => {
       const runs: RunEvidence[] = [];
@@ -2247,6 +2259,19 @@ function registerEvidenceTools(server: FastMCP, deps: ServerDeps): void {
         renderProfile(merged.profile),
       ].join('\n');
 
+      // Budgeted here rather than inside each branch, because the caller branch
+      // returns EARLY and dumping the whole registry is exactly how this tool
+      // overflowed a context window in the field. That branch is also the free
+      // one and the default whenever no utility model is configured, so it is
+      // the path most runs take, and it was the one without a ceiling.
+      const totalBudget = args.maxTokens * 4;
+      const registryLines = renderMergedRegistry(merged).split('\n');
+      const registryFit = takeWithin(registryLines, Math.floor(Math.max(2_000, totalBudget - header.length - 2_400) * 0.5));
+      const registryNote =
+        registryFit.dropped === 0
+          ? ''
+          : `\n\n_Showing ${String(registryFit.taken.length)} of ${String(registryLines.length)} registry lines; the rest did not fit \`maxTokens\`. Do not cite a source that is not shown here, even one you saw in an earlier read. Raise \`maxTokens\` or merge fewer runs for the whole list._`;
+
       const wantsCaller = args.distil === 'caller' || (args.distil === 'auto' && !deps.utility);
       if (wantsCaller) {
         return [
@@ -2267,8 +2292,9 @@ function registerEvidenceTools(server: FastMCP, deps: ServerDeps): void {
           '5. **Mark what you inferred.** A conclusion you drew by combining sources is `synthesised`, not `sourced`, even when every input was cited. The 2026 failure mode is correct facts assembled into a wrong conclusion, and it is invisible unless the joins are labelled.',
           '',
           '**Cite only from this registry.** It is frozen; a source that is not on it did not come from these runs.',
+          registryNote,
           '',
-          renderMergedRegistry(merged),
+          ...registryFit.taken,
         ].join('\n');
       }
 
@@ -2289,6 +2315,40 @@ function registerEvidenceTools(server: FastMCP, deps: ServerDeps): void {
       }
 
       const checked = crossCheck(sets);
+
+      // The registry gets the largest share and is trimmed LAST, but it is not
+      // exempt. Exempting it was the first attempt and it did not bound the
+      // output at all: six runs citing 400 sources each produce a registry
+      // larger than the whole budget, so "never trim the registry" and "bounded
+      // output" cannot both hold. What matters is not that the list is complete
+      // but that the caller is never told it is complete when it is not, so a
+      // trimmed registry changes the instruction below rather than hiding.
+      const claimBudget = Math.max(
+        1_000,
+        totalBudget - header.length - 2_400 - registryFit.taken.join('\n').length,
+      );
+
+      // Corroborated claims are worth more per character than solo ones, so the
+      // split is 70/30 rather than even. A merge whose whole value is the
+      // overlap should not lose the overlap to a verbose single backend.
+      const shared = takeWithin(
+        checked.shared.map((v) => {
+          const icon = v.support === 'corroborated' ? '✅' : v.support === 'weakly-supported' ? '🟡' : '⚠️';
+          return `- ${icon} **${v.support}** (${String(v.independentDomains)} independent domain(s)), ${v.claim.slice(0, 300)}`;
+        }),
+        Math.floor(claimBudget * 0.7),
+      );
+
+      const uniqueLines = checked.unique.flatMap((u) =>
+        u.claims.length === 0
+          ? []
+          : [`**${u.provider}** alone:`, ...u.claims.slice(0, 12).map((c) => `- ${c.text.slice(0, 260)}`), ''],
+      );
+      const unique = takeWithin(uniqueLines, Math.floor(claimBudget * 0.3));
+
+      const withheld = (n: number, what: string): string[] =>
+        n === 0 ? [] : ['', `_${String(n)} further ${what} withheld to fit the token budget. Raise \`maxTokens\` to see them._`];
+
       return [
         header,
         '',
@@ -2296,24 +2356,19 @@ function registerEvidenceTools(server: FastMCP, deps: ServerDeps): void {
         '',
         `## ${String(checked.shared.length)} claim(s) more than one backend made`,
         '',
-        ...checked.shared.map((v) => {
-          const icon = v.support === 'corroborated' ? '✅' : v.support === 'weakly-supported' ? '🟡' : '⚠️';
-          return `- ${icon} **${v.support}** (${String(v.independentDomains)} independent domain(s)), ${v.claim.slice(0, 300)}`;
-        }),
+        ...shared.taken,
+        ...withheld(shared.dropped, 'shared claim(s)'),
         '',
         '## Claims only one backend made',
         '',
-        ...checked.unique.flatMap((u) =>
-          u.claims.length === 0
-            ? []
-            : [`**${u.provider}** alone:`, ...u.claims.slice(0, 12).map((c) => `- ${c.text.slice(0, 260)}`), ''],
-        ),
+        ...unique.taken,
+        ...withheld(unique.dropped, 'line(s) of single-backend claims'),
         '> [!IMPORTANT]',
         '> A claim only one backend made is a **coverage difference**, not an error, and it is also **not corroborated**. The verdicts above count independent domains, never how many backends agreed, because backends reading the same page agree for free.',
         '',
-        'Cite only from the merged registry:',
+        `Cite only from the merged registry:${registryNote}`,
         '',
-        renderMergedRegistry(merged),
+        ...registryFit.taken,
       ].join('\n');
     },
   });
@@ -4153,6 +4208,22 @@ function registerResources(server: FastMCP, deps: ServerDeps): void {
         // Mode B is even worth considering should not have to guess what they
         // already have. Nothing here is started, and the renderer says so.
         lines.push('', renderBrowserTools(await probeAllBrowserTools()));
+      }
+
+      // Whether each backend's web search is actually working, from its own
+      // finished runs rather than from a probe. This is the answer to "is this
+      // CLI's search broken", and it costs nothing to ask because the evidence
+      // was already bought.
+      const health = describeSearchHealth(readSearchHealth(deps.config.storeDir));
+      if (health.length > 0) {
+        lines.push(
+          '',
+          '## Backends whose web search looks broken',
+          '',
+          ...health,
+          '',
+          '_Judged from finished runs that cited no sources at all, which is the signature of a search that did not run. A backend here still costs a panel slot and still returns a fluent report._',
+        );
       }
       return lines.join('\n');
     },
