@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
+  relevantTo,
   discoveryQuery,
   discoveryTerms,
   gatherSubreddit,
   inferWindow,
   subredditsFromUrls,
   windowStartEpoch,
+  type RedditItem,
 } from '../src/research/reddit.js';
 
 describe('inferWindow', () => {
@@ -146,5 +148,58 @@ describe('gatherSubreddit', () => {
     await gatherSubreddit('x', 0, fake, 'https://example.invalid', 400);
     // One empty page per kind is enough to stop; posts and comments are two.
     expect(calls).toBe(2);
+  });
+});
+
+describe('relevantTo', () => {
+  const item = (text: string, at = 1): RedditItem => ({
+    kind: 'post', subreddit: 's', id: String(at), text, createdUtc: at,
+  });
+
+  it('drops the posts that made a real gather useless', () => {
+    // Reported from use: a detailed question about a supplement returned 2,400
+    // posts from r/Sick about food poisoning, ringworm and coughing hard enough
+    // to fart. The archive filters by subreddit and time only, so everything in
+    // the window came back; the question was doing nothing but pick a date.
+    const q = 'Does Armaforce or zinc lozenges actually shorten a cold?';
+    const { kept, dropped } = relevantTo(q, [
+      item('I highly recommend taking zinc, it helps when you think you are getting sick'),
+      item('I coughed so hard I farted'),
+      item('is this ringworm or something else'),
+      item('food poisoning from last night, how long does it last'),
+    ]);
+    expect(kept).toHaveLength(1);
+    expect(kept[0]!.text).toMatch(/zinc/);
+    expect(dropped).toBe(3);
+  });
+
+  it('ranks a post matching more of the question above one matching less', () => {
+    const { kept } = relevantTo('zinc lozenges shorten a cold', [
+      item('anyone tried zinc?'),
+      item('zinc lozenges did shorten my cold by a day'),
+    ]);
+    expect(kept[0]!.text).toMatch(/lozenges/);
+  });
+
+  it('matches a plural against a singular term and back', () => {
+    expect(relevantTo('lozenges', [item('one lozenge helped')]).kept).toHaveLength(1);
+    expect(relevantTo('lozenge', [item('lozenges helped')]).kept).toHaveLength(1);
+  });
+
+  it('keeps everything when the question has no salient terms', () => {
+    // A question of pure stopwords must not drop the lot; that would be worse
+    // than the firehose it replaced, because it looks like an empty subreddit.
+    const items = [item('a'), item('b')];
+    expect(relevantTo('what about this then', items).kept).toHaveLength(2);
+    expect(relevantTo('', items).dropped).toBe(0);
+  });
+
+  it('does not match on the question’s grammar', () => {
+    // The same defect the subreddit discovery had: "does", "actually" and
+    // "about" are in the question and must not make a post relevant.
+    const { kept } = relevantTo('Does Armaforce actually work about colds', [
+      item('does anyone actually know what this is about'),
+    ]);
+    expect(kept).toHaveLength(0);
   });
 });

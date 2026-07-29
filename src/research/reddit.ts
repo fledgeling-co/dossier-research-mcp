@@ -173,6 +173,13 @@ const STOPWORDS = new Set([
   'will', 'with', 'work', 'working', 'would', 'year', 'years', 'your',
   'anyone', 'everyone', 'someone', 'something', 'anything', 'opinion',
   'opinions', 'experience', 'experiences', 'versus', 'compare', 'comparison',
+  // Added when the relevance filter matched a post on "actually". The
+  // discovery list was built for subreddit NAMES, where an adverb never
+  // appears; filtering post bodies meets far more of the question's grammar,
+  // so the common intensifiers and hedges have to go too.
+  'actually', 'know', 'knows', 'knew', 'seems', 'seem', 'looks', 'look',
+  'give', 'gives', 'getting', 'goes', 'going', 'said', 'says', 'tell',
+  'told', 'find', 'found', 'help', 'helps', 'helped', 'better', 'worse',
 ]);
 
 /**
@@ -322,6 +329,69 @@ async function getJson(url: string, fetchImpl: typeof fetch): Promise<unknown> {
   }
 }
 
+/* ----------------------------------------------------------------- filter */
+
+/**
+ * Keep the items that are actually about the question.
+ *
+ * The archive filters by subreddit and time and nothing else, so a gather over
+ * a busy community returns everything posted in the window. Reported from real
+ * use: a detailed question about a specific supplement returned 2,400 posts
+ * from r/Sick about food poisoning, ringworm, and coughing hard enough to fart.
+ * Zero relevant.
+ *
+ * That is not a subreddit-choice problem, it is a missing step. The `question`
+ * is right there and was being used only to pick a date range, which reads as
+ * topical filtering to anyone who passes one. So it filters now.
+ *
+ * Deliberately term-overlap rather than anything cleverer. It runs locally with
+ * no model call, it is explainable to someone reading the output, and its
+ * failure mode is dropping a relevant post rather than inventing a match. The
+ * count that was dropped is always reported, so a filter that is too aggressive
+ * is visible rather than silent.
+ */
+export function relevantTo(question: string, items: readonly RedditItem[]): {
+  readonly kept: RedditItem[];
+  readonly dropped: number;
+} {
+  const terms = questionTerms(question);
+  // Nothing to filter on: a question of pure stopwords would otherwise drop
+  // everything, which is worse than the firehose it replaced.
+  if (terms.length === 0) return { kept: [...items], dropped: 0 };
+
+  const scored = items
+    .map((item) => ({ item, hits: termHits(terms, item.text) }))
+    .filter((s) => s.hits > 0)
+    // Most matching terms first; a post hitting three of your words beats one
+    // hitting a single common one.
+    .sort((a, b) => b.hits - a.hits || b.item.createdUtc - a.item.createdUtc);
+
+  return { kept: scored.map((s) => s.item), dropped: items.length - scored.length };
+}
+
+/** Salient words from the question, singular and plural, longer ones first. */
+function questionTerms(question: string): string[] {
+  const words = question
+    .toLowerCase()
+    .replace(/[^a-z0-9 ]+/g, ' ')
+    .split(/\s+/)
+    .filter((w) => w.length >= 4 && !STOPWORDS.has(w));
+  return [...new Set(words)].sort((a, b) => b.length - a.length).slice(0, 12);
+}
+
+/** How many of the question's terms appear in a piece of text. */
+function termHits(terms: readonly string[], text: string): number {
+  const hay = text.toLowerCase();
+  let n = 0;
+  for (const t of terms) {
+    // Stem-ish: matching the first several characters catches plurals and
+    // simple inflections without a stemmer's false positives.
+    const stem = t.length > 6 ? t.slice(0, t.length - 1) : t;
+    if (hay.includes(stem)) n += 1;
+  }
+  return n;
+}
+
 /* ----------------------------------------------------------------- render */
 
 export interface GatherReport {
@@ -330,6 +400,8 @@ export interface GatherReport {
   readonly items: readonly RedditItem[];
   /** Subreddits asked for that returned nothing at all. */
   readonly empty: readonly string[];
+  /** Items gathered then dropped as unrelated to the question. */
+  readonly dropped: number;
 }
 
 export function renderGather(report: GatherReport, question: string): string {
@@ -342,6 +414,15 @@ export function renderGather(report: GatherReport, question: string): string {
     '',
     `**${String(items.length)} items** from ${String(subreddits.length)} subreddit(s). ` +
       `Window: ${window.window} — ${window.why}.`,
+    ...(report.dropped > 0
+      ? [
+          '',
+          `${String(report.dropped)} further item(s) were gathered and dropped as unrelated to the question. ` +
+            'The archive filters by subreddit and time only, so everything posted in the window comes back; ' +
+            'the question is what narrows it. If the count above looks too small, the filter was too tight ' +
+            'and a broader question widens it.',
+        ]
+      : []),
     '',
     'Source: Arctic Shift, a public Reddit archive. **Not Reddit, and not this project** — the query went to ' +
       'whoever operates photon-reddit.com. No credential was used and none exists to use: Reddit closed ' +

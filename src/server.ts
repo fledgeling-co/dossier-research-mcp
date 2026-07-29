@@ -14,6 +14,7 @@ import {
   gatherSubreddit,
   inferWindow,
   MAX_SUBREDDITS,
+  relevantTo,
   renderGather,
   windowStartEpoch,
   type RedditItem,
@@ -3029,15 +3030,19 @@ function registerLoopTools(server: FastMCP, deps: ServerDeps): void {
       }
 
       const start = windowStartEpoch(verdict.window);
-      const items: RedditItem[] = [];
+      const gathered: RedditItem[] = [];
       const empty: string[] = [];
       for (const sub of asked.slice(0, MAX_SUBREDDITS)) {
         const got = await gatherSubreddit(sub, start).catch(() => [] as RedditItem[]);
         if (got.length === 0) empty.push(sub);
-        items.push(...got);
+        gathered.push(...got);
       }
+      // The archive has no topic filter, so everything in the window comes
+      // back. Narrowing by the question is done here, because a caller who
+      // passes one reasonably expects it to matter.
+      const { kept: items, dropped } = relevantTo(args.question, gathered);
       const report = renderGather(
-        { window: verdict, subreddits: asked.slice(0, MAX_SUBREDDITS), items, empty },
+        { window: verdict, subreddits: asked.slice(0, MAX_SUBREDDITS), items, empty, dropped },
         args.question,
       );
       // Where each community came from, because "you named it" and "a search
