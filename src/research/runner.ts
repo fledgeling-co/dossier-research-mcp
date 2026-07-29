@@ -172,6 +172,24 @@ export interface PanelStartResult {
 }
 
 /**
+ * Split completed members into those that cited something and those that did not.
+ *
+ * Exported so the rule is testable on its own: a report citing nothing is not a
+ * contribution whatever its length, and the two real cases that motivated it
+ * were 3,171 and 9,140 characters of articulate explanation for why a broken
+ * web search had prevented any research.
+ */
+export function mergeContribution(
+  members: readonly { state: string; reportChars: number; sourceCount: number }[],
+): { contributed: typeof members; unsourced: typeof members } {
+  const done = members.filter((m) => m.state === 'completed' && m.reportChars > 0);
+  return {
+    contributed: done.filter((m) => m.sourceCount > 0),
+    unsourced: done.filter((m) => m.sourceCount === 0),
+  };
+}
+
+/**
  * Does this run hold a slot the concurrency cap exists to limit?
  *
  * The cap bounds work in flight at a provider, not records in a directory. A
@@ -1226,7 +1244,20 @@ export class Runner {
     // described the members that finished. The whole argument for paying five
     // times is that five backends read different parts of the web, so how many
     // of them actually did is the first fact a reader needs.
-    const contributed = members.filter((m) => m.state === 'completed' && m.reportChars > 0);
+    // Cited sources, not characters, decides whether a member contributed.
+    //
+    // A research report that cites nothing has not done research. The failure
+    // it hides is specific and was seen twice here: a CLI whose web search was
+    // broken produced 3,171 and 9,140 characters respectively, each a lucid
+    // account of why it could not search, and each counted as a member that
+    // answered. Length is exactly the wrong test, because an articulate excuse
+    // is longer than a terse finding.
+    const contributed = members.filter(
+      (m) => m.state === 'completed' && m.reportChars > 0 && m.sourceCount > 0,
+    );
+    const unsourced = members.filter(
+      (m) => m.state === 'completed' && m.reportChars > 0 && m.sourceCount === 0,
+    );
     lines.push(
       `${PANEL_MERGE_PREFIX} ${String(contributed.length)} of ${String(members.length)} members produced a report.`,
       '',
@@ -1234,7 +1265,12 @@ export class Runner {
         const label = `\`${m.id}\` ${m.provider}`;
         if (m.state === 'completed' && m.reportChars > 0) {
           const derivative = m.spawnedBy ? ' — **NOT INDEPENDENT**, started by a CLI Dossier spawned' : '';
-          return `- ✅ ${label}: ${String(m.reportChars)} chars, ${String(m.sourceCount)} cited sources${derivative}`;
+          // A report citing nothing is not a contribution, whatever its length.
+          // Observed twice on this machine, both times a CLI whose web search
+          // was down writing a long, fluent explanation of why it could not
+          // research — which the merge then counted as a member that answered.
+          const unsourced = m.sourceCount === 0 ? ' — **CITES NOTHING**, so it is not evidence' : '';
+          return `- ${m.sourceCount === 0 ? '⚠' : '✅'} ${label}: ${String(m.reportChars)} chars, ${String(m.sourceCount)} cited sources${unsourced}${derivative}`;
         }
         if (m.state === 'completed') return `- ⚠ ${label}: completed but produced no report text`;
         const why = m.failureKind ? failureTag(m.failureKind) : m.state;
@@ -1258,6 +1294,19 @@ export class Runner {
           `${String(members.length - derivative.length)}-way, not ${String(members.length)}-way.`,
         '',
         ...derivative.map((m) => `> - \`${m.id}\` ${m.provider}, spawned by \`${m.spawnedBy ?? ''}\``),
+        '',
+      );
+    }
+
+    if (unsourced.length > 0) {
+      lines.push(
+        `> [!WARNING]\n> ${String(unsourced.length)} member(s) returned a report that cites NO sources. ` +
+          'A research report citing nothing has not done research: the usual cause is a backend whose own ' +
+          'web search failed, which then writes a fluent account of why it could not search. That text is ' +
+          'not evidence and is excluded from the count above. Read those reports before trusting anything ' +
+          'below that appears to come from them.',
+        '',
+        ...unsourced.map((m) => `> - \`${m.id}\` ${m.provider}, ${String(m.reportChars)} chars, 0 sources`),
         '',
       );
     }

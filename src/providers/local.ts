@@ -11,6 +11,7 @@ import {
   ARGV_REJECTION_PATTERN,
   CLI_ADAPTERS,
   CLI_IDS,
+  cliEnv,
   hasSignInFile,
   probeCli,
   resolveHeadless,
@@ -334,7 +335,7 @@ export function localProvider(config: Config, adapter: CliAdapter): ResearchProv
           // downstream of this interaction. Without it the run is billed to the
           // user and counted as an independent voice, which is the one thing a
           // panel member's answer is not.
-          env: { ...process.env, DOSSIER_SPAWNED_BY: id },
+          env: { ...cliEnv(), DOSSIER_SPAWNED_BY: id },
         },
       );
       child.unref();

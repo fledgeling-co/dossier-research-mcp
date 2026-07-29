@@ -971,3 +971,44 @@ export function hasSignInFile(adapter: CliAdapter): boolean {
 export function adapterFor(id: string): CliAdapter | null {
   return CLI_ADAPTERS.find((a) => a.id === id) ?? null;
 }
+
+/**
+ * The environment a spawned CLI should get, which is NOT the one Dossier has.
+ *
+ * Dossier usually runs as a stdio MCP server launched by a coding CLI, so its
+ * own environment is that CLI's session state. Passing it through means the CLI
+ * Dossier spawns inherits the settings of the CLI that launched Dossier, and
+ * those variables are not inert — they configure the very program being run.
+ *
+ * Observed, not theorised. A research run came back `completed` with a 9,140
+ * character report explaining that its own web search was down:
+ *
+ *     effort 'xhigh' not supported when thinking is disabled
+ *
+ * The operator's `settings.json` had adaptive thinking ENABLED. The conflict
+ * came from `CLAUDE_EFFORT=xhigh`, inherited from the session that started
+ * Dossier, landing in a spawn whose thinking configuration was not the parent's.
+ * Also inherited: `CLAUDE_CODE_SESSION_ID` — the PARENT's session id — and
+ * `CLAUDE_CODE_CHILD_SESSION=1`, which tells the spawn it is part of a
+ * conversation it has never seen.
+ *
+ * So the whole `CLAUDE_CODE_*` family and `CLAUDE_EFFORT` are removed. Claude
+ * Code's own credentials live in `~/.claude.json` and `~/.claude`, which is
+ * what `authPaths` already checks, so removing them costs no authentication.
+ *
+ * `ANTHROPIC_API_KEY` goes too, and that one is about honesty rather than
+ * correctness. It OUTRANKS the subscription in `-p` mode with no prompt, so a
+ * run this provider prices at $0.00 with the basis "no API charge: the run
+ * draws on your CLI subscription" would in fact be billed per token. Either the
+ * key goes or the cost band is a false statement, and the band is the thing
+ * every budget decision is made from.
+ */
+export function cliEnv(base: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const out: NodeJS.ProcessEnv = {};
+  for (const [k, v] of Object.entries(base)) {
+    if (k.startsWith('CLAUDE_CODE_')) continue;
+    if (k === 'CLAUDE_EFFORT' || k === 'ANTHROPIC_API_KEY') continue;
+    out[k] = v;
+  }
+  return out;
+}

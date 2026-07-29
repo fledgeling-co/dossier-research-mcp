@@ -50,6 +50,7 @@ import {
 } from '../research/local-loop.js';
 import {
   type CliAdapter,
+  cliEnv,
   cliWorkDir,
   hasSignInFile,
   probeCli,
@@ -230,7 +231,7 @@ function askCli(
       // Same marker as the direct lane. A loop worker is a panel member too,
       // and one that reaches for `research_start` rather than its own search
       // would otherwise buy a paid run charged to the user.
-      env: { ...process.env, DOSSIER_SPAWNED_BY: spawnedBy },
+      env: { ...cliEnv(), DOSSIER_SPAWNED_BY: spawnedBy },
     });
     let stdout = '';
     let bytes = 0;
