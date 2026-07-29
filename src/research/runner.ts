@@ -119,6 +119,17 @@ export interface StartRunArgs {
   /** The wide spec, serialised, when this is a wide run. */
   readonly wideSpec?: string;
   /**
+   * Ask xAI to search X as well as the web.
+   *
+   * On a deep run, not only a `recent` one. Reported from use: a caller routed
+   * to xAI specifically for X access, read the plan's "xAI Grok (web + X
+   * search)" as meaning X was in scope, and got a run whose own gap note said
+   * web search had not surfaced tweet-level material. The capability was real
+   * and unreachable from this shape, which is the worst combination: the label
+   * promised it and the request never asked for it.
+   */
+  readonly searchX?: boolean;
+  /**
    * A deliberate repetition index, for measuring non-determinism.
    *
    * Omitted for every ordinary run. The benchmark harness sets it so `n = 5` of

@@ -19,6 +19,7 @@ import {
   windowStartEpoch,
   type RedditItem,
 } from './research/reddit.js';
+import { encodeXaiOptions } from './providers/xai.js';
 import { renderTactics } from './research/site-tactics.js';
 import {
   CLI_ADAPTERS,
@@ -325,6 +326,20 @@ export function renderPanel(panel: PanelDecision): string[] {
     lines.push(`  - **Total worst case**: $${panel.total.highUsd.toFixed(2)}. An estimate band, never a quote.`);
   }
 
+  // xAI's label says "web + X search" and its capability row says social: x,
+  // which reads as X being in scope. It is not, unless the run asks: X search
+  // is a separate tool on the request. Reported after a run routed to xAI for
+  // X access came back web-only, with its own gap note admitting no
+  // tweet-level material, at a cost the caller had already committed.
+  const xaiSeated = panel.members.some((m) => m.provider.id === 'xai');
+  if (xaiSeated) {
+    lines.push(
+      '- **X search is OFF unless you ask for it.** xAI is the only backend that reaches X, and its label says ' +
+        'so, but a run searches the web only unless you pass `includeX: true` to `research_start`. A CLI whose ' +
+        'model is Grok does not inherit it either: X search is a tool xAI attaches to its API, not something ' +
+        'the weights carry.',
+    );
+  }
   lines.push(`- **Question profile**: ${describeSignals(panel.profile)} (archetype: ${panel.profile.archetype}).`);
   if (panel.crawl) {
     const crawl = panel.crawl;
@@ -709,6 +724,14 @@ export function createServer(deps: ServerDeps): FastMCP {
         .max(128)
         .optional()
         .describe('The fingerprint from `research_plan`. Required when the server runs with DOSSIER_REQUIRE_CONTRACT=true.'),
+      includeX: z
+        .boolean()
+        .default(false)
+        .describe(
+          'Search X as well as the web. Only xAI reaches X; every other backend ignores this, and a CLI whose ' +
+          'model is Grok does NOT inherit it, because X search is a tool xAI attaches to its own API rather ' +
+          'than something the weights carry. Without this, an xAI run searches the web only.',
+        ),
       label: z.string().max(200).optional().describe('Short human label, shown in listings and the spend ledger.'),
       tags: z.array(z.string().max(60)).max(20).optional(),
       provider: z
@@ -861,9 +884,16 @@ export function createServer(deps: ServerDeps): FastMCP {
       }
       log.info('Starting deep research run', { tier: args.tier, archetype: resolved.archetype, provider: chosen });
 
+      // X search is an xAI tool carried in its encoded options, not a Gemini
+      // tool spec, so a deep run has to encode it the way the shaped path does.
+      // Only for xAI: encoding it for anything else would put a marker comment
+      // in a prompt that backend will read as prose.
+      const promptForRun =
+        args.includeX && chosen === 'xai' ? encodeXaiOptions(resolved.prompt, { searchX: true }) : resolved.prompt;
+
       const { run, deduped } = await runner.start({
         question: args.question,
-        prompt: resolved.prompt,
+        prompt: promptForRun,
         archetype: resolved.archetype,
         tier: args.tier,
         tools,
@@ -872,6 +902,7 @@ export function createServer(deps: ServerDeps): FastMCP {
         visualization: true,
         preEngineered: resolved.preEngineered,
         provider: chosen,
+        ...(args.includeX ? { searchX: true } : {}),
         ...(grounded.length > 0 ? { groundedIn: grounded } : {}),
         ...(args.label ? { label: args.label } : {}),
         ...(args.tags ? { tags: args.tags } : {}),
