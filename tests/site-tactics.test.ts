@@ -50,9 +50,14 @@ describe('the recorded tactics', () => {
     // archive; verified 29 July 2026, 200 with same-day posts and comments on
     // an unauthenticated GET. Found because a production pipeline on this
     // machine was already using it while this file said no route existed.
-    expect(reddit?.tactics[0]?.how).toMatch(/arctic-shift/);
+    // The route leads with the two-stage pattern, because Arctic Shift
+    // rejects `q=` and can only read a subreddit you already know — search is
+    // how you learn which. Listing them as siblings hid that.
+    expect(reddit?.tactics[0]?.how).toMatch(/TWO STAGES/);
+    const archive = reddit?.tactics.find((x) => x.how.includes('arctic-shift'));
+    expect(archive).toBeDefined();
     // Named as a third party, because a query goes to whoever runs it.
-    expect(reddit?.tactics[0]?.how).toMatch(/THIRD PARTY/);
+    expect(archive?.how).toMatch(/THIRD PARTY/);
   });
 
   it('does not claim a vendor’s account as its own finding', () => {

@@ -52,6 +52,24 @@ export const SITE_TACTICS: readonly SiteTactic[] = [
     label: 'Reddit',
     tactics: [
       {
+        // The two are STAGES, not alternatives, and listing them as siblings
+        // was the mistake. Arctic Shift rejects `q=` outright: it filters by
+        // subreddit and window, so it can read a community exhaustively and
+        // cannot tell you which community to read. A search index has the
+        // opposite shape — it knows where a topic is discussed and returns
+        // snippets rather than threads. Chained, each covers the other's gap.
+        //
+        // Stage 2 is verified here on 29 July 2026. Stage 1 is ordinary web
+        // search and was NOT re-run in this session, so it is asserted from the
+        // shape of the API rather than from an observation.
+        how:
+          'TWO STAGES. First find the communities: `site:reddit.com <topic>` through any panel backend, and ' +
+          'take the subreddit names out of the result URLs. Then read those subreddits properly with Arctic ' +
+          'Shift, below. Search alone returns snippets of whatever it indexed; the archive alone needs a ' +
+          'subreddit you do not have yet.',
+        provenance: 'verified',
+      },
+      {
         // Corrected twice in one day, and this is why the tactic exists at all.
         //
         // First reading: register a script app. Walked it — `create app` returns
