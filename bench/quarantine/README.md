@@ -111,3 +111,64 @@ fetch:
 - **Join across publishers.** A fact that requires reconciling an npm timestamp
   against a GitHub release against a changelog is three fetches and a judgement,
   and one of them will disagree.
+
+---
+
+## Three more inversions, all rejected. 29 July 2026
+
+The three techniques above were applied properly and produced three tasks that
+**all passed on the first probe**, against Claude Code with ordinary web search.
+They are in this directory rather than the corpus.
+
+| Task | Technique | Result |
+|---|---|---|
+| `archive-parser-cve-no-v40` (deleted) | invert to properties | passed — "desktop archiver" + "recovery files" still pinpoints WinRAR semantically |
+| `archive-cve-scoring-grid` | derived entity set + absence cells | passed — all 7 entities, all 14 cells |
+| `undici-release-timestamp-join` | join across publishers | passed — all three timestamps and the exact gap |
+
+The third is the one to look at, because it was the technique this README
+recommended most confidently. It asked for a field the GitHub web interface does
+not show, requiring the API, and a second timestamp from npm. The backend
+returned both, computed the gap to the second, and then **cross-checked the npm
+figure two ways nobody asked for**: deps.dev, and an epoch decoded out of the
+registry's own internal temp path.
+
+## What that means, and it is not that the tasks were badly written
+
+The diagnosis in this README was that a single primary source at a stable URL is
+a lookup rather than research. That is true and it is not the whole rule.
+**Several primary sources at stable URLs are also a lookup — just three of
+them.** An agent that can call an API can call three, and reconcile them, and it
+does not find that hard.
+
+So the axis these three tasks vary along is retrieval difficulty, and retrieval
+is the thing a competent agent with web access is now reliably good at. Making
+retrieval harder produces a harder lookup, not research.
+
+What none of the three required was **judgement**: no point at which two
+defensible answers exist and the work is deciding between them. Every one had a
+single correct answer sitting in a database, however many joins away.
+
+## The categories that can still discriminate
+
+`docs/plan/benchmark.md` already names them; the evidence now says they are not
+merely additional categories but the only ones with headroom:
+
+- **`contested`** — sources genuinely disagree and no authority resolves it, so
+  the answer is which position is better supported and why. The one contested
+  task in this set is also the only one Codex failed while Claude passed.
+- **`settled-with-fringe`** — the false-balance counterweight, where the failure
+  is treating a fringe position as a live controversy.
+- **`social-sentiment`** — no primary source states the answer at all; it has to
+  be assembled from many low-quality ones.
+
+The retrieval categories — `technical`, `enumeration`, `time-bound`,
+`primary-literature` — are where this attempt spent its effort and where the
+returns are lowest. They are worth keeping as a floor, since a backend that
+fails retrieval should be visible, but they will not separate strong backends
+from each other.
+
+**The honest recommendation: stop inverting these and author `contested` and
+`settled-with-fringe` from scratch.** They are slower to build, because each
+needs a real disagreement with real evidence on both sides, and they are the
+only ones where a better backend can currently show it is better.
