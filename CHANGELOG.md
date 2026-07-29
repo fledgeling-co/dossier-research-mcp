@@ -6,6 +6,26 @@ Dates are the release date. Costs are estimate bands, never quotes. Where a fact
 
 This project follows [semantic versioning](https://semver.org/). Until 1.0 the minor number carries breaking changes.
 
+## [0.14.0] - 2026-07-29
+
+### Added
+
+- **`reddit_gather`: read what a subreddit actually said, with no credential — because none is obtainable.** Checked on 29 July 2026 rather than read about: `create app` at reddit.com/prefs/apps returns a link to the Responsible Builder Policy and creates nothing, the `.json` endpoints answer 403 to a non-browser agent, `oauth.reddit.com` answers 403 without a token, and a clean automated browser is served a network-security block page. Self-serve registration ended around November 2025 and approval is routed to moderation use cases; the request form directs developers to Devvit, which builds apps hosted *on* Reddit rather than tools that read it.
+
+  So this reads **Arctic Shift**, a public Reddit archive. It is a **third party** — a query goes to whoever operates photon-reddit.com — and that is stated in the tool's own description, not a footnote. Free is not the same as private.
+
+  **Two stages, because the archive rejects `q=`** and filters by subreddit and time. Called with no subreddits it gathers nothing and returns name-matched candidates plus the `site:reddit.com` query to run; run that through any backend, pass the Reddit URLs back as `discoveredUrls`, and it extracts the communities and reads them. The second half carries the value: name matching finds `r/vectordatabase` and can never reach `r/LocalLLaMA`, where the same argument runs under a name sharing no substring with the subject. Driven end to end, 400 of 586 gathered items came from the community only a subject search could find.
+
+  **The window is inferred from the question** and the reason is printed with the result — "today" gives 24h, "this quarter" 90d, a bare year 1y. With no period named it is **30 days**, not the server-wide year: a year of a busy subreddit is mostly old items, and a thread nobody has replied to in six months is not what "what do people think" is asking.
+
+- **Per-site crawl tactics.** The crawl recommendation said "use browser tooling" for every site alike, which is true and nearly useless. It now names what actually works per site, with provenance marked: facts established here against the live site are separated from facts reported by a commercial scraping vendor, because a vendor documenting its own breakage is strong evidence about what is hard and weak evidence about what is impossible.
+
+  The strongest of them argues against building anything: a commercial LinkedIn API describes its own post search as best-effort over Google-indexed pages, so `site:linkedin.com/posts` through any backend is the same route for nothing.
+
+### Fixed
+
+- **`DOSSIER_BROWSER_PROVIDER` was a sentence, not a setting.** Four places told operators to set it — the server's crawl advice, the setup wizard, the registry comments and the browser detector — and the env schema never declared it, so setting it was silently discarded and all four sentences were false. It selects rather than activates: Dossier still drives no browser, but a crawl recommendation now names your driver and quotes how it reaches an existing login. A guard now refuses any source file that names a `DOSSIER_*` variable the schema does not read.
+
 ## [0.13.1] - 2026-07-29
 
 ### Fixed
@@ -694,7 +714,8 @@ Four defects that a full hermetic suite passed and one real API call each found.
 
 - First release. Gemini Deep Research wrapped so an agent can drive it safely: durable runs that survive a disconnect, a spend gate that reserves the worst case before the call, and outline-first reading so a 60,000-token report never lands inline.
 
-[Unreleased]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.13.1...HEAD
+[Unreleased]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.14.0...HEAD
+[0.14.0]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.13.1...v0.14.0
 [0.13.1]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.13.0...v0.13.1
 [0.13.0]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.11.0...v0.12.0
