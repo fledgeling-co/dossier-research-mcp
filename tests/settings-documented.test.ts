@@ -34,4 +34,35 @@ describe('documented settings', () => {
     const missing = declared.filter((v) => !new RegExp(`\\b${v}\\b`).test(docs));
     expect(missing, `undocumented in docs/setup.md: ${missing.join(', ')}`).toEqual([]);
   });
+
+  it('never tells a user to set a variable the schema does not read', () => {
+    // The reverse direction, and the one that actually shipped broken twice.
+    // `DOSSIER_BROWSER_PROVIDER` was named in four files — the server's own
+    // crawl advice, the setup wizard, the registry comments and the browser
+    // detector — and declared in none, so setting it was silently discarded and
+    // the advice was false. A rate-limit message did the same with
+    // `DOSSIER_PROVIDER_CONCURRENCY` the same week.
+    //
+    // Checking schema -> docs cannot catch this; only docs -> schema can.
+    const schema = readFileSync(new URL('../src/config.ts', import.meta.url), 'utf8');
+    const declared = new Set(
+      [...schema.matchAll(/^ {2}(DOSSIER_[A-Z_]+):/gm)].map((m) => m[1]!),
+    );
+
+    const sources = ['../src/server.ts', '../src/setup/wizard.ts', '../src/providers/registry.ts', '../src/local/browser.ts', '../src/research/runner.ts'];
+    const undeclared = new Set<string>();
+    for (const rel of sources) {
+      const text = readFileSync(new URL(rel, import.meta.url), 'utf8');
+      for (const m of text.matchAll(/DOSSIER_[A-Z_]+/g)) {
+        const name = m[0];
+        // The per-backend families are built by interpolation from a stem.
+        if (/^DOSSIER_(CONCURRENCY|LOCAL_MODEL)_/.test(name)) continue;
+        if (!declared.has(name)) undeclared.add(name);
+      }
+    }
+    expect(
+      [...undeclared],
+      `named in source but not declared in the env schema: ${[...undeclared].join(', ')}`,
+    ).toEqual([]);
+  });
 });

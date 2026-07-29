@@ -1,6 +1,7 @@
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { z } from 'zod';
+import { BROWSER_TOOL_IDS } from './local/browser.js';
 import { CLI_IDS } from './local/cli.js';
 
 /**
@@ -161,6 +162,23 @@ const EnvSchema = z.object({
   DOSSIER_LOCAL_MODEL_GROK: z.string().trim().max(120).optional(),
   DOSSIER_LOCAL_MODEL_CURSOR: z.string().trim().max(120).optional(),
 
+  /**
+   * Which browser driver you will drive, when a question needs one.
+   *
+   * Four places already told operators to set this and NOTHING read it: the
+   * schema never declared it, so `DOSSIER_BROWSER_PROVIDER=playwright-mcp` was
+   * silently discarded and the advice was false. The same defect class as a
+   * rate-limit message naming a variable that did not exist.
+   *
+   * It selects, it does not activate. Dossier still drives no browser — the
+   * boundary in `src/local/browser.ts` is deliberate, and detection is not
+   * permission. What this changes is the SPECIFICITY of what Dossier hands
+   * back: unset, a crawl recommendation can only say "use browser tooling";
+   * set, it names your driver and the invocation that reaches your logged-in
+   * session, which is the difference between advice and instructions.
+   */
+  DOSSIER_BROWSER_PROVIDER: z.enum(BROWSER_TOOL_IDS).optional(),
+
   DOSSIER_LOCAL_CLI: z
     .string()
     .trim()
@@ -260,6 +278,8 @@ export interface Config {
    * them spends subscription quota Dossier cannot see.
    */
   readonly localCli: readonly string[];
+  /** The browser driver the operator says they will drive. Empty when unset. */
+  readonly browserProvider: string;
   /** Model to request per CLI id, where the CLI accepts one. */
   readonly localModels: Readonly<Record<string, string>>;
   readonly hermetic: boolean;
@@ -342,6 +362,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       .filter(Boolean)
       .map((s) => resolve(s.startsWith('~') ? join(homedir(), s.slice(1)) : s)),
     localCli: e.DOSSIER_LOCAL_CLI ?? [],
+    browserProvider: e.DOSSIER_BROWSER_PROVIDER ?? '',
     localModels: {
       ...(e.DOSSIER_LOCAL_MODEL_CLAUDE ? { claude: e.DOSSIER_LOCAL_MODEL_CLAUDE } : {}),
       ...(e.DOSSIER_LOCAL_MODEL_CODEX ? { codex: e.DOSSIER_LOCAL_MODEL_CODEX } : {}),

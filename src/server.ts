@@ -313,10 +313,19 @@ export function renderPanel(panel: PanelDecision): string[] {
 
   lines.push(`- **Question profile**: ${describeSignals(panel.profile)} (archetype: ${panel.profile.archetype}).`);
   if (panel.crawl) {
+    const crawl = panel.crawl;
     lines.push(
-      `- **Crawl lane**: recommended, not enabled. ${panel.crawl.why}` +
-        (panel.crawl.sites.length > 0 ? ` Sites named: ${panel.crawl.sites.join(', ')}.` : '') +
-        ' Dossier drives no browser; set DOSSIER_BROWSER_PROVIDER and drive it yourself if you want those pages read.',
+      `- **Crawl lane**: recommended, not enabled. ${crawl.why}` +
+        (crawl.sites.length > 0 ? ` Sites named: ${crawl.sites.join(', ')}.` : '') +
+        // Dossier still drives nothing. What changes when the operator has
+        // named their driver is that this stops being advice and becomes an
+        // instruction: which tool, and how it reaches the session they are
+        // already logged into. Telling someone to "use browser tooling" when
+        // they have told you which one they have is a wasted sentence.
+        (crawl.driver === null
+          ? ' Dossier drives no browser. Set DOSSIER_BROWSER_PROVIDER to the driver you have — `research_doctor` lists what is on this machine — and this recommendation will name it and how to reach your logged-in session.'
+          : ` Dossier drives no browser, and you drive **${crawl.driver.label}**. Reaching your existing session: ${crawl.driver.reachesExistingSession}` +
+            (crawl.driver.caution === undefined ? '' : ` ⚠ ${crawl.driver.caution}`)),
     );
   }
   if (panel.rejected.length > 0) {

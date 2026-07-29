@@ -1,4 +1,5 @@
 import type { Config } from '../config.js';
+import { BROWSER_TOOLS } from '../local/browser.js';
 import { modelFamily, normaliseModelName } from '../local/cli.js';
 import type { DeepResearchClient } from '../gemini/client.js';
 import type { CostBand, DurationOptions } from '../gemini/cost.js';
@@ -69,6 +70,7 @@ export class ProviderRegistry {
   private readonly storeDir: string;
   private readonly freeLaneMax: number;
   private readonly localModels: Readonly<Record<string, string>>;
+  private readonly browserProvider: string;
 
   constructor(config: Config, resolveGeminiClient: () => DeepResearchClient | null) {
     const built = [
@@ -93,6 +95,7 @@ export class ProviderRegistry {
     this.storeDir = config.storeDir;
     this.freeLaneMax = config.freeLaneMax;
     this.localModels = config.localModels;
+    this.browserProvider = config.browserProvider;
   }
 
 
@@ -175,6 +178,7 @@ export class ProviderRegistry {
       allowList: this.allowListInForce,
       cliModels: probedModelsFor(this.storeDir, this.localModels),
       freeLaneMax: this.freeLaneMax,
+      browserProvider: this.browserProvider,
     });
   }
 }
@@ -461,6 +465,21 @@ export interface PanelMember {
 export interface CrawlRecommendation {
   readonly why: string;
   readonly sites: readonly string[];
+  /**
+   * The driver the operator said they would drive, when they said.
+   *
+   * Dossier still drives nothing — the boundary in `src/local/browser.ts` is
+   * deliberate. What this changes is what a caller is handed: without it the
+   * recommendation can only say "use browser tooling", which is advice; with it
+   * the recommendation names the tool and how it reaches an existing login,
+   * which is an instruction someone can follow.
+   */
+  readonly driver: {
+    readonly id: string;
+    readonly label: string;
+    readonly reachesExistingSession: string;
+    readonly caution?: string;
+  } | null;
 }
 
 export interface PanelDecision {
@@ -512,6 +531,8 @@ export interface PanelNeed extends RoutingNeed {
   readonly cliModels?: ReadonlyMap<ProviderId, ProbedModel>;
   /** How many CLIs the free lane may run. 0 means every one available. */
   readonly freeLaneMax?: number;
+  /** The browser driver the operator said they would drive, if any. */
+  readonly browserProvider?: string;
 }
 
 const ZERO_BAND: CostBand = { lowUsd: 0, highUsd: 0, midUsd: 0, basis: 'no members' };
@@ -664,7 +685,7 @@ export function assemblePanelAmong(
     notes.push(`A panel of one: ${members[0]!.provider.label} is the only backend that belongs on this question.`);
   }
 
-  const crawl = recommendCrawl(need.profile);
+  const crawl = recommendCrawl(need.profile, need.browserProvider ?? '');
 
   return {
     members,
@@ -934,13 +955,24 @@ export function sumBands(bands: readonly CostBand[]): CostBand {
  * Returns a sentence, never an action. The panel may ask for a crawl lane and
  * must not enable one.
  */
-function recommendCrawl(profile: QuestionProfile): CrawlRecommendation | null {
+function recommendCrawl(profile: QuestionProfile, providerId: string): CrawlRecommendation | null {
+  const adapter = BROWSER_TOOLS.find((tool) => tool.id === providerId);
+  const driver: CrawlRecommendation['driver'] = adapter
+    ? {
+        id: adapter.id,
+        label: adapter.label,
+        reachesExistingSession: adapter.reachesExistingSession,
+        ...(adapter.caution === undefined ? {} : { caution: adapter.caution }),
+      }
+    : null;
+
   if (profile.namedSites.length > 0) {
     return {
       why:
         'This question names specific pages. A search index reaches what it has crawled, ' +
         'so a named site is the case where browser tooling finds what the panel cannot.',
       sites: profile.namedSites,
+      driver,
     };
   }
   if (profile.needsSpecificPages) {
@@ -949,6 +981,7 @@ function recommendCrawl(profile: QuestionProfile): CrawlRecommendation | null {
         'This question points at a document behind a login or a paywall, which no search index reaches. ' +
         'Browser tooling is the only route to it.',
       sites: [],
+      driver,
     };
   }
   return null;
