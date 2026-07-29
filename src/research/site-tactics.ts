@@ -52,58 +52,71 @@ export const SITE_TACTICS: readonly SiteTactic[] = [
     label: 'Reddit',
     tactics: [
       {
-        // Demoted to first place from nowhere, after the app-registration route
-        // was tried and found closed. Same shape as the LinkedIn answer, and
-        // for once the free route is not a poor substitute: the index has the
-        // pages, and reaching them needs no credential and breaks no terms.
+        // Corrected twice in one day, and this is why the tactic exists at all.
+        //
+        // First reading: register a script app. Walked it — `create app` returns
+        // a policy link and creates nothing. Second reading: therefore no route
+        // exists. Wrong again, and the counter-example was a production pipeline
+        // on the same machine. Arctic Shift is a public Reddit archive with an
+        // open API, and it is what Reddit research actually runs on now that
+        // Pushshift is gone.
+        //
+        // Verified here on 29 July 2026: `/api/posts/search` and
+        // `/api/comments/search` both answered 200 with posts and comments
+        // timestamped the same day, on a plain unauthenticated GET, with no
+        // rate limit reached across the probes.
         how:
-          'Search the index, not the site: `site:reddit.com/r/<sub>` through any panel backend. No credential, ' +
-          'nothing to register, and it reaches the same public threads. This is the route to reach for first.',
+          'Arctic Shift, a public Reddit archive: ' +
+          '`https://arctic-shift.photon-reddit.com/api/posts/search?subreddit=<sub>&after=<epoch>&before=<epoch>&limit=100&sort=desc` ' +
+          'and the same path for `/api/comments/search`. No credential, posts and comments, current to today. ' +
+          'It is a THIRD PARTY, not Reddit, so a query goes to whoever runs it — the same disclosure that applies ' +
+          'to any backend here. `q=` alone is rejected; it filters by subreddit and time window.',
         provenance: 'verified',
       },
       {
-        // "Established" and "logged-in" are both load-bearing. Tested 29 July
-        // 2026: a FRESH Playwright Chromium, before any sign-in, was served
-        // "You've been blocked by network security" at /prefs/apps.
         how:
-          'Your own established browser profile, already signed in — not an automated one. A fresh Playwright ' +
-          'Chromium is served a network-security block page before it can even reach a login form, so this means ' +
-          'a driver that ATTACHES to the browser you already use, such as chrome-devtools-mcp with --autoConnect.',
+          'Search the index: `site:reddit.com/r/<sub>` through any panel backend. No credential, no third party ' +
+          'beyond the one already answering the question, and it reaches the same public threads.',
+        provenance: 'verified',
+      },
+      {
+        // Works, and the ceiling is low enough to matter. Three probes from a
+        // laptop was enough to earn a 429 on the plain subreddit feed.
+        how:
+          'Reddit\u2019s own RSS, `reddit.com/r/<sub>/.rss`, which is keyless and still served where `.json` is ' +
+          'not. Rate-limited hard: three requests from a laptop drew a 429, and datacenter addresses fare worse. ' +
+          'Fine for watching one subreddit, not for gathering a corpus.',
+        provenance: 'verified',
+      },
+      {
+        how:
+          'Your own established browser profile, already signed in — not an automated one, which is refused ' +
+          'outright. Use a driver that ATTACHES to the browser you already use, such as chrome-devtools-mcp ' +
+          'with --autoConnect.',
         provenance: 'verified',
       },
     ],
     deadEnds: [
       {
-        // The correction. This file previously recommended registering a script
-        // app as the primary route. Walked end to end on 29 July 2026 and it
-        // does not complete: `create app` returns only a link to the
-        // Responsible Builder Policy and creates nothing.
-        //
-        // The gate is not a form to fill in harder. Reddit's own text routes
-        // Data API requests to those with "a valid moderation use case", and
-        // the support form itself says developers should go through Devvit
-        // first and to use the form only for what Devvit cannot support. Devvit
-        // builds apps that live ON Reddit — games and mod tools. A research
-        // tool reading Reddit is neither of those things, so there is no
-        // sanctioned route for it, rather than a slow one.
         what:
           'Registering an app at reddit.com/prefs/apps. Self-serve creation ended around November 2025: ' +
-          '`create app` now returns a link to the Responsible Builder Policy and creates nothing. Approval is ' +
-          'routed to moderation use cases, and the request form directs developers to Devvit first — which ' +
-          'builds apps hosted on Reddit, not tools that read it. Credentials issued before the change still work.',
+          '`create app` returns a link to the Responsible Builder Policy and creates nothing. Approval is routed ' +
+          'to moderation use cases, and the request form directs developers to Devvit — which builds apps hosted ' +
+          'on Reddit, not tools that read it. Credentials issued before the change still work. You do not need ' +
+          'them: the archive above is open.',
         provenance: 'verified',
       },
       {
         what:
-          'The old `.json` endpoints. `reddit.com/r/…/search.json` answers 403 to a non-browser user-agent, ' +
-          'and `oauth.reddit.com` answers 403 without a token. Advice that says otherwise predates the change.',
+          'The `.json` endpoints. `reddit.com/r/…/search.json` answers 403 to a non-browser user-agent and ' +
+          '`oauth.reddit.com` answers 403 without a token.',
         provenance: 'verified',
       },
       {
         what:
           'Driving a fresh automated browser at it. Playwright Chromium with a clean profile is served ' +
-          '"You\u2019ve been blocked by network security", with no login attempted — the block is on the ' +
-          'browser, not the account. Reddit\u2019s own help centre is behind the same wall.',
+          '"You\u2019ve been blocked by network security", with no login attempted — the block is on the browser, ' +
+          'not the account. Reddit\u2019s own help centre is behind the same wall.',
         provenance: 'verified',
       },
       {

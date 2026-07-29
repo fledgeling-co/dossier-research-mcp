@@ -46,8 +46,13 @@ describe('the recorded tactics', () => {
     const closed = reddit?.deadEnds.find((d) => d.what.includes('prefs/apps'));
     expect(closed?.provenance).toBe('verified');
     expect(closed?.what).toMatch(/Devvit/);
-    // And the free route it was displaced by leads instead.
-    expect(reddit?.tactics[0]?.how).toMatch(/site:reddit\.com/);
+    // And a working route leads instead. Arctic Shift is a public Reddit
+    // archive; verified 29 July 2026, 200 with same-day posts and comments on
+    // an unauthenticated GET. Found because a production pipeline on this
+    // machine was already using it while this file said no route existed.
+    expect(reddit?.tactics[0]?.how).toMatch(/arctic-shift/);
+    // Named as a third party, because a query goes to whoever runs it.
+    expect(reddit?.tactics[0]?.how).toMatch(/THIRD PARTY/);
   });
 
   it('does not claim a vendor’s account as its own finding', () => {
