@@ -17,7 +17,7 @@ import {
   retryDelayFromMessage,
 } from '../src/net/retry.js';
 import { grepReport } from '../src/research/report.js';
-import { scoreCitations } from '../src/research/citations.js';
+import { scoreCitations, renderScorecard } from '../src/research/citations.js';
 import { normaliseCitations } from '../src/research/report.js';
 import { buildPrompt } from '../src/research/prompt.js';
 import { fingerprint, fingerprintMatches } from '../src/research/contract.js';
@@ -115,8 +115,12 @@ describe('citation verdicts for a self-redirecting host', () => {
       ...Array.from({ length: 25 }, (_, i) => ({ url: `u${i}`, verdict: 'live' as const, checkedAt: 'now' })),
       ...Array.from({ length: 5 }, (_, i) => ({ url: `b${i}`, verdict: 'blocked' as const, checkedAt: 'now' })),
     ]);
-    expect(card.badge).toBe('partial');
+    // `blocked` now, which is what this test was reaching for: the comment above
+    // names the defect as a badge that reads as fabrication, and `partial` was
+    // only a quieter version of the same problem.
+    expect(card.badge).toBe('blocked');
     expect(card.invalid).toBe(0);
+    expect(card.fabricated).toBe(0);
   });
 });
 
@@ -363,7 +367,44 @@ describe('citation scorecard', () => {
       { url: 'p1', verdict: 'blocked', checkedAt: at },
       { url: 'p2', verdict: 'blocked', checkedAt: at },
     ]);
-    expect(card.badge).toBe('partial');
+    // `blocked`, not `partial`. The test's own name is the requirement, and
+    // `partial` never actually met it: a reader saw it next to 77% and read
+    // doubt about the citations rather than about our access to them.
+    expect(card.badge).toBe('blocked');
+    expect(card.fabricated).toBe(0);
+  });
+
+  it('leads with the fabrication check, not the reachability percentage', () => {
+    const card = scoreCitations([
+      ...Array.from({ length: 7 }, (_, i) => ({ url: `u${i}`, verdict: 'live' as const, checkedAt: at })),
+      ...Array.from({ length: 3 }, (_, i) => ({ url: `b${i}`, verdict: 'blocked' as const, checkedAt: at })),
+    ]);
+    const rendered = renderScorecard(card);
+    // The real report that prompted this scored 77% with nothing fabricated.
+    expect(rendered.split('\n')[0]).toContain('Fabrication check: PASS');
+    expect(rendered).toContain('Reachability: 70%');
+  });
+
+  it('counts a blocked citation with a registered DOI as shown to exist', () => {
+    const card = scoreCitations([
+      { url: 'https://doi.org/10.1002/14651858.CD013574', verdict: 'blocked', registered: true, checkedAt: at },
+      ...Array.from({ length: 9 }, (_, i) => ({ url: `u${i}`, verdict: 'live' as const, checkedAt: at })),
+    ]);
+    expect(card.existenceConfirmed).toBe(1);
+    expect(card.confirmedRate).toBe(1);
+    // Reachability is honest that we never opened it; the badge reflects existence.
+    expect(card.liveRate).toBe(0.9);
+    expect(card.badge).toBe('verified');
+  });
+
+  it('lets a publisher 404 stand, and never appeals it to the DOI registry', () => {
+    // The asymmetry is the point: a 403 is the publisher declining to talk to a
+    // robot and is worth appealing; a 404 is the publisher saying it is not there.
+    const card = scoreCitations(
+      Array.from({ length: 10 }, (_, i) => ({ url: `u${i}`, verdict: 'not_found' as const, checkedAt: at })),
+    );
+    expect(card.fabricated).toBe(10);
+    expect(card.badge).toBe('suspect');
   });
 });
 

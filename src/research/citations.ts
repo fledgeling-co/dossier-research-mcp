@@ -68,6 +68,68 @@ export function judgeCitationError(e: unknown): CitationJudgement {
   return { verdict: 'unreachable', note: message.slice(0, 300) };
 }
 
+/**
+ * The DOI in a URL, if it carries one.
+ *
+ * Publishers embed the DOI in the path in a handful of shapes, and every one of
+ * them starts `10.<registrant>/`. Deliberately conservative: a false positive
+ * here would query the registry for nonsense and report `not_found`, which is
+ * the one direction this must never invent.
+ */
+export function extractDoi(url: string): string | undefined {
+  const m = /\b(10\.\d{4,9}\/[^\s"'<>&?#]+)/.exec(url);
+  if (!m?.[1]) return undefined;
+  // Trailing punctuation is markdown's, not the DOI's.
+  return m[1].replace(/[.,;:)\]]+$/, '');
+}
+
+/**
+ * Ask the DOI registry whether an identifier exists.
+ *
+ * This is the fix for the number that mattered to a real reader: a run scored
+ * 77% with ZERO not-found and ZERO invalid citations, because Wiley answers
+ * scrapers with 403/412. Every one of those sources was real, and the headline
+ * implied otherwise.
+ *
+ * Resolving Cochrane DOIs to PubMed was the suggestion; the registry is the
+ * better version of it, because PubMed only covers biomedical literature and
+ * `doi.org` answers for every discipline with a DOI, publisher-independently
+ * and without a key. It proves REGISTRATION, not reachability and not that the
+ * source supports the claim.
+ */
+async function doiIsRegistered(doi: string, timeoutMs: number): Promise<boolean> {
+  try {
+    const res = await safeFetch(`https://doi.org/api/handles/${encodeURIComponent(doi)}`, {
+      method: 'GET',
+      timeoutMs: Math.min(timeoutMs, 8_000),
+      maxBytes: 16 * 1024,
+    });
+    // Verified against the live registry on 29 July 2026: a registered handle
+    // answers 200 with `responseCode: 1`, an unknown one 404 with
+    // `responseCode: 100`.
+    //
+    // BOTH are required, and the redundancy is deliberate. The failure this
+    // guards is asymmetric: certifying a fabricated citation as real is the one
+    // outcome that would make this feature worse than not having it, so a
+    // future change to the API's status codes must not be able to flip the
+    // answer on its own.
+    if (!res.ok) return false;
+    try {
+      const parsed: unknown = JSON.parse(res.body);
+      return (
+        typeof parsed === 'object' &&
+        parsed !== null &&
+        (parsed as { responseCode?: unknown }).responseCode === 1
+      );
+    } catch {
+      return false;
+    }
+  } catch {
+    // The registry being unreachable is not evidence about the citation.
+    return false;
+  }
+}
+
 async function verifyOne(url: string, timeoutMs: number): Promise<CitationVerdict> {
   const checkedAt = new Date().toISOString();
   try {
@@ -78,6 +140,22 @@ async function verifyOne(url: string, timeoutMs: number): Promise<CitationVerdic
       result = await safeFetch(url, { method: 'GET', timeoutMs, maxBytes: 32 * 1024 });
     }
     const judged = judgeCitationStatus(result.status, result.ok);
+    // Only for `blocked`. A publisher's 404 is a real not-found and the registry
+    // must not be allowed to talk us out of it; a 403 is the publisher
+    // declining to talk to a robot, which is the case worth appealing.
+    if (judged.verdict === 'blocked') {
+      const doi = extractDoi(url);
+      if (doi !== undefined && (await doiIsRegistered(doi, timeoutMs))) {
+        return {
+          url,
+          httpStatus: result.status,
+          checkedAt,
+          verdict: 'blocked',
+          registered: true,
+          note: `Publisher returned ${String(result.status)} to an automated request, but DOI ${doi} is registered, so the source exists.`,
+        };
+      }
+    }
     return { url, httpStatus: result.status, checkedAt, ...judged };
   } catch (e: unknown) {
     return { url, checkedAt, ...judgeCitationError(e) };
@@ -123,8 +201,28 @@ export interface CitationScorecard {
   readonly unverified: number;
   /** Share of citations that resolved, 0-1. */
   readonly liveRate: number;
-  /** Overall badge, for a UI or a downstream gate. */
-  readonly badge: 'verified' | 'partial' | 'suspect' | 'none';
+  /**
+   * Citations that do not exist: 404/410 plus malformed URLs.
+   *
+   * THIS is the fabrication number, and it is the one that matters. It is
+   * reported apart from reachability because they answer different questions
+   * and were previously collapsed into one percentage that a reader reasonably
+   * took as an accuracy score.
+   */
+  readonly fabricated: number;
+  /** Blocked citations whose identifier is nevertheless registered, so the source exists. */
+  readonly existenceConfirmed: number;
+  /** `live` plus `existenceConfirmed`: everything shown to exist, however it was shown. */
+  readonly confirmedRate: number;
+  /**
+   * Overall badge, for a UI or a downstream gate.
+   *
+   * `blocked` is its own outcome, and adding it is the point: a report whose
+   * citations are all real but sit behind Wiley's bot wall used to land on
+   * `partial`, which reads as doubt about the citations rather than about our
+   * access to them.
+   */
+  readonly badge: 'verified' | 'partial' | 'blocked' | 'suspect' | 'none';
 }
 
 export function scoreCitations(verdicts: readonly CitationVerdict[]): CitationScorecard {
@@ -135,15 +233,27 @@ export function scoreCitations(verdicts: readonly CitationVerdict[]): CitationSc
   const notFound = count('not_found');
   const invalid = count('invalid_url');
   const liveRate = total === 0 ? 0 : live / total;
+  const fabricated = notFound + invalid;
+  const existenceConfirmed = verdicts.filter((v) => v.verdict !== 'live' && v.registered === true).length;
+  const confirmed = live + existenceConfirmed;
+  const confirmedRate = total === 0 ? 0 : confirmed / total;
 
+  // Fabrication is asked FIRST, and nothing below can override it. The ordering
+  // is the fix: reachability used to be able to pull a report with zero
+  // fabricated citations down to `partial`.
   const badge: CitationScorecard['badge'] =
     total === 0
       ? 'none'
-      : notFound + invalid > total * 0.15
+      : fabricated > total * 0.15
         ? 'suspect'
-        : liveRate >= 0.9
+        : confirmedRate >= 0.9
           ? 'verified'
-          : 'partial';
+          : fabricated === 0
+            ? // Nothing was shown to be fake; we just could not read some of it.
+              // A distinct badge, because `partial` was being read as doubt
+              // about the citations rather than about our access to them.
+              'blocked'
+            : 'partial';
 
   return {
     total,
@@ -154,6 +264,9 @@ export function scoreCitations(verdicts: readonly CitationVerdict[]): CitationSc
     invalid,
     unverified: count('unverified'),
     liveRate,
+    fabricated,
+    existenceConfirmed,
+    confirmedRate,
     badge,
   };
 }
@@ -161,11 +274,34 @@ export function scoreCitations(verdicts: readonly CitationVerdict[]): CitationSc
 export function renderScorecard(card: CitationScorecard): string {
   if (card.total === 0) return 'No citations found in this report.';
   const pct = (n: number): string => `${Math.round((n / card.total) * 100)}%`;
+
+  // Two questions, answered in the order they matter, because collapsing them
+  // into one percentage cost a reader real trust: a run with zero fabricated
+  // citations read as 77% and looked like an accuracy score. It was a measure of
+  // how many publishers would talk to a robot.
+  const fabrication =
+    card.fabricated === 0
+      ? `Fabrication check: PASS. No citation was fabricated, ${String(card.total)} checked, 0 dead links, 0 malformed URLs.`
+      : `Fabrication check: ${card.badge === 'suspect' ? 'FAIL' : 'ATTENTION'}. ${String(card.fabricated)} of ${String(card.total)} citations do not exist (${String(card.notFound)} dead, ${String(card.invalid)} malformed).`;
+
+  const reach = [
+    `Reachability: ${pct(card.live)} opened directly (${String(card.live)}/${String(card.total)}).`,
+    card.existenceConfirmed > 0
+      ? ` A further ${String(card.existenceConfirmed)} were blocked to us but confirmed registered, so ${pct(card.live + card.existenceConfirmed)} are shown to exist.`
+      : '',
+  ].join('');
+
   return [
-    `Citation scorecard: ${card.badge.toUpperCase()}, ${card.live}/${card.total} resolved (${pct(card.live)}).`,
+    fabrication,
+    reach,
     `  live ${card.live} · not_found ${card.notFound} · blocked ${card.blocked} · unreachable ${card.unreachable} · invalid ${card.invalid} · unverified ${card.unverified}`,
-    card.badge === 'suspect'
-      ? '  ⚠ A high share of citations do not resolve. Treat quantitative claims in this report as unconfirmed until checked by hand.'
-      : '  Note: "live" means the URL resolves, it does not mean the source supports the claim it is attached to.',
-  ].join('\n');
+    card.fabricated > 0
+      ? '  ⚠ Citations that do not resolve at all. Treat the claims attached to them as unconfirmed until checked by hand.'
+      : card.live < card.total
+        ? '  A blocked or unreachable citation is usually a paywall or a bot wall, and says nothing about whether the source is real. The fabrication check above is the number to judge this report by.'
+        : '',
+    '  Note: neither number means the source SUPPORTS the claim it is attached to. That still needs a reader.',
+  ]
+    .filter((l) => l !== '')
+    .join('\n');
 }

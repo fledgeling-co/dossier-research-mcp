@@ -6,6 +6,41 @@ Dates are the release date. Costs are estimate bands, never quotes. Where a fact
 
 This project follows [semantic versioning](https://semver.org/). Until 1.0 the minor number carries breaking changes.
 
+## [Unreleased]
+
+### Fixed
+
+- `research_verify_citations` no longer scores a bot-blocked publisher as a failed
+  citation. A real run read 77% with **zero** dead links and zero malformed URLs:
+  every "failure" was Wiley answering an automated request with a redirect or a
+  403, and Google's own `vertexaisearch` redirect wrappers timing out. The
+  scorecard now leads with a **fabrication check** (did any cited source turn out
+  not to exist) and reports **reachability** beside it as a separate number,
+  because they answer different questions and collapsing them into one percentage
+  made a clean report look doubtful. A report with nothing fabricated gets a new
+  `blocked` badge rather than `partial`.
+- A blocked citation carrying a DOI is now checked against the DOI registry, so a
+  paper behind a paywall is still shown to exist. `doi.org` answers for every
+  discipline without a key, which is why it is used in preference to resolving
+  Cochrane DOIs to PubMed specifically. A publisher's 404 is never appealed to the
+  registry; only a block is. Verified against the live registry rather than from
+  documentation: a registered handle answers 200 with `responseCode: 1`, an
+  unknown one 404 with `responseCode: 100`, and both signals are required.
+- `research_synthesise` no longer leads with the count of near-identically worded
+  claims. That is the weakest of its three agreement tests and printed first, so a
+  reader saw "**0**" as the headline while the fuzzy match that found real overlap
+  sat on line four, and described a merge as finding no corroboration before
+  having to walk it back. Convergence leads now, and the exact-wording count says
+  plainly that a low number there is normal.
+- Deduplication could hand back a finished run that cited nothing. The usual cause
+  is a backend whose web search broke and which then wrote a fluent account of why
+  it could not research, which lands as `completed`; asking the same question
+  again returned that instead of researching. A terminal run with no sources is no
+  longer a cache hit.
+- `reddit_gather` took the question only to pick a date window and then ignored it,
+  so a narrow question got whatever the subreddit happened to be discussing.
+- A deep run can now search X. The plan implied it already did.
+
 ## [0.14.0] - 2026-07-29
 
 ### Added

@@ -27,6 +27,16 @@ export const CitationVerdictSchema = z.object({
   url: z.string().max(4000),
   verdict: z.enum(['live', 'not_found', 'unreachable', 'blocked', 'unverified', 'invalid_url']),
   httpStatus: z.number().int().optional(),
+  /**
+   * The citation carries an identifier that IS registered, even though the page
+   * itself would not serve us.
+   *
+   * This is the answer to the question people actually ask of this tool. A
+   * publisher returning 403 to a scraper says nothing about whether the paper
+   * exists; the DOI registry does, and it answers everyone. Optional because
+   * records written before this existed must still parse.
+   */
+  registered: z.boolean().optional(),
   checkedAt: z.string(),
   note: z.string().max(500).optional(),
 });

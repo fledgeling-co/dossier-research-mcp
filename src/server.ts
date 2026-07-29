@@ -2000,10 +2000,18 @@ function registerShapeTools(server: FastMCP, deps: ServerDeps): void {
         return [
           `## Cross-backend comparison of ${String(sets.length)} run(s)`,
           '',
-          `- Claims worded near-identically by more than one backend: **${String(shared.length)}**`,
-          `- Of those, backed by 3+ independent domains: **${String(corroborated.length)}**`,
-          `- Of those, agreeing while citing ONE domain: **${String(sameSource.length)}**, agreement here is not evidence.`,
-          `- Claims that look like the same claim written differently: **${String(convergent.length)}**`,
+          // Convergence leads, and the ordering is the fix.
+          //
+          // The near-identical count was printed first and read as the
+          // headline, which cost a reader real trust: three reports
+          // independently said the same four things, this line said 0, and they
+          // described the merge as finding no overlap before having to walk it
+          // back. It is the WEAKEST of the three tests, matching on wording, so
+          // it belongs under the one with the power to find a positive.
+          `- Claims two or more backends appear to agree on: **${String(convergent.length)}**, matched on meaning rather than wording`,
+          `- Of those, worded near-identically: **${String(shared.length)}**. A low number here is normal and says nothing about agreement; independent reports rarely phrase a finding the same way.`,
+          `- Backed by 3+ independent domains: **${String(corroborated.length)}**`,
+          `- Agreeing while citing ONE domain: **${String(sameSource.length)}**, agreement here is not evidence.`,
           '',
           convergent.length > 0
             ? [
