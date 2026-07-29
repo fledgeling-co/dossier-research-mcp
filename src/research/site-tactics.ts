@@ -61,7 +61,15 @@ export const SITE_TACTICS: readonly SiteTactic[] = [
         provenance: 'verified',
       },
       {
-        how: 'A logged-in browser session reaches the same pages a person can, when the API shape does not fit.',
+        // "Logged-in" and "established" are both load-bearing. Tested on 29 July
+        // 2026: a FRESH Playwright Chromium, before any sign-in was attempted,
+        // was served Reddit's "You've been blocked by network security" page at
+        // /prefs/apps. Automating a browser is not the same as using yours.
+        how:
+          'Your own established browser profile, already signed in — not an automated one. A fresh Playwright ' +
+          'Chromium is served a network-security block page before it can even reach the login form, so this ' +
+          'route means a driver that attaches to the browser you already use, such as chrome-devtools-mcp with ' +
+          '--autoConnect.',
         provenance: 'verified',
       },
     ],
@@ -71,6 +79,13 @@ export const SITE_TACTICS: readonly SiteTactic[] = [
         what:
           'The old `.json` endpoints. `reddit.com/r/…/search.json` answers 403 to a non-browser user-agent, ' +
           'and `oauth.reddit.com` answers 403 without a token. Advice that says otherwise predates the change.',
+        provenance: 'verified',
+      },
+      {
+        what:
+          'Driving a fresh automated browser at it. Playwright Chromium with a clean profile is served ' +
+          '"You\u2019ve been blocked by network security" on /prefs/apps, with no login attempted — so the block ' +
+          'is on the browser, not the account.',
         provenance: 'verified',
       },
       {
