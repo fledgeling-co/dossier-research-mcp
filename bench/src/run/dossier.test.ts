@@ -229,7 +229,11 @@ describe('the live cell executor', () => {
   it('a re-executed cell returns the run already bought rather than buying a second', async () => {
     let created = 0;
     const client: DeepResearchClient = {
-      ...scriptedClient([snapshot({ status: 'completed', markdown: '# R' })]),
+      // The report needs a citation. Dedupe now skips a finished run that cited
+      // nothing, because a 0-source "completed" run is the signature of a
+      // backend whose search broke, and a retry deduping onto one could never
+      // succeed. A bare '# R' has no sources and is no longer a dedupe target.
+      ...scriptedClient([snapshot({ status: 'completed', markdown: '# R\n\nSee https://example.com/a' })]),
       async createRun() {
         created += 1;
         return snapshot({ interactionId: `int_${String(created)}` });

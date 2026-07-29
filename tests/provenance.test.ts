@@ -70,3 +70,55 @@ describe('RunRecord.spawnedBy', () => {
     expect(parsed.spawnedBy).toBe('loc_claude_abc001');
   });
 });
+
+describe('dedupe never returns a run that produced nothing', () => {
+  it('skips a completed run with no sources, so a retry can actually retry', async () => {
+    // Reported from use: a retry after a failure deduped straight onto the
+    // 0-source run it was retrying, so the retry could never succeed. The
+    // `failed` guard does not catch it: the usual cause is a backend whose web
+    // search broke and then wrote a fluent account of why it could not
+    // research, which lands as `completed`.
+    const { mkdtemp } = await import('node:fs/promises');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const { Store } = await import('../src/store/store.js');
+
+    const root = await mkdtemp(join(tmpdir(), 'dedupe-'));
+    const store = new Store(root);
+    await store.init();
+
+    const now = new Date().toISOString();
+    const base = {
+      createdAt: now, updatedAt: now, lastProgressAt: now,
+      question: 'q', prompt: 'p', archetype: 'technical' as const, tier: 'fast' as const,
+      estimatedCostUsd: 1, fingerprint: 'fp-shared',
+    };
+
+    await store.saveRun({ ...base, id: 'dr_barren', state: 'completed', reportChars: 9140, sourceCount: 0 } as never);
+    expect(await store.findByFingerprint('fp-shared', 60)).toBeNull();
+
+    // And a real one on the same fingerprint is still returned, or dedupe would
+    // have stopped working rather than become correct.
+    await store.saveRun({ ...base, id: 'dr_real', state: 'completed', reportChars: 400, sourceCount: 7 } as never);
+    expect((await store.findByFingerprint('fp-shared', 60))?.id).toBe('dr_real');
+  });
+
+  it('still dedupes onto an in-flight run, which has no sources yet', async () => {
+    // The guard is on TERMINAL runs only. An in-flight run legitimately has no
+    // sources, and deduping onto it is the entire point of dedupe.
+    const { mkdtemp } = await import('node:fs/promises');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const { Store } = await import('../src/store/store.js');
+    const root = await mkdtemp(join(tmpdir(), 'dedupe2-'));
+    const store = new Store(root);
+    await store.init();
+    const now = new Date().toISOString();
+    await store.saveRun({
+      id: 'dr_running', createdAt: now, updatedAt: now, lastProgressAt: now,
+      state: 'running', question: 'q', prompt: 'p', archetype: 'technical',
+      tier: 'fast', estimatedCostUsd: 1, fingerprint: 'fp-live', reportChars: 0, sourceCount: 0,
+    } as never);
+    expect((await store.findByFingerprint('fp-live', 60))?.id).toBe('dr_running');
+  });
+});

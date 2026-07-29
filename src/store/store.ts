@@ -392,6 +392,17 @@ export class Store {
     for (const run of all) {
       if (run.fingerprint !== fingerprint) continue;
       if (run.state === 'failed' || run.state === 'cancelled') continue;
+      // A finished run that cited nothing is not a result to hand back.
+      //
+      // Reported from use: a retry after a failure deduped straight onto the
+      // 0-source run it was retrying, so the retry could never succeed. The
+      // `failed` guard above does not catch it, because the usual cause is a
+      // backend whose web search broke and which then wrote a fluent account of
+      // why it could not research. That lands as `completed`.
+      //
+      // Only applied once the run is terminal: an in-flight run legitimately
+      // has no sources yet, and deduping onto it is the whole point.
+      if (TERMINAL_STATES.includes(run.state) && run.sourceCount === 0) continue;
       if (run.createdAt < cutoff) continue;
       return run;
     }
