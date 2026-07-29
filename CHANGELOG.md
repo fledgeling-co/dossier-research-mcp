@@ -6,6 +6,18 @@ Dates are the release date. Costs are estimate bands, never quotes. Where a fact
 
 This project follows [semantic versioning](https://semver.org/). Until 1.0 the minor number carries breaking changes.
 
+## [0.13.1] - 2026-07-29
+
+### Fixed
+
+- **A spawned CLI inherited the session state of the CLI that launched Dossier.** Reported live: a run came back `completed` with a 9,140-character report explaining that its own web search was down with `effort 'xhigh' not supported when thinking is disabled`, while the operator's own settings had adaptive thinking enabled.
+
+  Dossier usually runs as a stdio MCP server launched **by** a coding CLI, so its environment *is* that CLI's session state — and both spawn paths passed it through untouched. The spawned Claude Code inherited `CLAUDE_EFFORT=xhigh` from the session that started Dossier, plus `CLAUDE_CODE_SESSION_ID` (the parent's) and `CLAUDE_CODE_CHILD_SESSION=1`, which tells a fresh process it belongs to a conversation it has never seen.
+
+  The `CLAUDE_CODE_*` family and `CLAUDE_EFFORT` are now removed before spawning. Claude Code's credentials live in `~/.claude.json` and `~/.claude`, which `authPaths` already checks, so this costs no authentication. `ANTHROPIC_API_KEY` goes with them for a different reason: it outranks the subscription in `-p` mode, so a run priced at $0.00 with the basis "no API charge: the run draws on your CLI subscription" would in fact be billed per token. Either the key goes or that cost band is false, and the band is what every budget decision is made from.
+
+- **A report citing no sources counted as a member that answered.** The panel merge tested `reportChars > 0`, which is precisely the wrong test: an articulate excuse is longer than a terse finding. Two runs on the machine where this was found produced 3,171 and 9,140 characters, cited zero sources between them, and both counted toward "N of M members produced a report". A research report that cites nothing has not done research. The count is on cited sources now, and unsourced members are named in their own warning.
+
 ## [0.13.0] - 2026-07-29
 
 ### Added
@@ -682,7 +694,8 @@ Four defects that a full hermetic suite passed and one real API call each found.
 
 - First release. Gemini Deep Research wrapped so an agent can drive it safely: durable runs that survive a disconnect, a spend gate that reserves the worst case before the call, and outline-first reading so a 60,000-token report never lands inline.
 
-[Unreleased]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.13.0...HEAD
+[Unreleased]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.13.1...HEAD
+[0.13.1]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.13.0...v0.13.1
 [0.13.0]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/fledgeling-co/dossier-research-mcp/compare/v0.10.0...v0.11.0
