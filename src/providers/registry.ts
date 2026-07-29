@@ -1,5 +1,5 @@
 import type { Config } from '../config.js';
-import { healthOf, readSearchHealth } from '../local/search-health.js';
+import { healthOf, probedUnableToSearch, readSearchHealth, readSearchProbes } from '../local/search-health.js';
 import { BROWSER_TOOLS } from '../local/browser.js';
 import { modelFamily, normaliseModelName } from '../local/cli.js';
 import type { DeepResearchClient } from '../gemini/client.js';
@@ -588,8 +588,15 @@ const LARGE_DOMAIN_FILTER = 20;
  */
 function unhealthyBackends(storeDir: string): readonly string[] {
   try {
-    const record = readSearchHealth(storeDir);
-    return [...record].filter(([, outcomes]) => healthOf(outcomes) === 'failing').map(([id]) => id);
+    const observed = [...readSearchHealth(storeDir)]
+      .filter(([, outcomes]) => healthOf(outcomes) === 'failing')
+      .map(([id]) => id);
+    // A fresh probe counts too, and it is the stronger of the two: it asked the
+    // CLI to search a moment ago, where the record only knows how earlier
+    // questions went. Union rather than precedence, because they fail
+    // independently and either one is enough to be worth saying.
+    const probed = probedUnableToSearch(readSearchProbes(storeDir));
+    return [...new Set([...observed, ...probed])];
   } catch {
     return [];
   }
@@ -720,8 +727,9 @@ export function assemblePanelAmong(
   if (unhealthySeated.length > 0) {
     notes.push(
       `Web search looks broken on ${unhealthySeated.map((m) => m.provider.label).join(', ')}: ` +
-        'recent finished runs cited no sources at all. Seated anyway, because that evidence is about earlier questions rather than this one, ' +
-        'but expect a fluent report with nothing behind it. `research_doctor` has the detail.',
+        'either a recent probe found it unable to search, or its last finished runs cited no sources at all. ' +
+        'Seated anyway rather than dropped, because a backend that silently vanishes from a panel is harder to diagnose than one with a note against its name, ' +
+        'but expect a fluent report with nothing behind it. `research_doctor { probeSearch: true }` has the detail.',
     );
   }
 

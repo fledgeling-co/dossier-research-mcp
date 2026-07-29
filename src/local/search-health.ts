@@ -144,3 +144,87 @@ export function describeSearchHealth(record: ReadonlyMap<string, Outcome[]>): st
   }
   return lines;
 }
+
+const PROBE_FILE = 'cli-search-probe.json';
+
+/**
+ * How long a search probe is believed.
+ *
+ * Far shorter than the model cache's 30 days, because the two facts decay at
+ * completely different rates. A CLI's model changes when someone changes a
+ * setting; its ability to search breaks when a session expires, a rate limit
+ * trips, or a network changes, none of which anyone does deliberately. A day-old
+ * "search works" is a claim about yesterday.
+ */
+export const PROBE_TRUSTED_MS = 12 * 60 * 60 * 1000;
+
+const ProbeSchema = z.object({
+  state: z.enum(['working', 'no_search', 'unverified', 'refused', 'failed']),
+  at: z.number(),
+  detail: z.string().max(500).optional(),
+});
+const ProbeFileSchema = z.record(z.string(), ProbeSchema);
+
+export type ProbeRecord = z.infer<typeof ProbeSchema>;
+
+export function searchProbePath(storeDir: string): string {
+  return join(storeDir, PROBE_FILE);
+}
+
+export function readSearchProbes(storeDir: string): ReadonlyMap<string, ProbeRecord> {
+  const out = new Map<string, ProbeRecord>();
+  let raw: string;
+  try {
+    raw = readFileSync(searchProbePath(storeDir), 'utf8');
+  } catch {
+    return out;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return out;
+  }
+  const envelope = ProbeFileSchema.safeParse(parsed);
+  if (!envelope.success) return out;
+  for (const [backend, rec] of Object.entries(envelope.data)) out.set(backend, rec);
+  return out;
+}
+
+export async function writeSearchProbes(
+  storeDir: string,
+  results: ReadonlyMap<string, ProbeRecord>,
+): Promise<void> {
+  if (results.size === 0) return;
+  const merged: Record<string, ProbeRecord> = {};
+  for (const [k, v] of readSearchProbes(storeDir)) merged[k] = v;
+  for (const [k, v] of results) merged[k] = v;
+
+  mkdirSync(storeDir, { recursive: true, mode: 0o700 });
+  const path = searchProbePath(storeDir);
+  const tmp = `${path}.${String(process.pid)}.tmp`;
+  await writeFile(tmp, JSON.stringify(merged, null, 2), { mode: 0o600 });
+  await rename(tmp, path);
+}
+
+/** Whether a stored probe is recent enough to act on. */
+export function probeIsFresh(rec: ProbeRecord, now: number = Date.now()): boolean {
+  return now - rec.at <= PROBE_TRUSTED_MS;
+}
+
+/**
+ * Backends a FRESH probe found unable to search.
+ *
+ * Only `no_search` and `unverified` count. `refused` means the CLI was never
+ * asked (absent, unidentified, or signed out), which the doctor already reports
+ * on its own terms, and `failed` means the probe itself did not complete, which
+ * is evidence about the probe rather than about the search.
+ */
+export function probedUnableToSearch(
+  probes: ReadonlyMap<string, ProbeRecord>,
+  now: number = Date.now(),
+): readonly string[] {
+  return [...probes]
+    .filter(([, r]) => probeIsFresh(r, now) && (r.state === 'no_search' || r.state === 'unverified'))
+    .map(([id]) => id);
+}

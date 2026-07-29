@@ -936,6 +936,121 @@ export async function probeCliModel(
   return { ...base, state: 'probed', model, detail: `reports its model as ${model}` };
 }
 
+
+/**
+ * Ask a CLI to actually perform a web search and show its working.
+ *
+ * The failure this catches: a CLI joins the free lane, its web search is broken,
+ * and rather than failing it writes a fluent report explaining why it could not
+ * research. That lands `completed` and costs a panel slot.
+ *
+ * The prompt demands a URL because a URL is the one part of the answer that can
+ * be checked from outside the CLI. An answer with no URL is a CLI that did not
+ * search; a URL that does not resolve is one that invented its evidence.
+ *
+ * **What a pass cannot mean.** A model could satisfy this from memory with a URL
+ * it happens to know, and a real homepage will resolve. So `working` means the
+ * CLI produced a resolvable source on demand, NOT that its search index is live
+ * or good. The state that carries real information is the negative one, and that
+ * is the one the caller was losing a slot to.
+ */
+export const SEARCH_PROBE_PROMPT =
+  'Search the web right now for a news article published within the last 7 days about any topic. ' +
+  'Reply with exactly one line and nothing else, in this exact form: SEARCH_OK=<the full https URL of the article you found>. ' +
+  'If you cannot search the web for any reason, reply with exactly: SEARCH_FAILED=<a short reason>. ' +
+  'Do not explain, do not add any other line, and do not answer from memory.';
+
+export type SearchProbeState = 'working' | 'no_search' | 'unverified' | 'refused' | 'failed';
+
+export interface CliSearchProbe {
+  readonly id: CliId;
+  readonly label: string;
+  readonly state: SearchProbeState;
+  /** The URL the CLI produced, when it produced one. */
+  readonly url?: string;
+  readonly detail: string;
+}
+
+/** The URL a CLI offered as evidence it searched, or the reason it gave for not searching. */
+export function parseSearchAnswer(raw: string): { ok: true; url: string } | { ok: false; reason: string } | undefined {
+  const failed = /SEARCH_FAILED\s*=\s*(.+)/i.exec(raw);
+  const okMatch = /SEARCH_OK\s*=\s*(https?:\/\/\S+)/i.exec(raw);
+  // The URL form wins when both appear: CLIs narrate, and a transcript that
+  // mentions a failed first attempt and then succeeds is a success.
+  if (okMatch?.[1]) return { ok: true, url: okMatch[1].replace(/[)\].,;]+$/, '').slice(0, 2000) };
+  if (failed?.[1]) return { ok: false, reason: failed[1].trim().slice(0, 300) };
+  return undefined;
+}
+
+export async function probeCliSearch(
+  adapter: CliAdapter,
+  verifyUrl: (url: string) => Promise<boolean>,
+  timeoutMs = 120_000,
+  workDir?: string,
+): Promise<CliSearchProbe> {
+  const base = { id: adapter.id, label: adapter.label } as const;
+  const status = await probeCli(adapter);
+  if (status.state !== 'ready') {
+    return {
+      ...base,
+      state: 'refused',
+      detail:
+        status.state === 'ambiguous'
+          ? 'not asked: the binary could not be identified, and an unidentified binary is never run'
+          : status.state === 'absent'
+            ? 'not asked: not installed'
+            : 'not asked: installed but not signed in, so a prompt would fail or open a login',
+    };
+  }
+
+  const bin = status.path ?? resolveOnPath(adapter.bin);
+  if (!bin) return { ...base, state: 'failed', detail: 'the binary vanished from PATH between the two checks' };
+
+  const headless = await resolveHeadless(adapter, bin);
+
+  let raw: string;
+  try {
+    const { stdout, stderr } = await run(bin, [...headless(SEARCH_PROBE_PROMPT)], {
+      timeout: timeoutMs,
+      maxBuffer: 4_000_000,
+      ...(workDir ? { cwd: workDir } : {}),
+    });
+    raw = `${stdout}\n${stderr}`;
+  } catch (e: unknown) {
+    return {
+      ...base,
+      state: 'failed',
+      detail: `the CLI did not answer within ${String(Math.round(timeoutMs / 1000))}s or exited non-zero: ${
+        e instanceof Error ? e.message.split('\n')[0] : String(e)
+      }`,
+    };
+  }
+
+  const answer = parseSearchAnswer(raw);
+  if (!answer) {
+    return {
+      ...base,
+      state: 'unverified',
+      detail: 'the CLI answered but named no URL, which is what a backend with no working search produces',
+    };
+  }
+  if (!answer.ok) {
+    return { ...base, state: 'no_search', detail: `the CLI says it cannot search: ${answer.reason}` };
+  }
+
+  // Dereferenced here rather than trusted, because a CLI with no search that has
+  // been told to produce a URL will produce one.
+  const resolves = await verifyUrl(answer.url);
+  return resolves
+    ? { ...base, state: 'working', url: answer.url, detail: `searched and returned a source that resolves: ${answer.url}` }
+    : {
+        ...base,
+        state: 'unverified',
+        url: answer.url,
+        detail: `returned ${answer.url}, which did not resolve. Either its search is broken or it invented the source.`,
+      };
+}
+
 async function anyExists(paths: readonly string[]): Promise<boolean> {
   for (const p of paths) {
     if (await access(p).then(() => true).catch(() => false)) return true;

@@ -6,6 +6,30 @@ Dates are the release date. Costs are estimate bands, never quotes. Where a fact
 
 This project follows [semantic versioning](https://semver.org/). Until 1.0 the minor number carries breaking changes.
 
+## [Unreleased]
+
+### Added
+
+- `research_doctor { probeSearch: true }` asks each signed-in CLI to perform a
+  real web search and return a URL, then dereferences that URL rather than taking
+  its word. This is the check worth running before spending on a panel: a CLI
+  whose web search is broken does not fail, it writes a fluent report explaining
+  why it could not research, which lands `completed`, costs a slot and cites
+  nothing. Off by default because it spends a search against each subscription;
+  cached for 12 hours, far shorter than the model cache's 30 days, because a
+  model changes when someone changes a setting whereas a search breaks when a
+  session expires or a rate limit trips.
+
+  Verified against the real CLIs rather than assumed: Codex and Grok both
+  honoured the prompt form and returned news URLs published the previous day,
+  which is the part a memorised answer could not fake.
+
+  A pass means the CLI produced a resolvable source on demand. It does not prove
+  the search index is live or good; the negative answers carry the information.
+  The panel takes a fresh probe and the observed run record together, and warns
+  rather than dropping a backend, because one that silently vanishes from a panel
+  is harder to diagnose than one with a note against its name.
+
 ## [0.16.0] - 2026-07-29
 
 ### Added

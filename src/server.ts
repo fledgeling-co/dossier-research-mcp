@@ -26,10 +26,18 @@ import {
   checkAllHeadlessArgv,
   probeAllClis,
   probeCliModel,
+  probeCliSearch,
   type CliArgvCheck,
   type CliId, cliWorkDir } from './local/cli.js';
 import { describeProbeAge, readModelCache, writeModelCache } from './local/model-cache.js';
-import { describeSearchHealth, readSearchHealth } from './local/search-health.js';
+import {
+  describeSearchHealth,
+  probeIsFresh,
+  readSearchHealth,
+  readSearchProbes,
+  writeSearchProbes,
+  type ProbeRecord,
+} from './local/search-health.js';
 import {
   DEFAULT_BASE_AGENT,
   RESEARCH_AGENT_INSTRUCTION,
@@ -4030,6 +4038,77 @@ export function renderArgvSelfTest(checks: readonly CliArgvCheck[]): string[] {
  * configuration the user can change whenever they like, so an answer printed
  * without a date invites being trusted for longer than it has earned.
  */
+
+/**
+ * Whether each CLI's web search actually works, by asking it to use it.
+ *
+ * Distinct from the health record beside it, and both are kept because they
+ * answer different questions. The record is free and retrospective: it knows
+ * what happened on real questions, and it cannot tell you anything until a slot
+ * has already been lost. The probe costs a subscription round trip and answers
+ * NOW, before the panel is seated. The probe is the one worth paying for when
+ * you are about to spend real money on a panel.
+ */
+async function renderCliSearch(storeDir: string, probeNow: boolean, ready: readonly CliId[]): Promise<string[]> {
+  const lines: string[] = ['## Whether each CLI can actually search the web', ''];
+  lines.push(
+    '_A CLI whose search is broken does not fail. It writes a fluent report explaining why it could not research, which ' +
+      'lands `completed`, costs a panel slot and cites nothing. This asks each one to search and show a URL, then ' +
+      'dereferences that URL rather than taking its word._',
+    '',
+  );
+
+  if (probeNow && ready.length > 0) {
+    const targets = CLI_ADAPTERS.filter((a) => ready.includes(a.id));
+    const work = cliWorkDir(storeDir);
+    const results = await Promise.all(
+      // The URL is checked with the same SSRF-safe fetch every citation goes
+      // through, rather than a bare fetch, because the URL was chosen by a model
+      // that has just been told to go and read the open web.
+      targets.map((a) =>
+        probeCliSearch(
+          a,
+          async (url: string) => {
+            try {
+              const res = await safeFetch(url, { method: 'HEAD', timeoutMs: 10_000 });
+              return res.ok;
+            } catch {
+              return false;
+            }
+          },
+          120_000,
+          work,
+        ),
+      ),
+    );
+    const toStore = new Map<string, ProbeRecord>();
+    for (const r of results) toStore.set(r.id, { state: r.state, at: Date.now(), detail: r.detail.slice(0, 500) });
+    await writeSearchProbes(storeDir, toStore);
+  }
+
+  const probes = readSearchProbes(storeDir);
+  for (const adapter of CLI_ADAPTERS) {
+    const rec = probes.get(adapter.id);
+    if (!rec) {
+      if (ready.includes(adapter.id)) lines.push(`- ⚪ **${adapter.label}**: signed in, search never probed`);
+      continue;
+    }
+    const icon = rec.state === 'working' ? '✅' : rec.state === 'refused' ? '⚪' : rec.state === 'failed' ? '🟡' : '❌';
+    const stale = probeIsFresh(rec) ? '' : ' _(stale; re-probe before trusting it)_';
+    lines.push(`- ${icon} **${adapter.label}**: ${rec.detail ?? rec.state}${stale}`);
+  }
+
+  if (probes.size === 0 && ready.length === 0) lines.push('- No signed-in CLI to ask.');
+  lines.push(
+    '',
+    probeNow
+      ? '_Probed just now._'
+      : '_Set `probeSearch: true` to ask. It spends one short search on each CLI subscription and takes up to two minutes; the answer is cached for 12 hours._',
+    '_A pass means the CLI produced a source that resolves on demand. It does not prove the search index is live or good; the negative answers are the ones carrying information._',
+  );
+  return lines;
+}
+
 async function renderCliModels(storeDir: string, probeNow: boolean, ready: readonly CliId[]): Promise<string[]> {
   const lines: string[] = ['## Which model each CLI serves', ''];
   lines.push(
@@ -4110,6 +4189,12 @@ function registerResources(server: FastMCP, deps: ServerDeps): void {
         .default(false)
         .describe(
           'Ask each identified, signed-in CLI which model it actually serves, and cache the answer on disk. Off by default because it SPENDS a short model round trip against each of those subscriptions and takes a few seconds per CLI, where ordinary detection is offline and instant. Worth doing once: the panel uses it to stop seating two CLIs that serve the same model, which would buy one perspective and report two. Without it the free lane keeps every CLI and says it may hold duplicates.',
+        ),
+      probeSearch: z
+        .boolean()
+        .default(false)
+        .describe(
+          'Ask each identified, signed-in CLI to perform a real web search and return a URL, then dereference that URL. Off by default because it SPENDS a search against each of those subscriptions and can take two minutes. This is the check worth running before a panel: a CLI whose web search is broken does not fail, it writes a fluent report about why it could not research, which completes, costs a slot and cites nothing. Cached for 12 hours.',
         ),
     }),
     async execute(args) {
@@ -4199,6 +4284,12 @@ function registerResources(server: FastMCP, deps: ServerDeps): void {
           ...(await renderCliModels(
             deps.config.storeDir,
             args.probeModels,
+            ready.map((c) => c.id),
+          )),
+          '',
+          ...(await renderCliSearch(
+            deps.config.storeDir,
+            args.probeSearch,
             ready.map((c) => c.id),
           )),
         );
