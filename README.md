@@ -257,7 +257,7 @@ Two things this layer refuses to do, both deliberate. The quality floors are **a
 | **Spend nothing** | Run it through a CLI you already pay for, import a report from a subscription, or drive the free local loop |
 | **Watch the spend** | See what you've committed today, what's left, and per-backend sub-ceilings |
 
-Full contract for all thirty-seven tools: **[Tool reference](docs/tools.md)**.
+Full contract for all thirty-eight tools: **[Tool reference](docs/tools.md)**.
 
 ## What it costs
 
@@ -281,7 +281,7 @@ Normal is the default and is right most of the time. Dossier never quietly upgra
 |---|---|
 | **[Setup](docs/setup.md)** | Getting a key, spend caps, installing, every environment variable |
 | **[Providers](docs/providers/README.md)** | Which backend for which job, and how routing decides |
-| **[Tool reference](docs/tools.md)** | All thirty-seven tools, six resources, four prompts |
+| **[Tool reference](docs/tools.md)** | All thirty-eight tools, six resources, four prompts |
 | **[How it works](docs/how-it-works.md)** | What it decides for you and what it doesn't, how a brief is built, a real session end to end |
 | **[Security](docs/security.md)** | Prompt injection, SSRF, what leaves your machine |
 | **[Test plan](docs/test-plan.md)** | The acceptance-criteria matrix, and the gaps named honestly |

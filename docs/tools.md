@@ -531,6 +531,27 @@ First, it sets a **hierarchy of truth**: your internal documents are authoritati
 
 When it works, that contradictions section is the most useful thing in the report. What the internet says about your problem is commodity; where it disagrees with what your team already believes isn't.
 
+### `reddit_gather`, free
+
+Reads what a subreddit actually said, in a time window, with **no credential** — because none is obtainable. Checked on 29 July 2026: `create app` at reddit.com/prefs/apps returns a link to the Responsible Builder Policy and creates nothing, the `.json` endpoints answer 403 to a non-browser agent, `oauth.reddit.com` answers 403 without a token, and a clean automated browser is served a network-security block page. Self-serve registration ended around November 2025 and approval is routed to moderation use cases.
+
+So this reads **Arctic Shift**, a public third-party Reddit archive at `photon-reddit.com`. Your query goes to whoever operates it. Free is not the same as private, and that is stated in the tool's own description rather than here alone.
+
+**It cannot search by topic.** `q=` is rejected; the archive filters by subreddit and time. That makes discovery a separate stage rather than a parameter:
+
+- Call with **no** `subreddits` and it gathers nothing. It returns name-matched candidates ranked by comment volume, plus the `site:reddit.com …` query to run through any search backend — because a name search finds `r/vectordatabase` and never finds `r/LocalLLaMA`, where the same argument is happening under a name that shares nothing with the subject.
+- Call **with** `subreddits` and it reads them.
+
+| Parameter | Type | Notes |
+|---|---|---|
+| `question` | `string` | What you want to know. The window is inferred from it |
+| `subreddits` | `string[]` | Up to 8. Omit to get candidates and the discovery query instead of a gather |
+| `window` | `24h` \| `7d` \| `30d` \| `90d` \| `1y` \| `5y` \| `all` | Overrides the inference |
+
+The window is **inferred from the question** and the reason is printed with the result: "today" gives 24h, "this quarter" gives 90d, a bare year gives 1y. With no period named it is **30 days**, not the server-wide year — a year of a busy subreddit is mostly old items, and a thread nobody has replied to in six months is not what "what do people think" is asking.
+
+A subreddit returning nothing is reported by name as a real result — quiet, private or misspelled — rather than averaged into the total.
+
 ### The local corpus: `corpus_local_list` · `corpus_local_search`
 
 The other option, for anything you cannot hand to a third party. Files are read on your machine, matched on your machine, and **no byte of their content reaches any provider, reranker or model**.

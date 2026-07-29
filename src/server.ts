@@ -6,6 +6,17 @@ import { backendLimitations, describeAuth, loadConfig, type Config } from './con
 import { assertStoreName, resolveCorpusClient, type CorpusClient } from './corpus/files.js';
 import { LocalCorpus } from './corpus/local.js';
 import { probeAllBrowserTools, renderBrowserTools } from './local/browser.js';
+import {
+  discoverByName,
+  discoveryQuery,
+  discoveryTerms,
+  gatherSubreddit,
+  inferWindow,
+  MAX_SUBREDDITS,
+  renderGather,
+  windowStartEpoch,
+  type RedditItem,
+} from './research/reddit.js';
 import { renderTactics } from './research/site-tactics.js';
 import {
   CLI_ADAPTERS,
@@ -2920,6 +2931,112 @@ function registerLoopTools(server: FastMCP, deps: ServerDeps): void {
     }
     return parsed.data;
   }
+
+  server.addTool({
+    name: 'reddit_gather',
+    description:
+      'Read what a subreddit actually said, in a time window, with no credential. Reddit closed self-serve API ' +
+      'registration — `create app` now returns a policy link and creates nothing, the `.json` endpoints answer ' +
+      '403, and an automated browser is blocked — so this reads Arctic Shift, a PUBLIC THIRD-PARTY ARCHIVE of ' +
+      'Reddit at photon-reddit.com. Your query goes to whoever operates it; free is not the same as private. ' +
+      'It filters by SUBREDDIT and time, and cannot search by topic: pass `subreddits` if you know them, or ' +
+      'call with none and it returns name-matched candidates plus the `site:reddit.com` query to run for ' +
+      'subject-based discovery, which finds the communities whose names share nothing with your topic. The ' +
+      'window is inferred from the question unless you name one.',
+    annotations: {
+      title: 'Read Reddit through a public archive (free, no key)',
+      readOnlyHint: true,
+      destructiveHint: false,
+      openWorldHint: true,
+    },
+    parameters: z.object({
+      question: z.string().min(3).max(2000).describe('What you want to know. The time window is inferred from it.'),
+      subreddits: z
+        .array(z.string().min(2).max(21))
+        .max(MAX_SUBREDDITS)
+        .optional()
+        .describe('Communities to read. Omit to get candidates and the discovery query instead of a gather.'),
+      window: z
+        .enum(WINDOWS)
+        .optional()
+        .describe('Override the inferred window. Defaults to 30d when the question names no period.'),
+    }),
+    execute: async (args) => {
+      const verdict = inferWindow(args.question, args.window);
+
+      if (!args.subreddits || args.subreddits.length === 0) {
+        // No gather without a subreddit, because the archive has no topic
+        // search and guessing which community to read is the half a machine
+        // cannot do alone. Hand back both halves of the discovery rather than
+        // an empty result.
+        // Terms, not words. Taking every word of four letters or more offered
+        // r/Whatcouldgowrong and r/thinkpad for "what do people think of vector
+        // databases" — matches on the question's grammar, ranked to the top by
+        // sheer size. `discoveryTerms` drops those and prefers the compound
+        // forms communities are actually named after.
+        const terms = discoveryTerms(args.question);
+        const seen = new Map<string, { comments: number; term: string }>();
+        for (const term of terms) {
+          for (const c of await discoverByName(term).catch(() => [])) {
+            // A prefix match is not a topic match: `subreddit_prefix=vector`
+            // returns anything starting with those letters. Keep only names
+            // that contain the term, so the filter is the term rather than
+            // the alphabet.
+            if (!c.name.toLowerCase().includes(term)) continue;
+            if (!seen.has(c.name)) seen.set(c.name, { comments: c.comments, term });
+          }
+        }
+        const ranked = [...seen.entries()]
+          .sort((a, b) => b[1].comments - a[1].comments)
+          .slice(0, 10)
+          .map(([n, v]) => [n, v.comments] as const);
+        return [
+          '### No subreddits given, so nothing was gathered',
+          '',
+          `Window if you proceed: **${verdict.window}** — ${verdict.why}.`,
+          '',
+          ranked.length > 0
+            ? '**Name-matched candidates** (busiest first; this only finds communities whose NAME matches):\n' +
+              ranked.map(([n, c]) => `- r/${n} — ${c.toLocaleString('en-US')} comments`).join('\n')
+            : '**No name matches.** That is common: most communities are not named after their subject.',
+          '',
+          '**Then find the ones a name search cannot.** Run this through any search backend and take the ' +
+            'subreddit names out of the result URLs:',
+          '',
+          '```',
+          discoveryQuery(args.question),
+          '```',
+          '',
+          'Call again with `subreddits` to read them.',
+        ].join('\n');
+      }
+
+      const start = windowStartEpoch(verdict.window);
+      const items: RedditItem[] = [];
+      const empty: string[] = [];
+      for (const sub of args.subreddits.slice(0, MAX_SUBREDDITS)) {
+        const got = await gatherSubreddit(sub, start).catch(() => [] as RedditItem[]);
+        if (got.length === 0) empty.push(sub);
+        items.push(...got);
+      }
+      const report = renderGather(
+        { window: verdict, subreddits: args.subreddits, items, empty },
+        args.question,
+      );
+      // Newest first: a caller reading the top of a long list should see what
+      // is current, not what happened at the window's far edge.
+      const sorted = [...items].sort((a, b) => b.createdUtc - a.createdUtc);
+      const body = sorted
+        .slice(0, 120)
+        .map((i) => {
+          const when = new Date(i.createdUtc * 1000).toISOString().slice(0, 10);
+          const score = i.score === undefined ? '' : ` (${String(i.score)})`;
+          return `- **r/${i.subreddit}** ${when} ${i.kind}${score}: ${i.text.replace(/\s+/g, ' ').slice(0, 300)}`;
+        })
+        .join('\n');
+      return `${report}\n\n---\n\n${body}${sorted.length > 120 ? `\n\n_…and ${String(sorted.length - 120)} more._` : ''}`;
+    },
+  });
 
   server.addTool({
     name: 'research_local_start',

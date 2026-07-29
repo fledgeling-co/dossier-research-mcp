@@ -83,6 +83,7 @@ describe('PROTO-01: every tool registers', () => {
         'agent_create', 'agent_delete', 'agent_list', 'agent_run',
         'corpus_add_file', 'corpus_create', 'corpus_delete', 'corpus_list',
         'corpus_local_list', 'corpus_local_search',
+        'reddit_gather',
         'research_approve_plan', 'research_budget', 'research_cancel', 'research_claims',
         'research_compare', 'research_counter_review', 'research_doctor',
         'research_evidence',
@@ -276,7 +277,7 @@ describe('PROTO-06 / DEGRADE-02: usable with no credentials', () => {
     expect(started.isError).toBe(true);
     expect(started.text).toMatch(/credential/i);
     // The decisive part: the server is still alive and answering afterwards.
-    expect((await mcp.listTools()).length).toBe(37);
+    expect((await mcp.listTools()).length).toBe(38);
   });
 });
 
