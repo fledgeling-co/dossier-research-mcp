@@ -6,7 +6,7 @@ Dates are the release date. Costs are estimate bands, never quotes. Where a fact
 
 This project follows [semantic versioning](https://semver.org/). Until 1.0 the minor number carries breaking changes.
 
-## [Unreleased]
+## [0.16.0] - 2026-07-29
 
 ### Added
 
