@@ -1,0 +1,63 @@
+id: openvsx-cvss-assigner-split
+category: contested
+topic: cvss-assigner-disagreement
+question: >-
+  CVE-2026-13323 concerns the Open VSX Registry before 1.0.2, where the
+  /vscode/unpkg/ endpoint serves user-supplied HTML with Content-Type text/html
+  and no Content-Security-Policy. What CVSS v3.1 base score does the National
+  Vulnerability Database record for it, and is that severity agreed on by
+  everyone who has scored it? If it is not, give each score with the party that
+  assigned it, and say where in the vector the two assessments diverge.
+asOf: 2026-07-01
+reverifiedAt: 2026-07-29
+
+requiredTerms: [CVSS, Open VSX]
+
+conflictingFigures:
+  - quantity: CVSS v3.1 base score recorded for CVE-2026-13323
+    values:
+      - id: cna-score
+        label: the score assigned by Eclipse, the CNA and the project's own steward
+        kind: number
+        value: 4.1
+        unit: CVSS v3.1 base score
+        tolerance: { kind: exact }
+        source:
+          url: https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=CVE-2026-13323
+          quote: '"baseScore":4.1,"baseSeverity":"MEDIUM"'
+          locator: cvssMetricV31 entry whose source is emo@eclipse.org, type Secondary
+      - id: nvd-score
+        label: the score assigned by NVD itself
+        kind: number
+        value: 8.7
+        unit: CVSS v3.1 base score
+        tolerance: { kind: exact }
+        source:
+          url: https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=CVE-2026-13323
+          quote: '"baseScore":8.7,"baseSeverity":"HIGH"'
+          locator: cvssMetricV31 entry whose source is nvd@nist.gov, type Primary
+
+# The CNA's own impact metrics. They appear nowhere in a report that found
+# only NVD's primary score, so quoting them is evidence the second assessment
+# was actually read rather than the headline figure repeated.
+knownDissent:
+  - url: https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=CVE-2026-13323
+    distinguishingTerm: 'C:N/I:L'
+
+goldFacts:
+  - id: nvd-vector
+    label: the vector string NVD assigns
+    kind: identifier
+    value: CVSS:3.1/AV:N/AC:L/PR:L/UI:R/S:C/C:H/I:H/A:N
+    source:
+      url: https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=CVE-2026-13323
+      quote: 'CVSS:3.1/AV:N/AC:L/PR:L/UI:R/S:C/C:H/I:H/A:N'
+      locator: cvssMetricV31 entry of type Primary
+  - id: cna-vector
+    label: the vector string the CNA assigns
+    kind: identifier
+    value: CVSS:3.1/AV:N/AC:L/PR:L/UI:R/S:C/C:N/I:L/A:N
+    source:
+      url: https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=CVE-2026-13323
+      quote: 'CVSS:3.1/AV:N/AC:L/PR:L/UI:R/S:C/C:N/I:L/A:N'
+      locator: cvssMetricV31 entry of type Secondary

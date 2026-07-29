@@ -172,3 +172,75 @@ from each other.
 `settled-with-fringe` from scratch.** They are slower to build, because each
 needs a real disagreement with real evidence on both sides, and they are the
 only ones where a better backend can currently show it is better.
+
+---
+
+## And a `contested` task, authored from scratch. Also rejected. 29 July 2026
+
+The recommendation immediately above was to stop inverting retrieval tasks and
+author `contested` ones instead. That was tried the same day and the first
+attempt failed too, which makes five rejected probes in a row and changes the
+conclusion rather than extending it.
+
+`openvsx-cvss-assigner-split` is a real, material disagreement between two
+authoritative parties. CVE-2026-13323 carries **two** CVSS v3.1 scores in NVD:
+Eclipse, the CNA and the project's own steward, assigns 4.1 MEDIUM; NVD assigns
+8.7 HIGH. They agree on every exploitability metric and differ entirely on
+impact — `C:N/I:L` against `C:H/I:H` — so a four-point spread turns on what an
+attacker is assumed to gain. All five source checks proved against live data.
+
+It was probed twice. Asked the leading form — "is that severity agreed on by
+everyone who has scored it?" — the backend gave both scores, both assigners,
+localised the divergence to the impact metrics, explained the reasoning behind
+each, and volunteered CISA-ADP's SSVC entry unprompted.
+
+Then it was asked the **plain** question a user would actually ask: what is the
+CVSS score. It answered 8.7 and then added, unprompted:
+
+> Note the CNA (Eclipse Foundation) disputes this with a much lower 4.1
+> (Medium) score, so which figure you cite matters.
+
+So the task is not merely passable; the disagreement is surfaced without being
+asked for.
+
+## What five rejections establish
+
+Not that the tasks were weak. Each was a real property of real data, verified
+against primary sources before being probed.
+
+**Evidence that is CO-LOCATED is retrievable, and retrieval is solved.** It does
+not matter how many joins, filters, absences or contradictions a question
+contains, if the material sits in documents an agent can fetch. NVD returns both
+disputed scores in one array. GitHub and npm both answer HTTP. A conflict inside
+one API response is a field comparison, not a controversy.
+
+The one task in this whole corpus that both backends struggled with remains
+`deeptrace-gemini-citation-accuracy`, and the reason is now clearer. Its two
+figures — 50.3% in Table 1, 40.3% in the Results prose — sit far apart in a long
+paper, **nothing cross-references them, and the paper does not know it
+contradicts itself.** No index carries "this paper is inconsistent". You find it
+by reading both and noticing.
+
+That is the shape with headroom: **an undeclared contradiction that no source
+flags, because nobody has noticed it yet.** It cannot be found by querying for
+disagreements, since by construction it is unindexed. It is found by reading
+long documents carefully, which is expensive, and that is why there is exactly
+one.
+
+## What to do with that
+
+Three options, and the first is not defeat.
+
+1. **Report the finding as the result.** "Frontier CLI backends pass every
+   retrievable task shape we could construct, including contested ones,
+   unprompted" is a real, defensible, currently-true claim about the state of
+   the art, and it is more useful than a ranking built on tasks nothing fails.
+
+2. **Author from unindexed contradictions**, at roughly a day per task, by
+   reading long primary documents looking for internal inconsistency. Slow, and
+   the only route to tasks that discriminate.
+
+3. **Change what is measured.** If every backend retrieves correctly, the
+   remaining differences are cost, latency, citation honesty and calibration —
+   all of which this suite already scores and none of which needs a task nobody
+   can answer.
