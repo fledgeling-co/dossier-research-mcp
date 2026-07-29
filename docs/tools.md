@@ -546,6 +546,7 @@ So this reads **Arctic Shift**, a public third-party Reddit archive at `photon-r
 |---|---|---|
 | `question` | `string` | What you want to know. The window is inferred from it |
 | `subreddits` | `string[]` | Up to 8. Omit to get candidates and the discovery query instead of a gather |
+| `discoveredUrls` | `string[]` | Reddit URLs from running the discovery search. Community names are extracted from them, so results paste straight back. Merges with `subreddits` |
 | `window` | `24h` \| `7d` \| `30d` \| `90d` \| `1y` \| `5y` \| `all` | Overrides the inference |
 
 The window is **inferred from the question** and the reason is printed with the result: "today" gives 24h, "this quarter" gives 90d, a bare year gives 1y. With no period named it is **30 days**, not the server-wide year — a year of a busy subreddit is mostly old items, and a thread nobody has replied to in six months is not what "what do people think" is asking.

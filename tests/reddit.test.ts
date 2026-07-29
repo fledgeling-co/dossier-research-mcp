@@ -89,6 +89,27 @@ describe('subredditsFromUrls', () => {
   });
 });
 
+describe('the discovery loop', () => {
+  it('extracts the community a name search could never have found', () => {
+    // The whole point of the second stage. `r/LocalLLaMA` discusses vector
+    // databases constantly under a name sharing no substring with the subject,
+    // so no prefix search reaches it — but a subject search does, and the URL
+    // it returns names the community.
+    const found = subredditsFromUrls([
+      'https://www.reddit.com/r/LocalLLaMA/comments/abc/best_vector_db/',
+      'https://www.reddit.com/r/vectordatabase/comments/def/pgvector/',
+    ]);
+    expect(found).toContain('LocalLLaMA');
+    expect(discoveryTerms('what do people think of vector databases')).not.toContain('localllama');
+  });
+
+  it('ignores a URL that is not Reddit', () => {
+    // Search results are mixed. A vendor blog must not become a subreddit name.
+    expect(subredditsFromUrls(['https://example.com/r/notreddit/x'])).toEqual([]);
+    expect(subredditsFromUrls(['https://medium.com/some-post-about-r/rust'])).toEqual([]);
+  });
+});
+
 describe('discoveryQuery', () => {
   it('is a site-scoped search a caller can paste anywhere', () => {
     expect(discoveryQuery('  vector   databases  ')).toBe('site:reddit.com vector databases');

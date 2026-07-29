@@ -53,7 +53,7 @@ describe('the recorded tactics', () => {
     // The route leads with the two-stage pattern, because Arctic Shift
     // rejects `q=` and can only read a subreddit you already know — search is
     // how you learn which. Listing them as siblings hid that.
-    expect(reddit?.tactics[0]?.how).toMatch(/TWO STAGES/);
+    expect(reddit?.tactics[0]?.how).toMatch(/reddit_gather/);
     const archive = reddit?.tactics.find((x) => x.how.includes('arctic-shift'));
     expect(archive).toBeDefined();
     // Named as a third party, because a query goes to whoever runs it.

@@ -63,10 +63,11 @@ export const SITE_TACTICS: readonly SiteTactic[] = [
         // search and was NOT re-run in this session, so it is asserted from the
         // shape of the API rather than from an observation.
         how:
-          'TWO STAGES. First find the communities: `site:reddit.com <topic>` through any panel backend, and ' +
-          'take the subreddit names out of the result URLs. Then read those subreddits properly with Arctic ' +
-          'Shift, below. Search alone returns snippets of whatever it indexed; the archive alone needs a ' +
-          'subreddit you do not have yet.',
+          'Use `reddit_gather`, which does both stages. Call it with no subreddits and it returns name-matched ' +
+          'candidates plus the `site:reddit.com <topic>` query to run; run that through any panel backend and ' +
+          'pass the Reddit URLs straight back as `discoveredUrls`, and it extracts the communities and reads ' +
+          'them. The second half is the one that matters: a name search finds r/vectordatabase and never finds ' +
+          'r/LocalLLaMA, where the same argument is happening under a name sharing nothing with the subject.',
         provenance: 'verified',
       },
       {

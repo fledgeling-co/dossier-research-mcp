@@ -10,6 +10,7 @@ import {
   discoverByName,
   discoveryQuery,
   discoveryTerms,
+  subredditsFromUrls,
   gatherSubreddit,
   inferWindow,
   MAX_SUBREDDITS,
@@ -2956,6 +2957,14 @@ function registerLoopTools(server: FastMCP, deps: ServerDeps): void {
         .max(MAX_SUBREDDITS)
         .optional()
         .describe('Communities to read. Omit to get candidates and the discovery query instead of a gather.'),
+      discoveredUrls: z
+        .array(z.string().max(2000))
+        .max(50)
+        .optional()
+        .describe(
+          'Reddit URLs from running the discovery search. The subreddit names are extracted from them, so ' +
+          'you can paste results straight back instead of parsing them yourself. Merges with `subreddits`.',
+        ),
       window: z
         .enum(WINDOWS)
         .optional()
@@ -2964,7 +2973,15 @@ function registerLoopTools(server: FastMCP, deps: ServerDeps): void {
     execute: async (args) => {
       const verdict = inferWindow(args.question, args.window);
 
-      if (!args.subreddits || args.subreddits.length === 0) {
+      // Names out of the URLs a search returned. This is the half a name
+      // search cannot do — r/LocalLLaMA discusses vector databases under a name
+      // sharing nothing with the subject — and it closes the loop: the caller
+      // runs the query, pastes the results, and does not have to parse a
+      // permalink to find the community it belongs to.
+      const fromUrls = args.discoveredUrls ? subredditsFromUrls(args.discoveredUrls) : [];
+      const asked = [...new Set([...(args.subreddits ?? []), ...fromUrls])];
+
+      if (asked.length === 0) {
         // No gather without a subreddit, because the archive has no topic
         // search and guessing which community to read is the half a machine
         // cannot do alone. Hand back both halves of the discovery rather than
@@ -3014,15 +3031,22 @@ function registerLoopTools(server: FastMCP, deps: ServerDeps): void {
       const start = windowStartEpoch(verdict.window);
       const items: RedditItem[] = [];
       const empty: string[] = [];
-      for (const sub of args.subreddits.slice(0, MAX_SUBREDDITS)) {
+      for (const sub of asked.slice(0, MAX_SUBREDDITS)) {
         const got = await gatherSubreddit(sub, start).catch(() => [] as RedditItem[]);
         if (got.length === 0) empty.push(sub);
         items.push(...got);
       }
       const report = renderGather(
-        { window: verdict, subreddits: args.subreddits, items, empty },
+        { window: verdict, subreddits: asked.slice(0, MAX_SUBREDDITS), items, empty },
         args.question,
       );
+      // Where each community came from, because "you named it" and "a search
+      // suggested it" carry different weight when a reader judges coverage.
+      const provenance =
+        fromUrls.length === 0
+          ? ''
+          : `\n\n_${String(fromUrls.length)} of these came from the URLs you supplied: ` +
+            `${fromUrls.slice(0, MAX_SUBREDDITS).map((s) => `r/${s}`).join(', ')}._`;
       // Newest first: a caller reading the top of a long list should see what
       // is current, not what happened at the window's far edge.
       const sorted = [...items].sort((a, b) => b.createdUtc - a.createdUtc);
@@ -3034,7 +3058,7 @@ function registerLoopTools(server: FastMCP, deps: ServerDeps): void {
           return `- **r/${i.subreddit}** ${when} ${i.kind}${score}: ${i.text.replace(/\s+/g, ' ').slice(0, 300)}`;
         })
         .join('\n');
-      return `${report}\n\n---\n\n${body}${sorted.length > 120 ? `\n\n_…and ${String(sorted.length - 120)} more._` : ''}`;
+      return `${report}${provenance}\n\n---\n\n${body}${sorted.length > 120 ? `\n\n_…and ${String(sorted.length - 120)} more._` : ''}`;
     },
   });
 
