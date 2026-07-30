@@ -6,7 +6,11 @@ Dates are the release date. Costs are estimate bands, never quotes. Where a fact
 
 This project follows [semantic versioning](https://semver.org/). Until 1.0 the minor number carries breaking changes.
 
-## [0.18.0] - 2026-07-29
+## [0.18.1] - 2026-07-29
+
+_0.18.0 was tagged and never published: its release workflow hit the rare
+cross-file test flake recorded below, so the version number is skipped rather
+than reused._
 
 ### Fixed
 
