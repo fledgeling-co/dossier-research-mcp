@@ -49,6 +49,8 @@ import { ProviderRegistry, type PanelDecision } from './providers/registry.js';
 import { describeShaping, shapeRequest } from './providers/options.js';
 import { PROVIDER_IDS, type ProviderId, type Shape } from './providers/types.js';
 import { estimateCost, estimateDuration, formatCostBand, formatDuration } from './gemini/cost.js';
+import { claimsRestingOnFailedCitations, renderClaimRisks } from './research/claim-risk.js';
+import { DUPLICATION_THRESHOLD, ECHO_THRESHOLD, renderReportQa } from './research/report-qa.js';
 import {
   monitorAdvice,
   panelProgress,
@@ -1083,6 +1085,22 @@ export function createServer(deps: ServerDeps): FastMCP {
             '```',
           );
         }
+        // Read from the stored ratios, so this costs nothing on a poll. A
+        // caller in a real session read a completed run, concluded it had failed
+        // because it echoed the prompt, then concluded the opposite because the
+        // body was merely duplicated. Both facts were computable and neither was
+        // reported.
+        if (run.state === 'completed') {
+          lines.push(
+            ...renderReportQa({
+              echoRatio: run.reportEchoRatio ?? 0,
+              duplicationRatio: run.reportDuplicationRatio ?? 0,
+              echoesPrompt: (run.reportEchoRatio ?? 0) >= ECHO_THRESHOLD,
+              heavilyDuplicated: (run.reportDuplicationRatio ?? 0) >= DUPLICATION_THRESHOLD,
+            }),
+          );
+        }
+
         if (run.panelId && panelMembers.length > 1) {
           lines.push(
             ...(inUnfinishedPanel
@@ -1376,8 +1394,15 @@ export function createServer(deps: ServerDeps): FastMCP {
       const problems = verdicts.filter((v) => v.verdict !== 'live');
       const shown = args.onlyProblems ? problems : verdicts;
 
+      // The join. Not "these URLs failed" and separately "here are the claims",
+      // but "this claim's only source is one of the failures". Every input was
+      // already here; handing back three lists left the analysis to the reader,
+      // and in the session that prompted this the reader did it by hand.
+      const risks = claimsRestingOnFailedCitations(markdown, verdicts);
+
       return [
         renderScorecard(card),
+        ...renderClaimRisks(risks),
         totalFound > checked ? `\n(${totalFound} citations found; checked the first ${checked}.)` : '',
         '',
         shown.length === 0

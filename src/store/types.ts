@@ -157,6 +157,16 @@ export const RunRecordSchema = z.object({
   /** Path (relative to the store dir) of the report markdown, when completed. */
   reportPath: z.string().max(500).optional(),
   reportChars: z.number().int().nonnegative().default(0),
+  /**
+   * How much of the brief reappears verbatim in the report, 0-1.
+   *
+   * Stored rather than computed on demand: a monitor polling every two minutes
+   * must not re-read a 60,000-token report to answer "does this look like a
+   * report". Optional so records written before this parse unchanged.
+   */
+  reportEchoRatio: z.number().min(0).max(1).optional(),
+  /** How much of the report repeats itself, 0-1. Stored for the same reason. */
+  reportDuplicationRatio: z.number().min(0).max(1).optional(),
   sourceCount: z.number().int().nonnegative().default(0),
   imageCount: z.number().int().nonnegative().default(0),
 

@@ -24,6 +24,7 @@ import { extractPlan } from './plan.js';
 import { KeyedMutex, Mutex } from './spend.js';
 import { StreamSupervisor } from './stream.js';
 import { recordSearchOutcome } from '../local/search-health.js';
+import { assessReport } from './report-qa.js';
 import { extractCitedUrls, normaliseCitations } from './report.js';
 import { describeOverlap, mergeEvidence, type RunEvidence } from './synthesise.js';
 
@@ -1132,6 +1133,14 @@ export class Runner {
         // never cost a report that has already been paid for.
         try {
           await recordSearchOutcome(this.store.root, next.provider, next.sourceCount);
+          // Judged once, here, rather than on demand: a monitor polling every two
+          // minutes must not re-read a 60,000-token report to answer "is this
+          // actually a report". Catches the two pathologies a caller had to
+          // diagnose by reading, a backend that restated the brief instead of
+          // researching it, and a report delivered twice in one body.
+          const qa = assessReport(markdown, run.prompt);
+          next = { ...next, reportEchoRatio: qa.echoRatio, reportDuplicationRatio: qa.duplicationRatio };
+          await this.store.saveRun(next);
         } catch {
           // Nothing to do and nothing worth failing a finished run over.
         }

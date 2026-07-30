@@ -8,6 +8,34 @@ This project follows [semantic versioning](https://semver.org/). Until 1.0 the m
 
 ## [Unreleased]
 
+### Added
+
+- `research_verify_citations` now names **which claims rest on a citation that did
+  not resolve**, instead of returning a list of broken URLs and leaving the join to
+  the reader. In the session that prompted this, a five-member panel produced a
+  disputed power figure; the tool correctly reported zero fabricated citations and
+  correctly listed the URLs that failed, and the caller then had to work out by
+  hand that one of those failures was the *only* support for the disputed figure.
+  Every input to that deduction was already on the machine. A claim whose sources
+  all failed is separated from one that merely lost some, because the first has no
+  support at all right now and the second is only thinner than it looks. A blocked
+  source whose DOI is registered is not counted, since the best evidence in a
+  report is often the least reachable.
+
+  Dossier still does not verify anything: it has no web search and cannot borrow
+  one. What changed is that it no longer makes the caller work out WHAT to check.
+
+- A finished report is now checked for the two shapes that are not reports. A
+  backend with no working search sometimes **restates the brief** instead of
+  researching it, which produces normal length and normal headings; and a report is
+  sometimes **delivered twice in one body**, which makes any summary of it wrong
+  because the summariser read everything twice. Both were diagnosed by a caller
+  reading, in the same session, and both were computable. Reported rather than
+  refused: a duplicated report still contains a complete report, and something
+  already paid for is not thrown away. Computed once when the report lands, so a
+  monitor polling every two minutes never re-reads a 60,000-token report.
+
+
 ### Changed
 
 - **A panel now reports once, when it is finished, instead of member by member.**
