@@ -759,6 +759,17 @@ npm run gate                # typecheck, lint, test, build
 | **READ-03** | A merge over unread reports warns at the top, and names what was never opened | `reading` | ✓ |
 | **READ-04** | The read ledger is wired: a merge over unread reports warns over the real MCP surface | `reading` acceptance | ✓ |
 | **CLI-32** | A CLI runs with stdin closed, in a scratch directory, not the client's project | `local-cli` | ✓ |
+| **PANEL-01** | An unfinished panel does not invite reading a finished member, names how many settled, gives the time REMAINING, and asks for a monitor | `panel` acceptance | ✓ |
+| **PANEL-02** | The remaining estimate shrinks with elapsed time and follows the SLOWEST member, never an average | `panel-view` | ✓ |
+| **PANEL-03** | A settled panel returns every member at once with the merge command and the reading order, and drops the waiting language | `panel` acceptance | ✓ |
+| **PANEL-04** | One surviving member is never presented as a panel | `panel-view` | ✓ |
+| **SYNTH-01** | A merge cannot overflow the caller's context, and says how many lines it withheld | `reading` acceptance | ✓ |
+| **SYNTH-02** | The registry the merge tells the caller to cite from is never trimmed silently; the instruction names the count instead | `reading` acceptance | ✓ |
+| **CITE-10** | A bot-blocked publisher is not scored as a fabricated citation; the fabrication check is reported apart from reachability | `safety` | ✓ |
+| **CITE-11** | A blocked citation whose DOI is registered counts as shown to exist; a publisher's 404 is never appealed to the registry | `safety` | ✓ |
+| **CLI-33** | A CLI's web search is probed by asking it to search and dereferencing the URL it returns; a refusal and an unresolvable URL are distinct answers | `search-probe` | ✓ |
+| **CLI-34** | A stale search probe is not believed, and a CLI that was never asked is never reported as unable to search | `search-probe` | ✓ |
+| **CLI-35** | A backend is called search-broken only after consecutive sourceless runs, and clears as soon as it cites something | `search-health` | ✓ |
 
 ### BENCH-11 — which combination is best
 

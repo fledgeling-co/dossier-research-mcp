@@ -64,7 +64,7 @@ A panel runs the same three gates, but over the whole membership at once rather 
 - **Concurrency** must fit the whole panel. A panel of five needs five slots at once, and is refused whole rather than admitted in part.
 - **Budget** reserves the **sum** of every member's worst case in one critical section, before any member starts. A panel that can't be afforded in full starts nothing, writes no ledger line, and tells you the whole figure it needed.
 
-Each member comes back as its own run id, bound by a shared panel id. `research_status`, `research_read`, `research_tail` and `research_budget` all work per member exactly as they do for a single run. A paid create is attempted once, with one exception: a 429 is retried, because a rate limiter that answered created nothing. See [a failed run says which kind of failure it was](#a-failed-run-says-which-kind-of-failure-it-was).
+Each member comes back as its own run id, bound by a shared panel id. `research_status`, `research_read`, `research_tail` and `research_budget` all work per member exactly as they do for a single run, but **a panel is reported once rather than member by member**. `research_status` on a member of an unfinished panel says how many members have settled and how long is left, and withholds the invitation to read; once the last member settles, any member's status returns the whole panel, the merge command, and the order to read it in. That is deliberate rather than tidy: an early member read on its own is a single-sourced finding carrying a panel's authority, and a caller who reports it has already called it corroborated by the time the merge points out that four backends read the same page. Nothing is hidden; `research_read { runId }` on a member works whenever you ask it to. A paid create is attempted once, with one exception: a 429 is retried, because a rate limiter that answered created nothing. See [a failed run says which kind of failure it was](#a-failed-run-says-which-kind-of-failure-it-was).
 
 When the last member reaches a terminal state the panel is merged automatically with `research_synthesise`'s free deterministic pass, and the result is written to every member's journal. Read it with `research_tail`. Agreement between members is not corroboration, and support is counted in independent registrable domains.
 
@@ -533,13 +533,13 @@ When it works, that contradictions section is the most useful thing in the repor
 
 ### `reddit_gather`, free
 
-Reads what a subreddit actually said, in a time window, with **no credential** — because none is obtainable. Checked on 29 July 2026: `create app` at reddit.com/prefs/apps returns a link to the Responsible Builder Policy and creates nothing, the `.json` endpoints answer 403 to a non-browser agent, `oauth.reddit.com` answers 403 without a token, and a clean automated browser is served a network-security block page. Self-serve registration ended around November 2025 and approval is routed to moderation use cases.
+Reads what a subreddit actually said, in a time window, with **no credential**, because none is obtainable. Checked on 29 July 2026: `create app` at reddit.com/prefs/apps returns a link to the Responsible Builder Policy and creates nothing, the `.json` endpoints answer 403 to a non-browser agent, `oauth.reddit.com` answers 403 without a token, and a clean automated browser is served a network-security block page. Self-serve registration ended around November 2025 and approval is routed to moderation use cases.
 
 So this reads **Arctic Shift**, a public third-party Reddit archive at `photon-reddit.com`. Your query goes to whoever operates it. Free is not the same as private, and that is stated in the tool's own description rather than here alone.
 
 **It cannot search by topic.** `q=` is rejected; the archive filters by subreddit and time. That makes discovery a separate stage rather than a parameter:
 
-- Call with **no** `subreddits` and it gathers nothing. It returns name-matched candidates ranked by comment volume, plus the `site:reddit.com …` query to run through any search backend — because a name search finds `r/vectordatabase` and never finds `r/LocalLLaMA`, where the same argument is happening under a name that shares nothing with the subject.
+- Call with **no** `subreddits` and it gathers nothing. It returns name-matched candidates ranked by comment volume, plus the `site:reddit.com …` query to run through any search backend. A name search finds `r/vectordatabase` and never finds `r/LocalLLaMA`, where the same argument is happening under a name that shares nothing with the subject.
 - Call **with** `subreddits` and it reads them.
 
 | Parameter | Type | Notes |
@@ -549,9 +549,9 @@ So this reads **Arctic Shift**, a public third-party Reddit archive at `photon-r
 | `discoveredUrls` | `string[]` | Reddit URLs from running the discovery search. Community names are extracted from them, so results paste straight back. Merges with `subreddits` |
 | `window` | `24h` \| `7d` \| `30d` \| `90d` \| `1y` \| `5y` \| `all` | Overrides the inference |
 
-The window is **inferred from the question** and the reason is printed with the result: "today" gives 24h, "this quarter" gives 90d, a bare year gives 1y. With no period named it is **30 days**, not the server-wide year — a year of a busy subreddit is mostly old items, and a thread nobody has replied to in six months is not what "what do people think" is asking.
+The window is **inferred from the question** and the reason is printed with the result: "today" gives 24h, "this quarter" gives 90d, a bare year gives 1y. With no period named it is **30 days**, not the server-wide year. A year of a busy subreddit is mostly old items, and a thread nobody has replied to in six months is not what "what do people think" is asking.
 
-A subreddit returning nothing is reported by name as a real result — quiet, private or misspelled — rather than averaged into the total.
+A subreddit returning nothing is reported by name as a real result (quiet, private or misspelled) rather than averaged into the total.
 
 ### The local corpus: `corpus_local_list` · `corpus_local_search`
 

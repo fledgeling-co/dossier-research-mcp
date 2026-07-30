@@ -6,6 +6,32 @@ Dates are the release date. Costs are estimate bands, never quotes. Where a fact
 
 This project follows [semantic versioning](https://semver.org/). Until 1.0 the minor number carries breaking changes.
 
+## [Unreleased]
+
+### Changed
+
+- **A panel now reports once, when it is finished, instead of member by member.**
+  Each member was its own run and the tools said so, so an agent driving Dossier
+  polled each handle, watched members land one at a time, and reported each to its
+  user as it arrived. By the time the merge said "these agreed because they read
+  the same page", several single-sourced findings had already been presented as
+  corroborated. `research_status` on a member of an unfinished panel now says how
+  many members have settled and withholds the invitation to read, and once every
+  member settles it returns them all together with the merge command and the
+  reading order. Nothing is hidden: `research_read { runId }` on a member still
+  works, because a caller who has decided to look at one member is entitled to.
+- The completed-panel output asks for the report to be read **in detail rather
+  than in outline**, and to open the member reports the merge points at, because a
+  finding's caveats and sample size live in the body and reporting from an outline
+  is how a hedged result becomes a confident one.
+- `research_status` with no arguments groups in-flight runs by panel and leads with
+  **time remaining** rather than total duration, taken from the provider's own
+  published figures minus elapsed, and following the slowest member rather than an
+  average because a panel finishes when its slowest member does. Both `research_start`
+  and `research_status` now ask the caller to set up a monitor that checks every
+  two minutes and reports the remaining estimate to the user, rather than polling
+  by hand or blocking.
+
 ## [0.17.0] - 2026-07-29
 
 ### Added

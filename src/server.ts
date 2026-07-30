@@ -49,6 +49,13 @@ import { ProviderRegistry, type PanelDecision } from './providers/registry.js';
 import { describeShaping, shapeRequest } from './providers/options.js';
 import { PROVIDER_IDS, type ProviderId, type Shape } from './providers/types.js';
 import { estimateCost, estimateDuration, formatCostBand, formatDuration } from './gemini/cost.js';
+import {
+  monitorAdvice,
+  panelProgress,
+  renderInFlight,
+  renderPanelComplete,
+  renderPanelWaiting,
+} from './research/panel-view.js';
 import type { CostBand } from './gemini/cost.js';
 import { describeSignals, profileQuestion } from './research/profile.js';
 import { AGENT_BY_TIER, RESEARCH_TIERS } from './gemini/types.js';
@@ -878,7 +885,15 @@ export function createServer(deps: ServerDeps): FastMCP {
             : []),
           '',
           members.length > 1
-            ? 'Do NOT block on this. Each member is its own run: `research_status { runId }` and `research_read { runId }` work per member. When every member finishes, the panel is merged automatically and the overlap warning is written to each member\'s journal. Read it with `research_tail { runId }`. Agreement between members is not corroboration; support is counted in independent registrable domains.'
+            ? [
+                'Do NOT block on this, and do NOT report anything to the user until every member has settled.',
+                '',
+                `Expected: ${formatDuration(estimateDuration({ tier: args.tier }))} for the slowest member. The panel merges itself the moment the last one settles.`,
+                '',
+                ...monitorAdvice(result.panelId, result.started[0]?.run.id ?? ''),
+                '',
+                'A member that finishes early is one backend\'s answer, not the panel\'s. Support is counted in independent registrable domains, never in how many backends agreed, so reporting an early member is how several backends reading one page becomes several apparent findings.',
+              ].join('\n')
             : 'Do NOT block on this. Check back with `research_status { runId }`, or replay progress with `research_tail { runId }`. The run continues if you disconnect and if this server restarts.',
         ].join('\n');
       }
@@ -1037,11 +1052,21 @@ export function createServer(deps: ServerDeps): FastMCP {
         if (run.plan && !run.planApproved) {
           lines.push('', '### Proposed plan (awaiting your approval)', '', run.plan.slice(0, 8000));
         }
+        // A panel member is reported as part of its panel, never as a finished
+        // thing on its own. The invitation to read is what an agent acts on, so
+        // it is withheld while siblings are still running rather than merely
+        // qualified: a caller told "completed, read it" will read it.
+        const panelMembers = run.panelId ? await runner.panelMembers(run.panelId) : [];
+        const inUnfinishedPanel =
+          panelMembers.length > 1 && !panelProgress(panelMembers).allTerminal;
+
         if (run.state === 'completed') {
           lines.push(
             '',
             `Report: ${run.reportChars} chars (~${Math.ceil(run.reportChars / 4)} estimated tokens) · ${run.sourceCount} cited sources.`,
-            'Read it with `research_read { runId }`, outline first; it is far too large to return inline.',
+            inUnfinishedPanel
+              ? 'It is on disk and `research_read { runId }` will return it, but this is one member of an unfinished panel; see below before reading or reporting it.'
+              : 'Read it with `research_read { runId }`, outline first; it is far too large to return inline.',
           );
         }
         // The provider's own words, in full, where a person looking at a failed
@@ -1058,6 +1083,13 @@ export function createServer(deps: ServerDeps): FastMCP {
             '```',
           );
         }
+        if (run.panelId && panelMembers.length > 1) {
+          lines.push(
+            ...(inUnfinishedPanel
+              ? renderPanelWaiting(panelMembers, run.panelId)
+              : renderPanelComplete(panelMembers, run.panelId)),
+          );
+        }
         return lines.join('\n');
       }
 
@@ -1070,7 +1102,10 @@ export function createServer(deps: ServerDeps): FastMCP {
       return [
         `${active.length} run(s) in flight (max ${budget.maxConcurrent}):`,
         '',
-        ...active.map((r) => `- ${describeRun(r)}${r.label ? `, ${r.label}` : ''}`),
+        // Grouped by panel, with time remaining rather than total duration. This
+        // is the output a two-minute monitor polls, and what the person behind it
+        // wants is not a count of runs, it is how much longer.
+        ...renderInFlight(active),
         '',
         `Budget: $${budget.committedUsd.toFixed(2)} of $${budget.budgetUsd.toFixed(2)} committed in the last ${budget.windowHours}h.`,
       ].join('\n');
