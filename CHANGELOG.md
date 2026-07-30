@@ -8,6 +8,17 @@ This project follows [semantic versioning](https://semver.org/). Until 1.0 the m
 
 ## [0.18.0] - 2026-07-29
 
+### Fixed
+
+- The local-CLI backend wrote its "this run has finished" sidecar before flushing
+  the output stream the report is written through. A completion signal must not
+  precede the flush of the data it describes, or an observer can read a
+  `completed` run with a short report. Stated honestly: this was found while
+  chasing a CI gate failure that reported an empty report on a run whose fake CLI
+  had echoed one line, and the fix has NOT been shown to be that failure's cause.
+  It could not be reproduced locally under CPU load or at 20,000 lines of output.
+  The ordering is wrong either way, so it is fixed either way.
+
 ### Added
 
 - `research_verify_citations` now names **which claims rest on a citation that did

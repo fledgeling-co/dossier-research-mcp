@@ -53,7 +53,17 @@ async function settled(
   const deadline = Date.now() + timeoutMs;
   for (;;) {
     const snapshot = await client.getRun(id);
-    if (snapshot.status !== 'in_progress' || Date.now() > deadline) return snapshot;
+    if (snapshot.status !== 'in_progress') return snapshot;
+    if (Date.now() > deadline) {
+      // Returning the half-finished snapshot made a timeout look like a result:
+      // a CI run failed with `expected '' to contain ...`, which reads as a
+      // wrong report rather than as a subprocess that had not finished. Say
+      // which it was.
+      throw new Error(
+        `settled(): ${id} was still in_progress after ${String(timeoutMs)}ms ` +
+          `(markdown ${String(snapshot.markdown.length)} chars). This is a timeout, not a bad report.`,
+      );
+    }
     await new Promise((r) => setTimeout(r, 25));
   }
 }
@@ -261,6 +271,35 @@ describe('the local CLI backend', () => {
     expect(done.status).toBe('completed');
     expect(done.markdown).toContain('durable output');
   });
+
+  it('does not claim a run is finished before its output is on disk', async () => {
+    // A large output survives the round trip: 20,000 lines is far past the
+    // 64 KB highWaterMark of the stream the output is written through, so this
+    // covers the multi-chunk path that a one-line echo never reaches.
+    //
+    // What it does NOT do, stated because the comment first claimed otherwise:
+    // it does not prove the sidecar-ordering fix in `local.ts`. It passes with
+    // and without it. The CI failure that prompted that fix (a `completed` run
+    // with an empty report) has not been reproduced here, under load or at
+    // size, so the fix stands on the argument that a completion signal must not
+    // precede the flush of the data it describes, not on this test.
+    const lines = 20_000;
+    await fakeCli(`i=0; while [ $i -lt ${String(lines)} ]; do echo "durable output line $i"; i=$((i+1)); done`);
+    const first = localProvider(config, CLAUDE).client();
+    const started = await first.createRun({
+      prompt: 'q',
+      tier: 'fast',
+      collaborativePlanning: false,
+      thinkingSummaries: false,
+      visualization: false,
+      tools: [],
+    });
+    const done = await settled(first, started.interactionId, 30_000);
+    expect(done.status).toBe('completed');
+    // The LAST line matters, not the first: a partial flush would contain the
+    // beginning of the output and none of the end.
+    expect(done.markdown).toContain(`durable output line ${String(lines - 1)}`);
+  }, 40_000);
 
   it('does not let a brief reach a shell', async () => {
     // The injection case. If the prompt were interpolated into a shell command,

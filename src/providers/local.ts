@@ -99,7 +99,22 @@ const { spawn } = require('node:child_process');
 const fs = require('node:fs');
 const [out, side, deadlineMs, maxBytes, bin, ...rest] = process.argv.slice(1);
 const sink = fs.createWriteStream(out, { flags: 'a' });
-const done = (payload) => { try { fs.writeFileSync(side, JSON.stringify(payload)); } catch {} };
+// The sidecar is the "this run is over" signal, so it MUST be the last thing
+// written. \`sink\` is a buffered stream and the sidecar was written with
+// writeFileSync the moment the child closed, so an observer could see exit 0,
+// call the run completed, and then read an output file Node had not flushed
+// yet. That is a report of zero characters on a run that succeeded, and it is
+// not hypothetical: it failed a CI gate as an empty report on a run whose fake
+// CLI had echoed one line. Locally the output is small and wins the race.
+let settled = false;
+const done = (payload) => {
+  if (settled) return;
+  settled = true;
+  const write = () => { try { fs.writeFileSync(side, JSON.stringify(payload)); } catch {} };
+  // end() flushes what is buffered and calls back once it is on its way to the
+  // OS; only then may the sidecar claim the run is finished.
+  try { sink.end(write); } catch { write(); }
+};
 let written = 0, truncated = false, finished = false;
 try {
   const child = spawn(bin, rest, { stdio: ['ignore', 'pipe', 'pipe'] });
