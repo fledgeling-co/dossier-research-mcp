@@ -1,2 +1,2 @@
 /** Kept in lockstep with package.json by scripts/sync-version.mjs. */
-export const version = '0.18.1';
+export const version = '0.19.0';
