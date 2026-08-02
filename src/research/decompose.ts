@@ -77,6 +77,12 @@ export interface SearchTask {
   readonly dependsOn: readonly string[];
   /** Concrete queries to issue, in the dialect the target index expects. */
   readonly queries: readonly string[];
+  /**
+   * Tools on this server that reach what a search index cannot. Empty for most
+   * classes, because most of the web is indexed and a tool hint that fires
+   * everywhere is noise a worker learns to skip.
+   */
+  readonly tools: readonly string[];
   /** What a good answer to this task looks like, so a worker knows when to stop. */
   readonly done: string;
 }
@@ -86,6 +92,7 @@ interface ClassStrategy {
   readonly objective: (topic: string) => string;
   readonly queries: (topic: string) => readonly string[];
   readonly depth: Depth;
+  readonly tools?: readonly string[];
   readonly done: string;
 }
 
@@ -140,6 +147,15 @@ const STRATEGIES: Record<SourceClass, ClassStrategy> = {
       `${t} "in production" experience review`,
     ],
     depth: 'scan',
+    // Two tools rather than three queries, because both reach places a search
+    // index does not: Reddit's `.json` endpoints answer 403, and a video's
+    // argument is in its audio, which no index has read.
+    tools: [
+      '`reddit_gather` reads a community exhaustively in a window. Call it with no subreddits first; it ' +
+        'returns the discovery query to run.',
+      '`youtube_gather` searches and returns transcripts, above a floor of 30,000 views and 30,000 ' +
+        'subscribers. Useful where the practitioner talk is on camera and nowhere else.',
+    ],
     done: 'Direct quotes with dates, and whether the account is first-hand.',
   },
   journalism: {
@@ -249,6 +265,7 @@ function reconciliationTask(topic: string, dependsOn: readonly string[]): Search
       `${topic} "<the contested figure>" correction OR retracted OR updated`,
       `${topic} "<the two disagreeing sources>" which is right`,
     ],
+    tools: [],
     done: 'Each contradiction either resolved with a source that settles it, or recorded as genuinely open. An unresolved contradiction is a finding, not a failure.',
   };
 }
@@ -267,6 +284,7 @@ export function decompose(question: string, opts: DecomposeOptions): SearchTask[
       group: 'A',
       dependsOn: [],
       queries: s.queries(topic),
+      tools: s.tools ?? [],
       done: s.done,
     };
   });
@@ -294,6 +312,9 @@ export function renderTasks(tasks: readonly SearchTask[]): string {
         `**Find** ${t.objective}`,
         `**Queries** (adapt them once you see results; these are the dialect this index expects):`,
         ...t.queries.map((q) => `- \`${q}\``),
+        ...(t.tools.length > 0
+          ? ['**Tools that reach what an index cannot** (call these too, not instead):', ...t.tools.map((x) => `- ${x}`)]
+          : []),
         t.depth === 'deep'
           ? '**Read in full** two or three of the best sources, and take notes from the body rather than the snippet.'
           : '**Snippets are enough.** Read titles, summaries and dates; do not open every result.',

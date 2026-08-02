@@ -258,7 +258,7 @@ describe('the plan and start handshake carries grounding', () => {
     expect(result.isError).toBe(true);
     expect(result.text).toMatch(/Invalid run id/);
     // The decisive part: the server is still answering.
-    expect((await granted.listTools()).length).toBe(38);
+    expect((await granted.listTools()).length).toBe(39);
   });
 
   it('refuses to record a grounding claim naming a run that never completed', async () => {

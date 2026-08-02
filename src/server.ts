@@ -22,6 +22,13 @@ import {
 import { encodeXaiOptions } from './providers/xai.js';
 import { renderTactics } from './research/site-tactics.js';
 import {
+  DEFAULT_MIN_SUBSCRIBERS,
+  DEFAULT_MIN_VIEWS,
+  gather as youtubeGather,
+  renderGather as renderYoutubeGather,
+  YouTubeError,
+} from './research/youtube.js';
+import {
   CLI_ADAPTERS,
   checkAllHeadlessArgv,
   probeAllClis,
@@ -3226,6 +3233,131 @@ function registerLoopTools(server: FastMCP, deps: ServerDeps): void {
         })
         .join('\n');
       return `${report}${provenance}\n\n---\n\n${body}${sorted.length > 120 ? `\n\n_…and ${String(sorted.length - 120)} more._` : ''}`;
+    },
+  });
+
+  server.addTool({
+    name: 'youtube_gather',
+    description:
+      'Read what people actually SAID on camera about a topic: searches YouTube, applies a quality floor, and ' +
+      'returns the transcripts. Free, no key, no credential. The floor is the point: 30,000 views and 30,000 ' +
+      'subscribers by default, because a search result is not evidence and a video with 200 views from a ' +
+      'channel with none is a stranger with a URL. It reports how many results fell below the floor, so an ' +
+      'empty answer reads as a fact about YouTube rather than about the subject. Captions only: there is no ' +
+      'paid transcription here, so a video without a caption track comes back marked unreadable rather than ' +
+      'silently billed. Cite a transcript as one person talking on camera, which is what it is; it classifies ' +
+      'as a community source, never as a primary one. Runs from this machine, so it needs a residential ' +
+      'connection, because YouTube refuses most datacentre addresses.',
+    annotations: {
+      title: 'Search YouTube and read transcripts (free, no key)',
+      readOnlyHint: true,
+      destructiveHint: false,
+      openWorldHint: true,
+    },
+    parameters: z.object({
+      query: z
+        .string()
+        .min(2)
+        .max(500)
+        .describe('What to search YouTube for. Plain search terms, not a research question.'),
+      limit: z
+        .number()
+        .int()
+        .min(1)
+        .max(10)
+        .default(5)
+        .describe('How many transcripts to return. Each one is a video, so this is the size of what comes back.'),
+      minViews: z
+        .number()
+        .int()
+        .min(0)
+        .optional()
+        .describe(
+          `Views floor. Defaults to ${String(DEFAULT_MIN_VIEWS)}. Lower it deliberately for a genuinely niche ` +
+            'topic, and know that you are lowering what counts as evidence.',
+        ),
+      minSubscribers: z
+        .number()
+        .int()
+        .min(0)
+        .optional()
+        .describe(
+          `Channel subscriber floor. Defaults to ${String(DEFAULT_MIN_SUBSCRIBERS)}. Costs one request per ` +
+            'distinct channel, so it runs last, over whatever cleared the free filters.',
+        ),
+      publishedWithinDays: z
+        .number()
+        .int()
+        .min(1)
+        .optional()
+        .describe(
+          'Recency limit in days. COARSE: YouTube reports "3 weeks ago", never a date, so this is honest for ' +
+            '"the past month" and not for "since the 14th".',
+        ),
+      minDurationSeconds: z
+        .number()
+        .int()
+        .min(0)
+        .optional()
+        .describe('Length floor. `60` excludes most Shorts, which rarely carry an argument worth citing.'),
+      languages: z
+        .array(z.string().min(2).max(10))
+        .max(5)
+        .optional()
+        .describe('Preferred caption languages, best first. Defaults to English.'),
+      maxCharsPerVideo: z
+        .number()
+        .int()
+        .min(500)
+        .max(40_000)
+        .default(8_000)
+        .describe('Per-transcript character cap. A long video is a long transcript and this is a context budget.'),
+      maxPages: z
+        .number()
+        .int()
+        .min(1)
+        .max(8)
+        .default(4)
+        .describe(
+          'How many result pages to walk before giving up. A strict floor on a niche topic matches nothing, and ' +
+            'this is what stops that becoming an unbounded walk. The result says when this ceiling is what ' +
+            'stopped the search, because that is a different answer from "nothing is there".',
+        ),
+    }),
+    execute: async (args) => {
+      let outcome;
+      try {
+        outcome = await youtubeGather(
+          args.query,
+          {
+            ...(args.minViews === undefined ? {} : { minViews: args.minViews }),
+            ...(args.minSubscribers === undefined ? {} : { minSubscribers: args.minSubscribers }),
+            ...(args.publishedWithinDays === undefined ? {} : { publishedWithinDays: args.publishedWithinDays }),
+            ...(args.minDurationSeconds === undefined ? {} : { minDurationSeconds: args.minDurationSeconds }),
+          },
+          {
+            limit: args.limit,
+            maxPages: args.maxPages,
+            ...(args.languages === undefined ? {} : { languages: args.languages }),
+          },
+        );
+      } catch (e: unknown) {
+        // A block and an empty topic are different answers, and a caller that
+        // cannot tell them apart reports "no video evidence" for a refused
+        // request.
+        if (e instanceof YouTubeError) throw new UserError(e.message);
+        throw e;
+      }
+
+      const lines = renderYoutubeGather(args.query, outcome, args.maxCharsPerVideo);
+      if (args.publishedWithinDays !== undefined) {
+        lines.push(
+          '',
+          `_Recency filter: within ${String(args.publishedWithinDays)} day(s), read from YouTube's relative ` +
+            'strings ("3 weeks ago"). Anything inside the current month is accurate to about a week._',
+        );
+      }
+      return lines.join('\n');
     },
   });
 

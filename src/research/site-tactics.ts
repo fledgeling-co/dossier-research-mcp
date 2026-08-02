@@ -221,6 +221,53 @@ export const SITE_TACTICS: readonly SiteTactic[] = [
       },
     ],
   },
+  {
+    domain: 'youtube.com',
+    label: 'YouTube',
+    tactics: [
+      {
+        how:
+          'Use `youtube_gather`, which searches and reads transcripts in one call, free and with no key. It ' +
+          'applies a quality floor first — 30,000 views and 30,000 subscribers by default — because a search ' +
+          'result is not evidence and the long tail of unwatched uploads is a stranger with a URL. It reports ' +
+          'how many results fell below the floor, so an empty answer is legible as a fact about YouTube rather ' +
+          'than about the subject.',
+        provenance: 'verified',
+      },
+      {
+        // Recorded because the split is not guessable and both halves look
+        // like typos to anyone reading the code later.
+        how:
+          'Directly: InnerTube `POST /youtubei/v1/search` with the `WEB` client for results, and ' +
+          '`/youtubei/v1/player` with the `IOS` client for captions. The clients are not interchangeable. ' +
+          '`WEB` search carries view counts, publish time and channel; `IOS` search carries only `videoId`. ' +
+          '`IOS` caption URLs return bytes; `WEB` caption URLs return HTTP 200 and nothing.',
+        provenance: 'verified',
+      },
+    ],
+    deadEnds: [
+      {
+        what:
+          'Caption URLs scraped from the watch page. They answer HTTP 200 with zero bytes, in every format and ' +
+          'with every client parameter tried, which is indistinguishable from a video with no captions unless ' +
+          'the response length is checked.',
+        provenance: 'verified',
+      },
+      {
+        what:
+          '`subscriberCountText` on a channel response. Several are present and none is the channel’s own; ' +
+          'they are the recommended-channel sidebar. Measured on a 4.24M-subscriber channel, the two values ' +
+          'present were 466 thousand and 49 thousand. The real figure is in the page header’s metadata rows.',
+        provenance: 'verified',
+      },
+      {
+        what:
+          'Running any of this from a cloud host. YouTube refuses most datacentre addresses outright, so the ' +
+          'free path works from a laptop and returns 403 from a server.',
+        provenance: 'verified',
+      },
+    ],
+  },
 ];
 
 /** The tactic for a site, if one is recorded. Matches on registrable domain. */

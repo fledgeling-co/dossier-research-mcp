@@ -94,6 +94,7 @@ describe('PROTO-01: every tool registers', () => {
         'research_local_start', 'research_local_submit',
         'research_tail', 'research_verify_citations',
         'research_verify_claims', 'research_wide',
+        'youtube_gather',
       ].sort(),
     );
   });
@@ -277,7 +278,7 @@ describe('PROTO-06 / DEGRADE-02: usable with no credentials', () => {
     expect(started.isError).toBe(true);
     expect(started.text).toMatch(/credential/i);
     // The decisive part: the server is still alive and answering afterwards.
-    expect((await mcp.listTools()).length).toBe(38);
+    expect((await mcp.listTools()).length).toBe(39);
   });
 });
 

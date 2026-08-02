@@ -553,6 +553,41 @@ The window is **inferred from the question** and the reason is printed with the 
 
 A subreddit returning nothing is reported by name as a real result (quiet, private or misspelled) rather than averaged into the total.
 
+### `youtube_gather`, free
+
+Searches YouTube, applies a quality floor, and returns the transcripts. No key, no credential, nothing billed.
+
+**The floor is the point.** 30,000 views and 30,000 subscribers by default. A search result is not evidence, and a video with 200 views from a channel with none is a stranger with a URL. The result reports how many results fell below the floor, so an empty answer reads as a fact about YouTube rather than about the subject.
+
+| Parameter | Type | Notes |
+|---|---|---|
+| `query` | `string` | Plain search terms, not a research question |
+| `limit` | `1-10` | How many transcripts come back. Default 5 |
+| `minViews` | `int` | Default 30,000. Lowering it lowers what counts as evidence |
+| `minSubscribers` | `int` | Default 30,000. Costs one request per distinct channel, so it runs last |
+| `publishedWithinDays` | `int` | Coarse; see below |
+| `minDurationSeconds` | `int` | `60` excludes most Shorts |
+| `languages` | `string[]` | Preferred caption languages, best first. Defaults to English |
+| `maxCharsPerVideo` | `500-40000` | Per-transcript character cap. Default 8,000 |
+| `maxPages` | `1-8` | Result pages to walk before giving up. Default 4 |
+
+**The filter order is the cost model.** Views, recency and duration come back with the search response, so they run first and free. Subscriber count is not in that response and costs one browse request per distinct channel, so it runs over what survives, once per channel however many of its videos are still in the set.
+
+**`maxPages` is a real ceiling, not a suggestion.** A strict floor on a niche topic matches nothing, and without a bound that is an unbounded walk through YouTube's result set at one browse request per new channel. When the ceiling is what stopped the search the result says so, because "we stopped looking" and "there is nothing there" are different answers and only one of them is about the subject. Measured: an impossible floor of 90M subscribers scanned 37 results across 2 pages, rejected all 37, and reported `hitPageLimit`.
+
+**The caption fetch goes through the SSRF-safe path; the InnerTube calls do not.** The difference is who chose the URL. The search and player calls go to a constant on youtube.com; the caption URL is a `baseUrl` YouTube handed back, so it is treated as untrusted input by the same reading that governs a citation URL. The byte cap is raised to 4 MB there, because a three-hour video's caption file legitimately runs past the 512 KB default and a truncated transcript would parse as a short one.
+
+**Captions only.** There is no paid transcription here, so a video with no caption track comes back marked unreadable rather than silently billed. Dossier's spend runs through the ledger and the budget gate, and a per-video model call would have to go through both to be honest about cost.
+
+**The date filter is approximate and the tool says so whenever it is used.** YouTube reports "3 weeks ago", never a date. "The past month" is honest; "since the 14th" is not.
+
+A transcript classifies as a **community** source, never a primary one. Cite it as one person talking on camera, which is what it is. A view count is a proxy for having been checked by somebody, and a weak one; the floor removes the long tail of unwatched uploads and says nothing about whether the speaker is right.
+
+> [!IMPORTANT]
+> **Run this from a laptop.** YouTube refuses most datacentre addresses outright, so the free path works from a residential connection and returns 403 from a cloud host.
+
+The same search and caption code ships in [`yt-transcript-gemini-mcp`](https://www.npmjs.com/package/yt-transcript-gemini-mcp), which adds the paid transcription fallback this deliberately omits. MCP servers are peers rather than libraries, so one cannot call another; the duplication is the price of not requiring a second install.
+
 ### The local corpus: `corpus_local_list` · `corpus_local_search`
 
 The other option, for anything you cannot hand to a third party. Files are read on your machine, matched on your machine, and **no byte of their content reaches any provider, reranker or model**.
